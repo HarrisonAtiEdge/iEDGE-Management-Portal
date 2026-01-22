@@ -1,0 +1,24 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "salesRecords",
+      "queryScope": "COLLECTION",
+      "fields": [
+        {
+          "fieldPath": "salesPersonId",
+          "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "updatedAt",
+          "order": "DESCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "DESCENDING"
+        }
+      ],
+      "density": "SPARSE_ALL"
+    }
+  ],
+  "fieldOverrides": []
+}
