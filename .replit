@@ -34,4 +34,4 @@ expertMode = true
 [deployment]
 deploymentTarget = "autoscale"
 run = ["bash", "-c", "NODE_ENV=production node dist/index.js"]
-build = ["bash", "-c", "npm run build"]
+build = ["bash", "-c", "npm install && vite build && esbuild ./server/index.ts --platform=node --packages=external --bundle --format=esm --outdir=dist"]
