@@ -24,7 +24,6 @@ import { pakistanCities } from "@/data/pakistanCities";
 // If you already have these, keep using them. If not, replace with your own.
 import TravelTabs from "./TravelTabs";
 
-
 import {
   Building2,
   Search,
@@ -59,18 +58,45 @@ const PANEL_ID = "IEDGE-SYSTEM";
  * Panels/IEDGE-SYSTEM/Travel/Hotels/items/{hotelId}/rooms/{roomId}
  *   - room fields
  */
-const hotelsCol = collection(db, "Panels", PANEL_ID, "Travel", "Hotels", "items");
+const hotelsCol = collection(
+  db,
+  "Panels",
+  PANEL_ID,
+  "Travel",
+  "Hotels",
+  "items",
+);
 
 // Hotel Settings (dynamic Room Types + Stay Types)
-const roomTypesCol = collection(db, "Panels", PANEL_ID, "Travel", "HotelSettings", "roomTypes");
-const stayTypesCol = collection(db, "Panels", PANEL_ID, "Travel", "HotelSettings", "stayTypes");
+const roomTypesCol = collection(
+  db,
+  "Panels",
+  PANEL_ID,
+  "Travel",
+  "HotelSettings",
+  "roomTypes",
+);
+const stayTypesCol = collection(
+  db,
+  "Panels",
+  PANEL_ID,
+  "Travel",
+  "HotelSettings",
+  "stayTypes",
+);
 
 type RoomTypeItem = { id: string; name: string };
 type StayTypeItem = { id: string; value: string; label: string };
 
-
 // Lookups
-const citiesCol = collection(db, "Panels", PANEL_ID, "Travel", "Cities", "items");
+const citiesCol = collection(
+  db,
+  "Panels",
+  PANEL_ID,
+  "Travel",
+  "Cities",
+  "items",
+);
 const paymentTermsCol = collection(db, "Panels", PANEL_ID, "paymentTerms");
 const taxCol = collection(db, "Panels", PANEL_ID, "tax");
 
@@ -101,7 +127,7 @@ type HotelDoc = {
   taxType: TaxType;
 
   servicesOffered: string;
-imageUrl?: string;
+  imageUrl?: string;
 
   createdAt?: any;
   updatedAt?: any;
@@ -113,10 +139,9 @@ imageUrl?: string;
 type StayType = string; // dynamic from Firestore
 type RoomType = string; // dynamic from Firestore
 
-
 type RoomDoc = {
   id: string;
-
+  doubleOccupancyRate?: number;
   checkInTime: string; // "14:00"
   checkOutTime: string; // "12:00"
 
@@ -138,8 +163,6 @@ type RoomDoc = {
   updatedAt?: any;
 };
 
-
-
 const uploadImageToCloudinary = async (file: File) => {
   try {
     const formData = new FormData();
@@ -147,7 +170,7 @@ const uploadImageToCloudinary = async (file: File) => {
     formData.append("upload_preset", "cloud-water");
 
     const cloudinaryUrl = `https://api.cloudinary.com/v1_1/iedge-system-travel-uploads/image/upload`;
-    
+
     const response = await fetch(cloudinaryUrl, {
       method: "POST",
       body: formData,
@@ -168,14 +191,17 @@ const uploadImageToCloudinary = async (file: File) => {
   }
 };
 
-
-
-
-
 const makeId = () =>
-  typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : String(Date.now());
+  typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : String(Date.now());
 
-const toNum = (v: string) => Number(String(v || "").replace(/,/g, "").trim()) || 0;
+const toNum = (v: string) =>
+  Number(
+    String(v || "")
+      .replace(/,/g, "")
+      .trim(),
+  ) || 0;
 
 function isValidUrlLike(v: string) {
   const s = String(v || "").trim();
@@ -189,10 +215,10 @@ function isValidEmailLike(v: string) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s);
 }
 
-const cn = (...classes: (string | false | undefined | null)[]) => classes.filter(Boolean).join(" ");
+const cn = (...classes: (string | false | undefined | null)[]) =>
+  classes.filter(Boolean).join(" ");
 
 function tinyChip(icon: ReactNode, text: string) {
-
   return (
     <span className="inline-flex items-center gap-1 rounded-full border px-2 py-0.5 text-[11px] text-muted-foreground">
       {icon}
@@ -202,7 +228,6 @@ function tinyChip(icon: ReactNode, text: string) {
 }
 
 export default function Hotel() {
-
   // Add this state for the image file
   const [imageFile, setImageFile] = useState<File | null>(null);
 
@@ -223,45 +248,53 @@ export default function Hotel() {
       roomTypes.length > 0
         ? roomTypes.map((r) => r.name).filter(Boolean)
         : ["Standard"],
-    [roomTypes]
+    [roomTypes],
   );
 
   const stayTypeOptions = useMemo(
     () =>
       stayTypes.length > 0
         ? stayTypes
-          .map((s) => ({
-            value: String(s.value || "").toUpperCase(),
-            label: String(s.label || ""),
-          }))
-          .filter((s) => s.value)
+            .map((s) => ({
+              value: String(s.value || "").toUpperCase(),
+              label: String(s.label || ""),
+            }))
+            .filter((s) => s.value)
         : [{ value: "BB", label: "BB - Bed & Breakfast" }],
-    [stayTypes]
+    [stayTypes],
   );
-
 
   // lookups
   // ✅ load hotel settings (room types + stay types)
   useEffect(() => {
-    const unsubRoomTypes = onSnapshot(query(roomTypesCol, orderBy("name", "asc")), (snap) => {
-      setRoomTypes(
-        snap.docs
-          .map((d) => ({ id: d.id, name: String((d.data() as any)?.name || "").trim() }))
-          .filter((x) => x.name)
-      );
-    });
+    const unsubRoomTypes = onSnapshot(
+      query(roomTypesCol, orderBy("name", "asc")),
+      (snap) => {
+        setRoomTypes(
+          snap.docs
+            .map((d) => ({
+              id: d.id,
+              name: String((d.data() as any)?.name || "").trim(),
+            }))
+            .filter((x) => x.name),
+        );
+      },
+    );
 
-    const unsubStayTypes = onSnapshot(query(stayTypesCol, orderBy("value", "asc")), (snap) => {
-      setStayTypes(
-        snap.docs
-          .map((d) => ({
-            id: d.id,
-            value: String((d.data() as any)?.value || "").trim(),
-            label: String((d.data() as any)?.label || "").trim(),
-          }))
-          .filter((x) => x.value)
-      );
-    });
+    const unsubStayTypes = onSnapshot(
+      query(stayTypesCol, orderBy("value", "asc")),
+      (snap) => {
+        setStayTypes(
+          snap.docs
+            .map((d) => ({
+              id: d.id,
+              value: String((d.data() as any)?.value || "").trim(),
+              label: String((d.data() as any)?.label || "").trim(),
+            }))
+            .filter((x) => x.value),
+        );
+      },
+    );
 
     return () => {
       unsubRoomTypes();
@@ -269,24 +302,26 @@ export default function Hotel() {
     };
   }, []);
 
-
   const [cities, setCities] = useState<CityDoc[]>([]);
   const cityOptions: CityDoc[] = useMemo(() => {
     const dbCities = cities.filter((c) => c?.id && c?.name);
-    if (dbCities.length > 0) return dbCities.sort((a, b) => a.name.localeCompare(b.name));
+    if (dbCities.length > 0)
+      return dbCities.sort((a, b) => a.name.localeCompare(b.name));
 
     const fromJson =
       Array.isArray(pakistanCities) && pakistanCities.length > 0
         ? (pakistanCities as any[]).map((c, idx) => {
-          if (typeof c === "string") return { id: `pk_${idx}`, name: c };
-          return {
-            id: String((c as any).id ?? `pk_${idx}`),
-            name: String((c as any).name ?? ""),
-          };
-        })
+            if (typeof c === "string") return { id: `pk_${idx}`, name: c };
+            return {
+              id: String((c as any).id ?? `pk_${idx}`),
+              name: String((c as any).name ?? ""),
+            };
+          })
         : [];
 
-    return fromJson.filter((c) => c.name).sort((a, b) => a.name.localeCompare(b.name));
+    return fromJson
+      .filter((c) => c.name)
+      .sort((a, b) => a.name.localeCompare(b.name));
   }, [cities]);
 
   const [paymentTerms, setPaymentTerms] = useState<PaymentTerm[]>([]);
@@ -320,25 +355,31 @@ export default function Hotel() {
 
   const selectedHotel = useMemo(
     () => hotels.find((h) => h.id === selectedHotelId) || null,
-    [hotels, selectedHotelId]
+    [hotels, selectedHotelId],
   );
 
   // ✅ load lookups
   useEffect(() => {
-    const unsubCities = onSnapshot(query(citiesCol, orderBy("name", "asc")), (snap) => {
-      setCities(
-        snap.docs
-          .map((d) => ({ id: d.id, name: String((d.data() as any)?.name || "").trim() }))
-          .filter((x) => x.name)
-      );
-    });
+    const unsubCities = onSnapshot(
+      query(citiesCol, orderBy("name", "asc")),
+      (snap) => {
+        setCities(
+          snap.docs
+            .map((d) => ({
+              id: d.id,
+              name: String((d.data() as any)?.name || "").trim(),
+            }))
+            .filter((x) => x.name),
+        );
+      },
+    );
 
     const unsubPT = onSnapshot(paymentTermsCol, (snap) => {
       setPaymentTerms(
         snap.docs
           .map((d) => String((d.data() as any)?.name || "").trim())
           .filter(Boolean)
-          .sort((a, b) => a.localeCompare(b))
+          .sort((a, b) => a.localeCompare(b)),
       );
     });
 
@@ -351,7 +392,7 @@ export default function Hotel() {
             percent: Number((d.data() as any)?.percent ?? 0),
           }))
           .filter((x) => x.name)
-          .sort((a, b) => a.name.localeCompare(b.name))
+          .sort((a, b) => a.name.localeCompare(b.name)),
       );
     });
 
@@ -364,37 +405,43 @@ export default function Hotel() {
 
   // ✅ load hotels (and roomsCount via subcollection size read when selected)
   useEffect(() => {
-    return onSnapshot(query(hotelsCol, orderBy("hotelName", "asc")), async (snap) => {
-      const raw = snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })) as any[];
+    return onSnapshot(
+      query(hotelsCol, orderBy("hotelName", "asc")),
+      async (snap) => {
+        const raw = snap.docs.map((d) => ({
+          id: d.id,
+          ...(d.data() as any),
+        })) as any[];
 
-      // Ensure cityName fallback from stored field
-      const mapped: HotelDoc[] = raw.map((x) => ({
-        id: x.id,
-        cityId: String(x.cityId || ""),
-        cityName: String(x.cityName || ""),
-        hotelName: String(x.hotelName || x.name || ""),
-        address: String(x.address || ""),
-        locationLink: String(x.locationLink || ""),
-        contactPerson: String(x.contactPerson || ""),
-        contactNo: String(x.contactNo || ""),
-        email: String(x.email || ""),
-        status: (x.status as any) || "active",
-        paymentTerm: String(x.paymentTerm || ""),
-        taxType: (x.taxType as any) || "exclusive",
-        servicesOffered: String(x.servicesOffered || ""),
-        createdAt: x.createdAt,
-        updatedAt: x.updatedAt,
-        roomsCount: Number(x.roomsCount ?? 0),
-      }));
+        // Ensure cityName fallback from stored field
+        const mapped: HotelDoc[] = raw.map((x) => ({
+          id: x.id,
+          cityId: String(x.cityId || ""),
+          cityName: String(x.cityName || ""),
+          hotelName: String(x.hotelName || x.name || ""),
+          address: String(x.address || ""),
+          locationLink: String(x.locationLink || ""),
+          contactPerson: String(x.contactPerson || ""),
+          contactNo: String(x.contactNo || ""),
+          email: String(x.email || ""),
+          status: (x.status as any) || "active",
+          paymentTerm: String(x.paymentTerm || ""),
+          taxType: (x.taxType as any) || "exclusive",
+          servicesOffered: String(x.servicesOffered || ""),
+          createdAt: x.createdAt,
+          updatedAt: x.updatedAt,
+          roomsCount: Number(x.roomsCount ?? 0),
+        }));
 
-      setHotels(mapped);
+        setHotels(mapped);
 
-      // if selected hotel was deleted
-      if (selectedHotelId && !mapped.some((h) => h.id === selectedHotelId)) {
-        setSelectedHotelId(null);
-        setRooms([]);
-      }
-    });
+        // if selected hotel was deleted
+        if (selectedHotelId && !mapped.some((h) => h.id === selectedHotelId)) {
+          setSelectedHotelId(null);
+          setRooms([]);
+        }
+      },
+    );
   }, [selectedHotelId]);
 
   // ✅ load rooms for selected hotel
@@ -412,7 +459,7 @@ export default function Hotel() {
       "Hotels",
       "items",
       selectedHotelId,
-      "rooms"
+      "rooms",
     );
 
     return onSnapshot(roomsCol, (snap) => {
@@ -425,7 +472,7 @@ export default function Hotel() {
           roomType: String(r.roomType || "Standard"),
           stayType: String(r.stayType || "BB"),
 
-
+          doubleOccupancyRate: Number(r.doubleOccupancyRate ?? 0),
           rate: Number(r.rate ?? 0),
           taxId: String(r.taxId || ""),
           taxLabel: String(r.taxLabel || ""),
@@ -441,14 +488,24 @@ export default function Hotel() {
       list.sort((a, b) => {
         const rt = a.roomType.localeCompare(b.roomType);
         if (rt !== 0) return rt;
-        return String(a.rateStartDate || "").localeCompare(String(b.rateStartDate || ""));
+        return String(a.rateStartDate || "").localeCompare(
+          String(b.rateStartDate || ""),
+        );
       });
 
       setRooms(list);
 
       // update roomsCount on hotel doc (admin helpful)
-      const hotelRef = doc(db, "Panels", PANEL_ID, "Travel", "Hotels", "items", selectedHotelId);
-      updateDoc(hotelRef, { roomsCount: list.length }).catch(() => { });
+      const hotelRef = doc(
+        db,
+        "Panels",
+        PANEL_ID,
+        "Travel",
+        "Hotels",
+        "items",
+        selectedHotelId,
+      );
+      updateDoc(hotelRef, { roomsCount: list.length }).catch(() => {});
     });
   }, [selectedHotelId]);
 
@@ -464,7 +521,8 @@ export default function Hotel() {
 
       const matchCity = !filterCityId || h.cityId === filterCityId;
       const matchStatus = !filterStatus || h.status === filterStatus;
-      const matchPay = !filterPaymentTerm || h.paymentTerm === filterPaymentTerm;
+      const matchPay =
+        !filterPaymentTerm || h.paymentTerm === filterPaymentTerm;
 
       return matchText && matchCity && matchStatus && matchPay;
     });
@@ -501,82 +559,100 @@ export default function Hotel() {
     setEditingHotelId(null);
   };
 
-const saveHotel = async () => {
-  const cityId = String(hotelForm.cityId || "").trim();
-  const cityName =
-    cityOptions.find((c) => c.id === cityId)?.name || String(hotelForm.cityName || "");
+  const saveHotel = async () => {
+    const cityId = String(hotelForm.cityId || "").trim();
+    const cityName =
+      cityOptions.find((c) => c.id === cityId)?.name ||
+      String(hotelForm.cityName || "");
 
-  const hotelName = String(hotelForm.hotelName || "").trim();
-  const address = String(hotelForm.address || "").trim();
-  const locationLink = String(hotelForm.locationLink || "").trim();
-  const contactPerson = String(hotelForm.contactPerson || "").trim();
-  const contactNo = String(hotelForm.contactNo || "").trim();
-  const email = String(hotelForm.email || "").trim();
-  const status = (hotelForm.status as HotelStatus) || "active";
-  const paymentTerm = String(hotelForm.paymentTerm || "").trim();
-  const taxType = (hotelForm.taxType as TaxType) || "exclusive";
-  const servicesOffered = String(hotelForm.servicesOffered || "").trim();
+    const hotelName = String(hotelForm.hotelName || "").trim();
+    const address = String(hotelForm.address || "").trim();
+    const locationLink = String(hotelForm.locationLink || "").trim();
+    const contactPerson = String(hotelForm.contactPerson || "").trim();
+    const contactNo = String(hotelForm.contactNo || "").trim();
+    const email = String(hotelForm.email || "").trim();
+    const status = (hotelForm.status as HotelStatus) || "active";
+    const paymentTerm = String(hotelForm.paymentTerm || "").trim();
+    const taxType = (hotelForm.taxType as TaxType) || "exclusive";
+    const servicesOffered = String(hotelForm.servicesOffered || "").trim();
 
-  // Image upload logic (if an image is selected)
-  let imageUrl = "";
-  if (imageFile) {
-    try {
-      imageUrl = await uploadImageToCloudinary(imageFile); // Upload to Cloudinary
-    } catch (error) {
-      alert("Image upload failed");
-      return; // Stop further execution if upload fails
+    // Image upload logic (if an image is selected)
+    let imageUrl = "";
+    if (imageFile) {
+      try {
+        imageUrl = await uploadImageToCloudinary(imageFile); // Upload to Cloudinary
+      } catch (error) {
+        alert("Image upload failed");
+        return; // Stop further execution if upload fails
+      }
     }
-  }
 
-  if (!cityId) return alert("City is required");
-  if (!hotelName) return alert("Hotel Name is required");
-  if (!isValidUrlLike(locationLink)) return alert("Location link must start with http/https");
-  if (!isValidEmailLike(email)) return alert("Email looks invalid");
+    if (!cityId) return alert("City is required");
+    if (!hotelName) return alert("Hotel Name is required");
+    if (!isValidUrlLike(locationLink))
+      return alert("Location link must start with http/https");
+    if (!isValidEmailLike(email)) return alert("Email looks invalid");
 
-  // ✅ If Cities table is empty, fallback to Pakistan Cities JSON
-  const payload: any = {
-    cityId,
-    cityName,
-    hotelName,
-    address,
-    locationLink,
-    contactPerson,
-    contactNo,
-    email,
-    status,
-    paymentTerm,
-    taxType,
-    servicesOffered,
-    updatedAt: serverTimestamp(),
+    // ✅ If Cities table is empty, fallback to Pakistan Cities JSON
+    const payload: any = {
+      cityId,
+      cityName,
+      hotelName,
+      address,
+      locationLink,
+      contactPerson,
+      contactNo,
+      email,
+      status,
+      paymentTerm,
+      taxType,
+      servicesOffered,
+      updatedAt: serverTimestamp(),
+    };
+
+    // Only add imageUrl if it's defined
+    if (imageUrl) {
+      payload.imageUrl = imageUrl; // Add the image URL to the payload
+    }
+
+    if (!editingHotelId) {
+      const id = makeId();
+      await setDoc(doc(hotelsCol, id), {
+        ...payload,
+        roomsCount: 0,
+        createdAt: serverTimestamp(),
+      });
+      setSelectedHotelId(id);
+    } else {
+      await setDoc(doc(hotelsCol, editingHotelId), payload, { merge: true });
+    }
+
+    closeHotelForm();
   };
-
-  // Only add imageUrl if it's defined
-  if (imageUrl) {
-    payload.imageUrl = imageUrl; // Add the image URL to the payload
-  }
-
-  if (!editingHotelId) {
-    const id = makeId();
-    await setDoc(doc(hotelsCol, id), {
-      ...payload,
-      roomsCount: 0,
-      createdAt: serverTimestamp(),
-    });
-    setSelectedHotelId(id);
-  } else {
-    await setDoc(doc(hotelsCol, editingHotelId), payload, { merge: true });
-  }
-
-  closeHotelForm();
-};
-
 
   const removeHotel = async (hotelId: string) => {
     const ok = confirm("Delete this hotel and all its rooms?");
     if (!ok) return;
 
-    const hotelRef = doc(db, "Panels", PANEL_ID, "Travel", "Hotels", "items", hotelId);
-    const roomsCol = collection(db, "Panels", PANEL_ID, "Travel", "Hotels", "items", hotelId, "rooms");
+    const hotelRef = doc(
+      db,
+      "Panels",
+      PANEL_ID,
+      "Travel",
+      "Hotels",
+      "items",
+      hotelId,
+    );
+    const roomsCol = collection(
+      db,
+      "Panels",
+      PANEL_ID,
+      "Travel",
+      "Hotels",
+      "items",
+      hotelId,
+      "rooms",
+    );
 
     const snap = await getDocs(roomsCol);
     const batch = writeBatch(db);
@@ -602,6 +678,7 @@ const saveHotel = async () => {
       roomType: roomTypeOptions[0] || "Standard",
       stayType: stayTypeOptions[0]?.value || "BB",
       rate: 0,
+      doubleOccupancyRate: 0,
       taxId: "",
       taxLabel: "",
       taxPercent: 0,
@@ -612,10 +689,12 @@ const saveHotel = async () => {
     setShowRoomForm(true);
   };
 
-
   const openEditRoom = (r: RoomDoc) => {
     setEditingRoomId(r.id);
-    setRoomForm({ ...r });
+    setRoomForm({
+      ...r,
+      doubleOccupancyRate: Number(r.doubleOccupancyRate ?? 0),
+    });
     setShowRoomForm(true);
   };
 
@@ -630,12 +709,17 @@ const saveHotel = async () => {
     const checkInTime = String(roomForm.checkInTime || "").trim();
     const checkOutTime = String(roomForm.checkOutTime || "").trim();
 
-    const roomType = String(roomForm.roomType || "").trim() || (roomTypeOptions[0] || "Standard");
-    const stayType = String(roomForm.stayType || "").trim() || (stayTypeOptions[0]?.value || "BB");
-
-
+    const roomType =
+      String(roomForm.roomType || "").trim() ||
+      roomTypeOptions[0] ||
+      "Standard";
+    const stayType =
+      String(roomForm.stayType || "").trim() ||
+      stayTypeOptions[0]?.value ||
+      "BB";
 
     const rate = Number(roomForm.rate ?? 0) || 0;
+    const doubleOccupancyRate = Number(roomForm.doubleOccupancyRate ?? 0) || 0;
 
     const taxId = String(roomForm.taxId || "").trim();
     const tax = taxes.find((t) => t.id === taxId);
@@ -653,7 +737,8 @@ const saveHotel = async () => {
     if (!rateStartDate) return alert("Rate Start Date is required");
     if (!rateEndDate) return alert("Rate End Date is required");
 
-    if (rateEndDate < rateStartDate) return alert("Rate End Date must be after Start Date");
+    if (rateEndDate < rateStartDate)
+      return alert("Rate End Date must be after Start Date");
 
     const payload = {
       checkInTime,
@@ -661,6 +746,7 @@ const saveHotel = async () => {
       roomType,
       stayType,
       rate,
+      doubleOccupancyRate,
       taxId: taxId || "",
       taxLabel: tax?.name || String(roomForm.taxLabel || ""),
       taxPercent: Number(tax?.percent ?? roomForm.taxPercent ?? 0),
@@ -679,12 +765,16 @@ const saveHotel = async () => {
       "Hotels",
       "items",
       selectedHotelId,
-      "rooms"
+      "rooms",
     );
 
     if (!editingRoomId) {
       const id = makeId();
-      await setDoc(doc(roomsCol, id), { ...payload, createdAt: serverTimestamp() }, { merge: true });
+      await setDoc(
+        doc(roomsCol, id),
+        { ...payload, createdAt: serverTimestamp() },
+        { merge: true },
+      );
     } else {
       await setDoc(doc(roomsCol, editingRoomId), payload, { merge: true });
     }
@@ -706,14 +796,13 @@ const saveHotel = async () => {
       "items",
       selectedHotelId,
       "rooms",
-      roomId
+      roomId,
     );
 
     await runTransaction(db, async (tx) => {
       tx.delete(roomRef);
     });
   };
-
 
   // ========= UI =========
   return (
@@ -758,7 +847,6 @@ const saveHotel = async () => {
                 </option>
               ))}
             </select>
-
           </div>
 
           <div className="relative">
@@ -811,7 +899,9 @@ const saveHotel = async () => {
         {/* LEFT: Hotels list */}
         <div className="lg:col-span-1 space-y-3">
           {filteredHotels.length === 0 ? (
-            <Card className="p-4 text-sm text-muted-foreground">No hotels found.</Card>
+            <Card className="p-4 text-sm text-muted-foreground">
+              No hotels found.
+            </Card>
           ) : (
             filteredHotels.map((h) => {
               const isActive = h.status === "active";
@@ -822,7 +912,7 @@ const saveHotel = async () => {
                   key={h.id}
                   className={cn(
                     "p-4 cursor-pointer hover:shadow-sm transition",
-                    isSelected && "ring-1 ring-black/10"
+                    isSelected && "ring-1 ring-black/10",
                   )}
                   onClick={() => setSelectedHotelId(h.id)}
                 >
@@ -830,16 +920,28 @@ const saveHotel = async () => {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <Building2 className="h-4 w-4 text-muted-foreground" />
-                        <div className="font-semibold text-sm truncate">{h.hotelName}</div>
+                        <div className="font-semibold text-sm truncate">
+                          {h.hotelName}
+                        </div>
                       </div>
 
                       <div className="mt-1 flex flex-wrap gap-2">
-                        {tinyChip(<MapPin className="h-3 w-3" />, h.cityName || "—")}
                         {tinyChip(
-                          isActive ? <BadgeCheck className="h-3 w-3" /> : <BadgeX className="h-3 w-3" />,
-                          isActive ? "Active" : "Inactive"
+                          <MapPin className="h-3 w-3" />,
+                          h.cityName || "—",
                         )}
-                        {tinyChip(<BedDouble className="h-3 w-3" />, `${Number(h.roomsCount ?? 0)} rooms`)}
+                        {tinyChip(
+                          isActive ? (
+                            <BadgeCheck className="h-3 w-3" />
+                          ) : (
+                            <BadgeX className="h-3 w-3" />
+                          ),
+                          isActive ? "Active" : "Inactive",
+                        )}
+                        {tinyChip(
+                          <BedDouble className="h-3 w-3" />,
+                          `${Number(h.roomsCount ?? 0)} rooms`,
+                        )}
                       </div>
 
                       {h.paymentTerm ? (
@@ -893,32 +995,41 @@ const saveHotel = async () => {
             <>
               {/* Hotel Detail */}
               <Card className="p-4">
-
                 <div className="flex flex-col md:flex-row md:items-start gap-3 md:justify-between">
-
-
-
                   <div className="space-y-2">
                     <div className="flex items-center gap-2">
                       <Building2 className="h-5 w-5 text-muted-foreground" />
-                      <div className="text-lg font-semibold">{selectedHotel.hotelName}</div>
+                      <div className="text-lg font-semibold">
+                        {selectedHotel.hotelName}
+                      </div>
                     </div>
 
                     <div className="flex flex-wrap gap-2">
-                      {tinyChip(<MapPin className="h-3 w-3" />, selectedHotel.cityName)}
+                      {tinyChip(
+                        <MapPin className="h-3 w-3" />,
+                        selectedHotel.cityName,
+                      )}
                       {tinyChip(
                         selectedHotel.status === "active" ? (
                           <BadgeCheck className="h-3 w-3" />
                         ) : (
                           <BadgeX className="h-3 w-3" />
                         ),
-                        selectedHotel.status === "active" ? "Active" : "Inactive"
+                        selectedHotel.status === "active"
+                          ? "Active"
+                          : "Inactive",
                       )}
                       {selectedHotel.taxType
-                        ? tinyChip(<Receipt className="h-3 w-3" />, `Tax: ${selectedHotel.taxType}`)
+                        ? tinyChip(
+                            <Receipt className="h-3 w-3" />,
+                            `Tax: ${selectedHotel.taxType}`,
+                          )
                         : null}
                       {selectedHotel.paymentTerm
-                        ? tinyChip(<CreditCard className="h-3 w-3" />, selectedHotel.paymentTerm)
+                        ? tinyChip(
+                            <CreditCard className="h-3 w-3" />,
+                            selectedHotel.paymentTerm,
+                          )
                         : null}
                     </div>
 
@@ -933,21 +1044,27 @@ const saveHotel = async () => {
                       {selectedHotel.contactPerson ? (
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <User className="h-4 w-4" />
-                          <span className="text-foreground">{selectedHotel.contactPerson}</span>
+                          <span className="text-foreground">
+                            {selectedHotel.contactPerson}
+                          </span>
                         </div>
                       ) : null}
 
                       {selectedHotel.contactNo ? (
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <Phone className="h-4 w-4" />
-                          <span className="text-foreground">{selectedHotel.contactNo}</span>
+                          <span className="text-foreground">
+                            {selectedHotel.contactNo}
+                          </span>
                         </div>
                       ) : null}
 
                       {selectedHotel.email ? (
                         <div className="flex items-center gap-2 text-muted-foreground">
                           <Mail className="h-4 w-4" />
-                          <span className="text-foreground">{selectedHotel.email}</span>
+                          <span className="text-foreground">
+                            {selectedHotel.email}
+                          </span>
                         </div>
                       ) : null}
                     </div>
@@ -967,19 +1084,19 @@ const saveHotel = async () => {
                     ) : null}
                   </div>
 
-{/* Hotel Image */}
-{selectedHotel?.imageUrl ? (
-  <img
-    src={selectedHotel.imageUrl}
-    alt={selectedHotel.hotelName}
-    className="w-full h-full object-cover"
-    loading="lazy"
-  />
-) : (
-  <div className="w-full h-full flex items-center justify-center text-muted-foreground">
-    No image available
-  </div>
-)}
+                  {/* Hotel Image */}
+                  {selectedHotel?.imageUrl ? (
+                    <img
+                      src={selectedHotel.imageUrl}
+                      alt={selectedHotel.hotelName}
+                      className="w-full h-full object-cover"
+                      loading="lazy"
+                    />
+                  ) : (
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground">
+                      No image available
+                    </div>
+                  )}
 
                   {/* Map preview */}
                   <div className="w-full md:w-[340px]">
@@ -988,7 +1105,8 @@ const saveHotel = async () => {
                       Map Preview
                     </div>
                     <div className="w-full h-[220px] rounded-md overflow-hidden border bg-muted">
-                      {selectedHotel.locationLink && isValidUrlLike(selectedHotel.locationLink) ? (
+                      {selectedHotel.locationLink &&
+                      isValidUrlLike(selectedHotel.locationLink) ? (
                         <iframe
                           title="map"
                           className="w-full h-full"
@@ -1006,9 +1124,6 @@ const saveHotel = async () => {
                       )}
                     </div>
                   </div>
-
-
-
                 </div>
 
                 {/* Services Offered */}
@@ -1051,6 +1166,7 @@ const saveHotel = async () => {
                         <th className="p-2 text-left">Room Type</th>
                         <th className="p-2 text-left">Stay Type</th>
                         <th className="p-2 text-right">Rate</th>
+                        <th className="p-2 text-right">Double Occ.</th>
                         <th className="p-2 text-left">Tax</th>
                         <th className="p-2 text-left">Start</th>
                         <th className="p-2 text-left">End</th>
@@ -1061,7 +1177,10 @@ const saveHotel = async () => {
                     <tbody>
                       {rooms.length === 0 ? (
                         <tr>
-                          <td className="p-3 text-muted-foreground" colSpan={10}>
+                          <td
+                            className="p-3 text-muted-foreground"
+                            colSpan={11}
+                          >
                             No rooms added yet.
                           </td>
                         </tr>
@@ -1082,9 +1201,19 @@ const saveHotel = async () => {
                             </td>
                             <td className="p-2 font-medium">{r.roomType}</td>
                             <td className="p-2">{r.stayType}</td>
-                            <td className="p-2 text-right tabular-nums">{Number(r.rate || 0).toLocaleString()}</td>
+                            <td className="p-2 text-right tabular-nums">
+                              {Number(r.rate || 0).toLocaleString()}
+                            </td>
+                            <td className="p-2 text-right tabular-nums">
+                              {Number(
+                                r.doubleOccupancyRate || 0,
+                              ).toLocaleString()}
+                            </td>
+
                             <td className="p-2">
-                              {r.taxId ? `${r.taxLabel} (${Number(r.taxPercent ?? 0)}%)` : "—"}
+                              {r.taxId
+                                ? `${r.taxLabel} (${Number(r.taxPercent ?? 0)}%)`
+                                : "—"}
                             </td>
                             <td className="p-2">
                               <span className="inline-flex items-center gap-1">
@@ -1099,7 +1228,9 @@ const saveHotel = async () => {
                               </span>
                             </td>
                             <td className="p-2 max-w-[420px]">
-                              <div className="line-clamp-2 text-muted-foreground">{r.roomDetails || "—"}</div>
+                              <div className="line-clamp-2 text-muted-foreground">
+                                {r.roomDetails || "—"}
+                              </div>
                             </td>
                             <td className="p-2 text-center">
                               <div className="flex items-center justify-center gap-2">
@@ -1112,7 +1243,11 @@ const saveHotel = async () => {
                                   <Pencil className="h-3.5 w-3.5" />
                                   Edit
                                 </Button>
-                                <Button size="sm" variant="destructive" onClick={() => removeRoom(r.id)}>
+                                <Button
+                                  size="sm"
+                                  variant="destructive"
+                                  onClick={() => removeRoom(r.id)}
+                                >
                                   <Trash2 className="h-3.5 w-3.5" />
                                 </Button>
                               </div>
@@ -1125,7 +1260,8 @@ const saveHotel = async () => {
                 </div>
 
                 <div className="mt-2 text-[11px] text-muted-foreground">
-                  Tip: Add separate rows for different date ranges (seasonal pricing).
+                  Tip: Add separate rows for different date ranges (seasonal
+                  pricing).
                 </div>
               </Card>
             </>
@@ -1144,7 +1280,12 @@ const saveHotel = async () => {
                   {editingHotelId ? "Edit Hotel" : "Add New Hotel"}
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={closeHotelForm} className="gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={closeHotelForm}
+                className="gap-2"
+              >
                 <X className="h-4 w-4" />
                 Close
               </Button>
@@ -1160,7 +1301,8 @@ const saveHotel = async () => {
                   value={String(hotelForm.cityId || "")}
                   onChange={(e) => {
                     const id = e.target.value;
-                    const name = cityOptions.find((c) => c.id === id)?.name || "";
+                    const name =
+                      cityOptions.find((c) => c.id === id)?.name || "";
                     setHotelForm((p) => ({ ...p, cityId: id, cityName: name }));
                   }}
                   className="w-full border rounded-md px-3 py-2 text-sm bg-white"
@@ -1172,7 +1314,6 @@ const saveHotel = async () => {
                     </option>
                   ))}
                 </select>
-
               </div>
 
               {/* Hotel Name */}
@@ -1183,7 +1324,9 @@ const saveHotel = async () => {
                 <Input
                   placeholder="e.g., Marriott Karachi"
                   value={String(hotelForm.hotelName || "")}
-                  onChange={(e) => setHotelForm((p) => ({ ...p, hotelName: e.target.value }))}
+                  onChange={(e) =>
+                    setHotelForm((p) => ({ ...p, hotelName: e.target.value }))
+                  }
                 />
               </div>
 
@@ -1195,7 +1338,9 @@ const saveHotel = async () => {
                 <Input
                   placeholder="Full address"
                   value={String(hotelForm.address || "")}
-                  onChange={(e) => setHotelForm((p) => ({ ...p, address: e.target.value }))}
+                  onChange={(e) =>
+                    setHotelForm((p) => ({ ...p, address: e.target.value }))
+                  }
                 />
               </div>
 
@@ -1212,9 +1357,6 @@ const saveHotel = async () => {
                 />
               </div>
 
-
-
-
               {/* Location Link */}
               <div className="space-y-1 md:col-span-2">
                 <div className="text-xs text-muted-foreground flex items-center gap-2">
@@ -1223,10 +1365,16 @@ const saveHotel = async () => {
                 <Input
                   placeholder="https://maps.google.com/..."
                   value={String(hotelForm.locationLink || "")}
-                  onChange={(e) => setHotelForm((p) => ({ ...p, locationLink: e.target.value }))}
+                  onChange={(e) =>
+                    setHotelForm((p) => ({
+                      ...p,
+                      locationLink: e.target.value,
+                    }))
+                  }
                 />
                 <div className="text-[11px] text-muted-foreground">
-                  If the map preview doesn’t load for some links, save an “embed” link next time.
+                  If the map preview doesn’t load for some links, save an
+                  “embed” link next time.
                 </div>
               </div>
 
@@ -1238,7 +1386,12 @@ const saveHotel = async () => {
                 <Input
                   placeholder="Name"
                   value={String(hotelForm.contactPerson || "")}
-                  onChange={(e) => setHotelForm((p) => ({ ...p, contactPerson: e.target.value }))}
+                  onChange={(e) =>
+                    setHotelForm((p) => ({
+                      ...p,
+                      contactPerson: e.target.value,
+                    }))
+                  }
                 />
               </div>
 
@@ -1250,7 +1403,9 @@ const saveHotel = async () => {
                 <Input
                   placeholder="+92..."
                   value={String(hotelForm.contactNo || "")}
-                  onChange={(e) => setHotelForm((p) => ({ ...p, contactNo: e.target.value }))}
+                  onChange={(e) =>
+                    setHotelForm((p) => ({ ...p, contactNo: e.target.value }))
+                  }
                 />
               </div>
 
@@ -1262,7 +1417,9 @@ const saveHotel = async () => {
                 <Input
                   placeholder="hotel@domain.com"
                   value={String(hotelForm.email || "")}
-                  onChange={(e) => setHotelForm((p) => ({ ...p, email: e.target.value }))}
+                  onChange={(e) =>
+                    setHotelForm((p) => ({ ...p, email: e.target.value }))
+                  }
                 />
               </div>
 
@@ -1273,7 +1430,12 @@ const saveHotel = async () => {
                 </div>
                 <select
                   value={String(hotelForm.status || "active")}
-                  onChange={(e) => setHotelForm((p) => ({ ...p, status: e.target.value as any }))}
+                  onChange={(e) =>
+                    setHotelForm((p) => ({
+                      ...p,
+                      status: e.target.value as any,
+                    }))
+                  }
                   className="w-full border rounded-md px-3 py-2 text-sm bg-white"
                 >
                   <option value="active">Active</option>
@@ -1288,7 +1450,9 @@ const saveHotel = async () => {
                 </div>
                 <select
                   value={String(hotelForm.paymentTerm || "")}
-                  onChange={(e) => setHotelForm((p) => ({ ...p, paymentTerm: e.target.value }))}
+                  onChange={(e) =>
+                    setHotelForm((p) => ({ ...p, paymentTerm: e.target.value }))
+                  }
                   className="w-full border rounded-md px-3 py-2 text-sm bg-white"
                 >
                   <option value="">Select Payment Terms</option>
@@ -1307,7 +1471,12 @@ const saveHotel = async () => {
                 </div>
                 <select
                   value={String(hotelForm.taxType || "exclusive")}
-                  onChange={(e) => setHotelForm((p) => ({ ...p, taxType: e.target.value as any }))}
+                  onChange={(e) =>
+                    setHotelForm((p) => ({
+                      ...p,
+                      taxType: e.target.value as any,
+                    }))
+                  }
                   className="w-full border rounded-md px-3 py-2 text-sm bg-white"
                 >
                   <option value="inclusive">Inclusive</option>
@@ -1318,11 +1487,17 @@ const saveHotel = async () => {
               {/* Services Offered */}
               <div className="space-y-1 md:col-span-2">
                 <div className="text-xs text-muted-foreground flex items-center gap-2">
-                  <FileText className="h-3.5 w-3.5" /> Services Offered (General)
+                  <FileText className="h-3.5 w-3.5" /> Services Offered
+                  (General)
                 </div>
                 <textarea
                   value={String(hotelForm.servicesOffered || "")}
-                  onChange={(e) => setHotelForm((p) => ({ ...p, servicesOffered: e.target.value }))}
+                  onChange={(e) =>
+                    setHotelForm((p) => ({
+                      ...p,
+                      servicesOffered: e.target.value,
+                    }))
+                  }
                   placeholder="Write detailed services, notes, inclusions, policies…"
                   className="w-full min-h-[110px] border rounded-md px-3 py-2 text-sm bg-white"
                 />
@@ -1349,13 +1524,20 @@ const saveHotel = async () => {
             <div className="flex items-center justify-between gap-3">
               <div className="flex items-center gap-2">
                 <BedDouble className="h-5 w-5 text-muted-foreground" />
-                <div className="font-semibold">{editingRoomId ? "Edit Room" : "Add Room"}</div>
+                <div className="font-semibold">
+                  {editingRoomId ? "Edit Room" : "Add Room"}
+                </div>
                 <ChevronDown className="h-4 w-4 text-muted-foreground" />
                 <div className="text-sm text-muted-foreground truncate">
                   {selectedHotel?.hotelName} • {selectedHotel?.cityName}
                 </div>
               </div>
-              <Button variant="outline" size="sm" onClick={closeRoomForm} className="gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={closeRoomForm}
+                className="gap-2"
+              >
                 <X className="h-4 w-4" />
                 Close
               </Button>
@@ -1371,7 +1553,12 @@ const saveHotel = async () => {
                   <Input
                     type="time"
                     value={String(roomForm.checkInTime || "")}
-                    onChange={(e) => setRoomForm((p) => ({ ...p, checkInTime: e.target.value }))}
+                    onChange={(e) =>
+                      setRoomForm((p) => ({
+                        ...p,
+                        checkInTime: e.target.value,
+                      }))
+                    }
                   />
                 </div>
 
@@ -1382,7 +1569,12 @@ const saveHotel = async () => {
                   <Input
                     type="time"
                     value={String(roomForm.checkOutTime || "")}
-                    onChange={(e) => setRoomForm((p) => ({ ...p, checkOutTime: e.target.value }))}
+                    onChange={(e) =>
+                      setRoomForm((p) => ({
+                        ...p,
+                        checkOutTime: e.target.value,
+                      }))
+                    }
                   />
                 </div>
               </div>
@@ -1394,8 +1586,12 @@ const saveHotel = async () => {
                     <BedDouble className="h-3.5 w-3.5" /> Room Type *
                   </div>
                   <select
-                    value={String(roomForm.roomType || roomTypeOptions[0] || "")}
-                    onChange={(e) => setRoomForm((p) => ({ ...p, roomType: e.target.value }))}
+                    value={String(
+                      roomForm.roomType || roomTypeOptions[0] || "",
+                    )}
+                    onChange={(e) =>
+                      setRoomForm((p) => ({ ...p, roomType: e.target.value }))
+                    }
                     className="w-full border rounded-md px-3 py-2 text-sm bg-white"
                   >
                     {roomTypeOptions.map((rt) => (
@@ -1404,7 +1600,6 @@ const saveHotel = async () => {
                       </option>
                     ))}
                   </select>
-
                 </div>
 
                 <div className="space-y-1">
@@ -1412,8 +1607,12 @@ const saveHotel = async () => {
                     <Receipt className="h-3.5 w-3.5" /> Stay Type *
                   </div>
                   <select
-                    value={String(roomForm.stayType || stayTypeOptions[0]?.value || "")}
-                    onChange={(e) => setRoomForm((p) => ({ ...p, stayType: e.target.value }))}
+                    value={String(
+                      roomForm.stayType || stayTypeOptions[0]?.value || "",
+                    )}
+                    onChange={(e) =>
+                      setRoomForm((p) => ({ ...p, stayType: e.target.value }))
+                    }
                     className="w-full border rounded-md px-3 py-2 text-sm bg-white"
                   >
                     {stayTypeOptions.map((s) => (
@@ -1422,7 +1621,6 @@ const saveHotel = async () => {
                       </option>
                     ))}
                   </select>
-
                 </div>
 
                 <div className="space-y-1">
@@ -1433,7 +1631,28 @@ const saveHotel = async () => {
                     inputMode="decimal"
                     placeholder="0"
                     value={String(roomForm.rate ?? "")}
-                    onChange={(e) => setRoomForm((p) => ({ ...p, rate: toNum(e.target.value) }))}
+                    onChange={(e) =>
+                      setRoomForm((p) => ({
+                        ...p,
+                        rate: toNum(e.target.value),
+                      }))
+                    }
+                  />
+                </div>
+                <div className="space-y-1">
+                  <div className="text-xs text-muted-foreground flex items-center gap-2">
+                    <CreditCard className="h-3.5 w-3.5" /> Double Occupancy Rate
+                  </div>
+                  <Input
+                    inputMode="decimal"
+                    placeholder="0"
+                    value={String(roomForm.doubleOccupancyRate ?? "")}
+                    onChange={(e) =>
+                      setRoomForm((p) => ({
+                        ...p,
+                        doubleOccupancyRate: toNum(e.target.value),
+                      }))
+                    }
                   />
                 </div>
               </div>
@@ -1469,7 +1688,8 @@ const saveHotel = async () => {
 
                 <div className="space-y-1">
                   <div className="text-xs text-muted-foreground flex items-center gap-2">
-                    <Receipt className="h-3.5 w-3.5" /> Hotel Tax Type (read-only)
+                    <Receipt className="h-3.5 w-3.5" /> Hotel Tax Type
+                    (read-only)
                   </div>
                   <div className="w-full border rounded-md px-3 py-2 text-sm bg-muted text-muted-foreground">
                     {selectedHotel?.taxType ? `${selectedHotel.taxType}` : "—"}
@@ -1480,11 +1700,14 @@ const saveHotel = async () => {
               {/* Row 3: Details */}
               <div className="space-y-1">
                 <div className="text-xs text-muted-foreground flex items-center gap-2">
-                  <FileText className="h-3.5 w-3.5" /> Room Details (Services Included / Memo)
+                  <FileText className="h-3.5 w-3.5" /> Room Details (Services
+                  Included / Memo)
                 </div>
                 <textarea
                   value={String(roomForm.roomDetails || "")}
-                  onChange={(e) => setRoomForm((p) => ({ ...p, roomDetails: e.target.value }))}
+                  onChange={(e) =>
+                    setRoomForm((p) => ({ ...p, roomDetails: e.target.value }))
+                  }
                   placeholder="e.g., breakfast included, Wi-Fi, cancellation policy, extra bed, view…"
                   className="w-full min-h-[110px] border rounded-md px-3 py-2 text-sm bg-white"
                 />
@@ -1499,7 +1722,12 @@ const saveHotel = async () => {
                   <Input
                     type="date"
                     value={String(roomForm.rateStartDate || "")}
-                    onChange={(e) => setRoomForm((p) => ({ ...p, rateStartDate: e.target.value }))}
+                    onChange={(e) =>
+                      setRoomForm((p) => ({
+                        ...p,
+                        rateStartDate: e.target.value,
+                      }))
+                    }
                   />
                 </div>
 
@@ -1510,7 +1738,12 @@ const saveHotel = async () => {
                   <Input
                     type="date"
                     value={String(roomForm.rateEndDate || "")}
-                    onChange={(e) => setRoomForm((p) => ({ ...p, rateEndDate: e.target.value }))}
+                    onChange={(e) =>
+                      setRoomForm((p) => ({
+                        ...p,
+                        rateEndDate: e.target.value,
+                      }))
+                    }
                   />
                 </div>
               </div>
