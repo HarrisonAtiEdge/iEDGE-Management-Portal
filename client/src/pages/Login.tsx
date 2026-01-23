@@ -354,7 +354,7 @@ export default function Login() {
           <div className="flex items-center justify-center mb-4">
             <i className="fas fa-file-invoice-dollar text-primary text-3xl"></i>
           </div>
-          <CardTitle className="text-2xl font-bold">Invoice Management</CardTitle>
+          <CardTitle className="text-2xl font-bold">iEDGE Management System</CardTitle>
           <CardDescription>Sign in to your account</CardDescription>
         </CardHeader>
 
