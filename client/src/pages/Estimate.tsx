@@ -1,13 +1,14 @@
-
 import React, { useState } from "react";
-import EstimateForm from "../components/EstimateForm";
-import EstimateList from "../components/EstimateList";
+import EstimateForm from "../components/Estimate/EstimateForm";
+import EstimateList from "../components/Estimate/EstimateList";
 import { Button } from "@/components/ui/button";
 import { Estimate } from "../types";
 
 export default function Estimates() {
   const [activeTab, setActiveTab] = useState<"createNew" | "list">("createNew");
-  const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(null);
+  const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(
+    null,
+  );
   const [duplicateMode, setDuplicateMode] = useState(false);
 
   // Called by EstimateList when user clicks Edit
@@ -45,20 +46,16 @@ export default function Estimates() {
         </Button>
       </div>
 
-     {activeTab === "createNew" && (
-  <EstimateForm
-    existingEstimate={selectedEstimate ?? undefined}
-    duplicateMode={duplicateMode}
-  />
-)}
+      {activeTab === "createNew" && (
+        <EstimateForm
+          existingEstimate={selectedEstimate ?? undefined}
+          duplicateMode={duplicateMode}
+        />
+      )}
 
-{activeTab === "list" && (
-  <EstimateList
-    onEdit={handleEdit}
-    onDuplicate={handleDuplicate}
-  />
-)}
+      {activeTab === "list" && (
+        <EstimateList onEdit={handleEdit} onDuplicate={handleDuplicate} />
+      )}
     </div>
   );
 }
-

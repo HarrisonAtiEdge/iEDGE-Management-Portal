@@ -1,4 +1,3 @@
-
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Estimate } from "../types";
@@ -48,10 +47,25 @@ const wrapTextByWords = (text: string, wordsPerLine = 5) => {
 
 const formatDatePretty = (v?: string) => {
   if (!v) return "";
-  const [y, m, d] = String(v).split("-").map((x) => parseInt(x, 10));
+  const [y, m, d] = String(v)
+    .split("-")
+    .map((x) => parseInt(x, 10));
   if (!y || !m || !d) return v;
 
-  const months = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+  const months = [
+    "Jan",
+    "Feb",
+    "Mar",
+    "Apr",
+    "May",
+    "Jun",
+    "Jul",
+    "Aug",
+    "Sep",
+    "Oct",
+    "Nov",
+    "Dec",
+  ];
   const dd = String(d).padStart(2, "0");
   return `${y}, ${months[m - 1] || ""} ${dd}`.trim();
 };
@@ -70,11 +84,13 @@ const formatMoney = (n: number) => {
 const resolveUser = (
   estimate: Estimate,
   footerUser?: FooterUser | null,
-  usersMap?: Record<string, FooterUser>
+  usersMap?: Record<string, FooterUser>,
 ) => {
   return (
     footerUser ||
-    (usersMap && estimate?.createdBy ? usersMap[estimate.createdBy] : undefined) ||
+    (usersMap && estimate?.createdBy
+      ? usersMap[estimate.createdBy]
+      : undefined) ||
     undefined
   );
 };
@@ -96,15 +112,20 @@ const resolvePhone = (u?: FooterUser) => {
 const resolveFooterContact = (
   estimate: Estimate,
   footerUser?: FooterUser | null,
-  usersMap?: Record<string, FooterUser>
+  usersMap?: Record<string, FooterUser>,
 ) => {
   // Your fixed footer:
   return `For any queries, please feel free to call Ahsan Idrees | ahsan.idrees@iedge.co | +92 345 8508254 | Terms & Conditions enclosed.`;
 };
 
-const addTermsAndConditionsPages = (pdf: jsPDF, args: { title?: string; text?: string }) => {
+const addTermsAndConditionsPages = (
+  pdf: jsPDF,
+  args: { title?: string; text?: string },
+) => {
   const t = String(args.title || "").trim();
-  const txt = String(args.text || "").replace(/\r\n/g, "\n").trim();
+  const txt = String(args.text || "")
+    .replace(/\r\n/g, "\n")
+    .trim();
   if (!t && !txt) return;
 
   const marginX = 40;
@@ -193,7 +214,12 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
   const { estimate, companyList } = args;
 
   // ✅ compress = true helps a lot
-  const pdf = new jsPDF({ orientation: "p", unit: "pt", format: "a4", compress: true });
+  const pdf = new jsPDF({
+    orientation: "p",
+    unit: "pt",
+    format: "a4",
+    compress: true,
+  });
 
   const pageWidth = pdf.internal.pageSize.getWidth();
   const pageHeight = pdf.internal.pageSize.getHeight();
@@ -234,7 +260,7 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
           logoWidth,
           logoHeight,
           undefined,
-          "FAST"
+          "FAST",
         );
       } catch {
         // ignore image errors safely
@@ -260,7 +286,10 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
     pdf.setFont("helvetica", "normal");
     y += 12;
 
-    const wrappedAddress = wrapTextByWords((estimate as any).address || estimate.address || "", 5);
+    const wrappedAddress = wrapTextByWords(
+      (estimate as any).address || estimate.address || "",
+      5,
+    );
     wrappedAddress.forEach((line) => {
       pdf.text(line, margin, y);
       y += 12;
@@ -273,7 +302,11 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
 
     pdf.setFont("helvetica", "normal");
     pdf.text(`Issue Date: ${formatDatePretty(estimate.date)}`, rightX, 130);
-    pdf.text(`Expire On: ${formatDatePretty(estimate.expiryDate)}`, rightX, 145);
+    pdf.text(
+      `Expire On: ${formatDatePretty(estimate.expiryDate)}`,
+      rightX,
+      145,
+    );
 
     // Created by
     const u = resolveUser(estimate, args.footerUser, args.usersMap);
@@ -289,12 +322,18 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
     pdf.text(`${createdPhone}`, rightX, 204);
 
     // Approval received on email (optional)
-    const approvalReceivedOn = String((estimate as any)?.approvalReceivedOn || "").trim();
+    const approvalReceivedOn = String(
+      (estimate as any)?.approvalReceivedOn || "",
+    ).trim();
     if (approvalReceivedOn) {
       pdf.setFont("helvetica", "bold");
       pdf.text("Approval received on email:", rightX, 220);
       pdf.setFont("helvetica", "normal");
-      pdf.text(formatDatePretty(approvalReceivedOn) || approvalReceivedOn, rightX, 233);
+      pdf.text(
+        formatDatePretty(approvalReceivedOn) || approvalReceivedOn,
+        rightX,
+        233,
+      );
     }
 
     pdf.setFont("helvetica", "bold");
@@ -319,30 +358,40 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
     const FOOTER_GAP = 110; // space reserved for footer + breathing room
     const footerSafeY = pageHeight - FOOTER_GAP;
 
-    const serviceRows = ((estimate.services || []) as any[]).map((s: ServiceItem) => {
-      const units = Number(s.units || 0);
+    const serviceRows = ((estimate.services || []) as any[]).map(
+      (s: ServiceItem) => {
+        const units = Number(s.units || 0);
 
-      // ✅ support percent rateMode from your form
-      const rateMode = (s as any).rateMode as "amount" | "percent" | undefined;
-      const rateNum = Number(String(s.rate ?? 0).replace(/,/g, "")) || 0;
+        // ✅ support percent rateMode from your form
+        const rateMode = (s as any).rateMode as
+          | "amount"
+          | "percent"
+          | undefined;
+        const rateNum = Number(String(s.rate ?? 0).replace(/,/g, "")) || 0;
 
-      const amount = rateMode === "percent" ? units * (rateNum / 100) : units * rateNum;
+        const amount =
+          rateMode === "percent" ? units * (rateNum / 100) : units * rateNum;
 
-      const rateDisplay =
-        rateMode === "percent"
-          ? (rateNum === 0 ? "" : `${formatMoney(rateNum)}%`)
-          : (rateNum === 0 ? "" : formatMoney(rateNum));
+        const rateDisplay =
+          rateMode === "percent"
+            ? rateNum === 0
+              ? ""
+              : `${formatMoney(rateNum)}%`
+            : rateNum === 0
+              ? ""
+              : formatMoney(rateNum);
 
-      return [
-        `${s.detail}\n${s.description || ""}`,
-        units === 0 ? "" : units.toLocaleString(),
-        rateDisplay,
-        Number(s.taxPercent ?? 0) > 0 && estimate.taxType !== "none"
-          ? `${s.taxLabel ?? "Tax"} ${Number(s.taxPercent ?? 0)}%`
-          : "No Tax",
-        amount === 0 ? "" : formatMoney(amount),
-      ];
-    });
+        return [
+          `${s.detail}\n${s.description || ""}`,
+          units === 0 ? "" : units.toLocaleString(),
+          rateDisplay,
+          Number(s.taxPercent ?? 0) > 0 && estimate.taxType !== "none"
+            ? `${s.taxLabel ?? "Tax"} ${Number(s.taxPercent ?? 0)}%`
+            : "No Tax",
+          amount === 0 ? "" : formatMoney(amount),
+        ];
+      },
+    );
 
     autoTable(pdf, {
       startY: 235,
@@ -380,14 +429,23 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
 
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(10);
-    pdf.text(formatMoney(estimate.subtotal ?? 0), totalsRightX, finalY, { align: "right" });
+    pdf.text(formatMoney(estimate.subtotal ?? 0), totalsRightX, finalY, {
+      align: "right",
+    });
 
     // ✅ TAX line now includes WHT too (so SUBTOTAL + TAX = TOTAL)
-    pdf.text(formatMoney(displayTax), totalsRightX, finalY + 15, { align: "right" });
+    pdf.text(formatMoney(displayTax), totalsRightX, finalY + 15, {
+      align: "right",
+    });
 
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(13);
-    pdf.text(`PKR ${formatMoney(estimate.total ?? 0)}`, totalsRightX, finalY + 32, { align: "right" });
+    pdf.text(
+      `PKR ${formatMoney(estimate.total ?? 0)}`,
+      totalsRightX,
+      finalY + 32,
+      { align: "right" },
+    );
     pdf.setFontSize(10);
 
     // ==========================
@@ -428,7 +486,10 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
     // ==========================
     // ✅ TAX SUMMARY (rows)
     // ==========================
-    const map = new Map<string, { label: string; pct: number; tax: number; net: number }>();
+    const map = new Map<
+      string,
+      { label: string; pct: number; tax: number; net: number }
+    >();
 
     for (const s of services) {
       const pct = Number(s.taxPercent ?? 0);
@@ -440,7 +501,8 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
       const rateMode = (s as any).rateMode as "amount" | "percent" | undefined;
       const rateNum = Number(String(s.rate ?? 0).replace(/,/g, "")) || 0;
 
-      const base = rateMode === "percent" ? units * (rateNum / 100) : units * rateNum;
+      const base =
+        rateMode === "percent" ? units * (rateNum / 100) : units * rateNum;
 
       let taxAmount = 0;
       let netAmount = 0;
@@ -459,7 +521,12 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
         prev.tax += taxAmount;
         prev.net += netAmount;
       } else {
-        map.set(key, { label: label || "Tax", pct, tax: taxAmount, net: netAmount });
+        map.set(key, {
+          label: label || "Tax",
+          pct,
+          tax: taxAmount,
+          net: netAmount,
+        });
       }
     }
 
@@ -476,7 +543,10 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
     // ==========================
     // ✅ WHT SUMMARY (rows) — NO EXTRA HEADING ROW
     // ==========================
-    const whtMap = new Map<string, { label: string; pct: number; wht: number; base: number }>();
+    const whtMap = new Map<
+      string,
+      { label: string; pct: number; wht: number; base: number }
+    >();
 
     for (const s of services) {
       const pct = Number(s.whtPercent ?? 0);
@@ -504,7 +574,10 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
     ]);
 
     const totalWht = Array.from(whtMap.values()).reduce((a, b) => a + b.wht, 0);
-    const totalWhtBase = Array.from(whtMap.values()).reduce((a, b) => a + b.base, 0);
+    const totalWhtBase = Array.from(whtMap.values()).reduce(
+      (a, b) => a + b.base,
+      0,
+    );
 
     // ==========================
     // ✅ ONE TABLE: TAX SUMMARY heading stays, WHT rows look like tax rows
@@ -516,13 +589,23 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
 
       if (taxRows.length > 0) {
         combinedRows.push(...taxRows);
-        combinedRows.push(["", "TOTAL (TAX)", formatMoney(totalTax), formatMoney(totalNet)]);
+        combinedRows.push([
+          "",
+          "TOTAL (TAX)",
+          formatMoney(totalTax),
+          formatMoney(totalNet),
+        ]);
       }
 
       if (whtRows.length > 0) {
         // ✅ NO EXTRA HEADING ROW — just rows like other taxes
         combinedRows.push(...whtRows);
-        combinedRows.push(["", "TOTAL (WHT)", formatMoney(totalWht), formatMoney(totalWhtBase)]);
+        combinedRows.push([
+          "",
+          "TOTAL (WHT)",
+          formatMoney(totalWht),
+          formatMoney(totalWhtBase),
+        ]);
       }
 
       autoTable(pdf, {
@@ -545,7 +628,10 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
 
     // Message
     if (estimate.message) {
-      let noteY = Math.max(afterTotalsY, (pdf as any).lastAutoTable?.finalY + 30 || afterTotalsY);
+      let noteY = Math.max(
+        afterTotalsY,
+        (pdf as any).lastAutoTable?.finalY + 30 || afterTotalsY,
+      );
 
       const footerSafeY2 = pageHeight - 120;
       if (noteY > footerSafeY2) {
@@ -578,15 +664,20 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
     pdf.setFontSize(8);
     pdf.setTextColor(100);
 
-    pdf.text(resolveFooterContact(estimate, args.footerUser, args.usersMap), margin, footerY - 15, {
-      maxWidth: pageWidth - margin * 2,
-    });
+    pdf.text(
+      resolveFooterContact(estimate, args.footerUser, args.usersMap),
+      margin,
+      footerY - 15,
+      {
+        maxWidth: pageWidth - margin * 2,
+      },
+    );
 
     pdf.text(
       "C-150, Block 2, Clifton, Karachi - 75600, Pakistan | Tel: +92 213 537 1818 | Email: sales@iedge.co | URL: www.iedge.co",
       margin,
       footerY + 15,
-      { maxWidth: pageWidth - margin * 2 }
+      { maxWidth: pageWidth - margin * 2 },
     );
   };
 
@@ -596,7 +687,10 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
   // T&C pages
   addTermsAndConditionsPages(pdf, {
     title: (estimate as any).termsConditionTitle || "",
-    text: (estimate as any).termsConditionText || (estimate as any).termsCondition || "",
+    text:
+      (estimate as any).termsConditionText ||
+      (estimate as any).termsCondition ||
+      "",
   });
 
   // page numbers

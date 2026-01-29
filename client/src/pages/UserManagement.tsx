@@ -45,9 +45,9 @@ const AVAILABLE_TABS = [
   { path: "/finance", label: "Finance" },
   { path: "/operation", label: "Operation" },
   { path: "/estimate", label: "Estimates" },
-   { path: "/sales-management", label: "Sales Management"},
-   { path: "/travel/hotel", label: "Travel"},
-
+  { path: "/sales-management", label: "Sales Management" },
+  { path: "/travel/hotel", label: "Travel" },
+  { path: "/invoice-estimate", label: "Invoice Estimiates" },
 ];
 
 const PANEL_ID = "IEDGE-SYSTEM";
@@ -75,12 +75,12 @@ interface User {
 
   // new fields
   mobileCountryCode?: string; // e.g. +92
-  mobileNo?: string;          // e.g. 3001234567
-  region?: string;            // e.g. Karachi
-  reportingTo?: string;       // e.g. Manager name / UID / email
-  financialLimit?: number;    // e.g. 500000
-  designation?: string;       // e.g. Sales Exec
-  department?: string;        // e.g. Sales
+  mobileNo?: string; // e.g. 3001234567
+  region?: string; // e.g. Karachi
+  reportingTo?: string; // e.g. Manager name / UID / email
+  financialLimit?: number; // e.g. 500000
+  designation?: string; // e.g. Sales Exec
+  department?: string; // e.g. Sales
 }
 
 // --------------------
@@ -127,7 +127,9 @@ export default function UserManagement() {
   const [showDeletePopup, setShowDeletePopup] = useState(false);
   const [roleToDelete, setRoleToDelete] = useState<Role | null>(null);
   const [confirmDeleteUser, setConfirmDeleteUser] = useState(false);
-  const [userIdToConfirmDelete, setUserIdToConfirmDelete] = useState<string | null>(null);
+  const [userIdToConfirmDelete, setUserIdToConfirmDelete] = useState<
+    string | null
+  >(null);
 
   // View details modal
   const [viewUser, setViewUser] = useState<User | null>(null);
@@ -159,26 +161,29 @@ export default function UserManagement() {
   // Load roles from Firestore (dynamic)
   // --------------------
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "Panels", PANEL_ID, "sidebarConfig"), (snap) => {
-      const list: Role[] = snap.docs.map((d) => {
-        const data = d.data() as any;
+    const unsub = onSnapshot(
+      collection(db, "Panels", PANEL_ID, "sidebarConfig"),
+      (snap) => {
+        const list: Role[] = snap.docs.map((d) => {
+          const data = d.data() as any;
 
-        let items: any[] = data.items ?? [];
-        if (items && items.length > 0 && typeof items[0] === "object") {
-          items = items.map((it: any) => it.path ?? it);
-        }
+          let items: any[] = data.items ?? [];
+          if (items && items.length > 0 && typeof items[0] === "object") {
+            items = items.map((it: any) => it.path ?? it);
+          }
 
-        return {
-          id: d.id,
-          name: data.name ?? data.id,
-          description: data.description ?? "",
-          users: data.users ?? 0,
-          items,
-        } as Role;
-      });
+          return {
+            id: d.id,
+            name: data.name ?? data.id,
+            description: data.description ?? "",
+            users: data.users ?? 0,
+            items,
+          } as Role;
+        });
 
-      setRoles(list);
-    });
+        setRoles(list);
+      },
+    );
 
     return () => unsub();
   }, []);
@@ -197,7 +202,7 @@ export default function UserManagement() {
         snap.docs.map((d) => ({
           ...(d.data() as User),
           id: d.id,
-        }))
+        })),
       );
     });
 
@@ -207,7 +212,7 @@ export default function UserManagement() {
           ...(d.data() as User),
           isActive: (d.data() as any)?.isActive ?? true,
           id: d.id,
-        }))
+        })),
       );
     });
 
@@ -285,14 +290,20 @@ export default function UserManagement() {
     if (!userIdToConfirmDelete) return;
 
     try {
-      await deleteDoc(doc(db, "Panels", PANEL_ID, "users", userIdToConfirmDelete));
+      await deleteDoc(
+        doc(db, "Panels", PANEL_ID, "users", userIdToConfirmDelete),
+      );
 
       toast({
         title: "User Deleted",
         description: "The selected user has been removed.",
       });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      });
     }
 
     setConfirmDeleteUser(false);
@@ -302,9 +313,16 @@ export default function UserManagement() {
   async function deleteRoleDocOnly(roleId: string) {
     try {
       await deleteDoc(doc(db, "Panels", PANEL_ID, "sidebarConfig", roleId));
-      toast({ title: "Role deleted", description: "Role removed successfully." });
+      toast({
+        title: "Role deleted",
+        description: "Role removed successfully.",
+      });
     } catch (err: any) {
-      toast({ title: "Error", description: err.message, variant: "destructive" });
+      toast({
+        title: "Error",
+        description: err.message,
+        variant: "destructive",
+      });
     }
   }
 
@@ -332,7 +350,9 @@ export default function UserManagement() {
     }
 
     const financialLimitNumber =
-      newUser.financialLimit?.trim() === "" ? 0 : Number(newUser.financialLimit);
+      newUser.financialLimit?.trim() === ""
+        ? 0
+        : Number(newUser.financialLimit);
 
     if (Number.isNaN(financialLimitNumber)) {
       toast({
@@ -349,7 +369,7 @@ export default function UserManagement() {
       const cred = await createUserWithEmailAndPassword(
         secondaryAuth,
         newUser.email.trim(),
-        newUser.password
+        newUser.password,
       );
 
       await updateProfile(cred.user, { displayName: newUser.displayName });
@@ -459,10 +479,16 @@ export default function UserManagement() {
     if (!editingRole) return;
 
     try {
-      const roleRef = doc(db, "Panels", PANEL_ID, "sidebarConfig", editingRole.id);
+      const roleRef = doc(
+        db,
+        "Panels",
+        PANEL_ID,
+        "sidebarConfig",
+        editingRole.id,
+      );
 
       const itemsToSave = AVAILABLE_TABS.filter((t) =>
-        selectedTabs.includes(t.path)
+        selectedTabs.includes(t.path),
       ).map((t) => ({ path: t.path, label: t.label }));
 
       await setDoc(
@@ -475,7 +501,7 @@ export default function UserManagement() {
           items: itemsToSave,
           updatedAt: new Date(),
         },
-        { merge: true }
+        { merge: true },
       );
 
       setEditingRole(null);
@@ -495,14 +521,18 @@ export default function UserManagement() {
   // --------------------
   // UI: check main admin
   // --------------------
-  const isMainAdmin = ["main_admin", "Main Admin"].includes(userProfile?.role ?? "");
+  const isMainAdmin = ["main_admin", "Main Admin"].includes(
+    userProfile?.role ?? "",
+  );
 
   if (!isMainAdmin) {
     return (
       <div className="flex items-center justify-center h-64">
         <div className="text-center">
           <h2 className="text-xl font-semibold mb-2">Access Denied</h2>
-          <p className="text-gray-500">Only main administrators can access user management.</p>
+          <p className="text-gray-500">
+            Only main administrators can access user management.
+          </p>
         </div>
       </div>
     );
@@ -518,7 +548,9 @@ export default function UserManagement() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold">User Accounts</h2>
           <div className="flex items-center gap-2">
-            <Button onClick={() => setShowCreateUser(true)}>Create New User</Button>
+            <Button onClick={() => setShowCreateUser(true)}>
+              Create New User
+            </Button>
           </div>
         </div>
 
@@ -530,7 +562,8 @@ export default function UserManagement() {
             </DialogHeader>
 
             <p className="text-sm mb-4">
-              Do you really want to delete this account? This action cannot be undone.
+              Do you really want to delete this account? This action cannot be
+              undone.
             </p>
 
             <DialogFooter>
@@ -551,21 +584,48 @@ export default function UserManagement() {
 
             {viewUser && (
               <div className="space-y-2 text-sm">
-                <div><span className="font-medium">Name:</span> {viewUser.displayName || "-"}</div>
-                <div><span className="font-medium">Email:</span> {viewUser.email || "-"}</div>
-                <div><span className="font-medium">Role:</span> {viewUser.role || "-"}</div>
-                <div><span className="font-medium">Region:</span> {viewUser.region || "-"}</div>
+                <div>
+                  <span className="font-medium">Name:</span>{" "}
+                  {viewUser.displayName || "-"}
+                </div>
+                <div>
+                  <span className="font-medium">Email:</span>{" "}
+                  {viewUser.email || "-"}
+                </div>
+                <div>
+                  <span className="font-medium">Role:</span>{" "}
+                  {viewUser.role || "-"}
+                </div>
+                <div>
+                  <span className="font-medium">Region:</span>{" "}
+                  {viewUser.region || "-"}
+                </div>
                 <div>
                   <span className="font-medium">Mobile:</span>{" "}
-                  {(viewUser.mobileCountryCode || "") + " " + (viewUser.mobileNo || "-")}
+                  {(viewUser.mobileCountryCode || "") +
+                    " " +
+                    (viewUser.mobileNo || "-")}
                 </div>
-                <div><span className="font-medium">Reporting To:</span> {viewUser.reportingTo || "-"}</div>
-                <div><span className="font-medium">Designation:</span> {viewUser.designation || "-"}</div>
-                <div><span className="font-medium">Department:</span> {viewUser.department || "-"}</div>
-                <div><span className="font-medium">Financial Limit:</span> {Number(viewUser.financialLimit ?? 0).toLocaleString()}</div>
+                <div>
+                  <span className="font-medium">Reporting To:</span>{" "}
+                  {viewUser.reportingTo || "-"}
+                </div>
+                <div>
+                  <span className="font-medium">Designation:</span>{" "}
+                  {viewUser.designation || "-"}
+                </div>
+                <div>
+                  <span className="font-medium">Department:</span>{" "}
+                  {viewUser.department || "-"}
+                </div>
+                <div>
+                  <span className="font-medium">Financial Limit:</span>{" "}
+                  {Number(viewUser.financialLimit ?? 0).toLocaleString()}
+                </div>
 
                 <div className="mt-3 p-3 rounded border bg-muted/30 text-xs text-muted-foreground">
-                  Passwords cannot be viewed/retrieved from Firebase Auth. If needed, implement an admin password reset flow instead.
+                  Passwords cannot be viewed/retrieved from Firebase Auth. If
+                  needed, implement an admin password reset flow instead.
                 </div>
               </div>
             )}
@@ -605,7 +665,9 @@ export default function UserManagement() {
                       <Badge>{user.role}</Badge>
                     </td>
                     <td className="px-6 py-3">
-                      {user.createdAt?.toDate ? user.createdAt.toDate().toLocaleDateString() : ""}
+                      {user.createdAt?.toDate
+                        ? user.createdAt.toDate().toLocaleDateString()
+                        : ""}
                     </td>
                     <td className="px-6 py-3">
                       {user.isActive ? (
@@ -652,7 +714,9 @@ export default function UserManagement() {
         <div className="flex items-center justify-between mb-4">
           <h2 className="text-2xl font-bold">Roles & Permissions</h2>
           <div className="flex items-center gap-2">
-            <Button onClick={() => setShowCreateRole(true)}>Create New Role</Button>
+            <Button onClick={() => setShowCreateRole(true)}>
+              Create New Role
+            </Button>
           </div>
         </div>
 
@@ -663,11 +727,17 @@ export default function UserManagement() {
                 <div>
                   <span className="font-semibold">{role.name}</span>
                   <p className="text-xs text-gray-500">{role.description}</p>
-                  <p className="text-xs text-gray-500">{role.users ?? 0} users</p>
+                  <p className="text-xs text-gray-500">
+                    {role.users ?? 0} users
+                  </p>
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <Button variant="outline" size="sm" onClick={() => openEditRole(role)}>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => openEditRole(role)}
+                  >
                     Edit
                   </Button>
                   <Button
@@ -687,8 +757,11 @@ export default function UserManagement() {
                 <div className="mt-2 flex flex-wrap gap-2">
                   {Array.isArray(role.items) && role.items.length > 0 ? (
                     role.items.map((it: any, idx: number) => {
-                      const path = typeof it === "string" ? it : it.path ?? it;
-                      const label = AVAILABLE_TABS.find((t) => t.path === path)?.label ?? path;
+                      const path =
+                        typeof it === "string" ? it : (it.path ?? it);
+                      const label =
+                        AVAILABLE_TABS.find((t) => t.path === path)?.label ??
+                        path;
                       return (
                         <Badge key={idx} className="px-2 py-1">
                           {label}
@@ -696,7 +769,9 @@ export default function UserManagement() {
                       );
                     })
                   ) : (
-                    <p className="text-sm text-gray-400 mt-2">No tabs enabled</p>
+                    <p className="text-sm text-gray-400 mt-2">
+                      No tabs enabled
+                    </p>
                   )}
                 </div>
 
@@ -712,7 +787,9 @@ export default function UserManagement() {
                       ))}
                     </ul>
                   ) : (
-                    <p className="text-sm text-gray-400 mt-2">No users in this role</p>
+                    <p className="text-sm text-gray-400 mt-2">
+                      No users in this role
+                    </p>
                   )}
                 </div>
               </CardContent>
@@ -735,9 +812,13 @@ export default function UserManagement() {
                   checked={selectedTabs.includes(tab.path)}
                   onCheckedChange={(checked) => {
                     if (checked) {
-                      setSelectedTabs((prev) => Array.from(new Set([...prev, tab.path])));
+                      setSelectedTabs((prev) =>
+                        Array.from(new Set([...prev, tab.path])),
+                      );
                     } else {
-                      setSelectedTabs((prev) => prev.filter((p) => p !== tab.path));
+                      setSelectedTabs((prev) =>
+                        prev.filter((p) => p !== tab.path),
+                      );
                     }
                   }}
                 />
@@ -767,7 +848,9 @@ export default function UserManagement() {
               <Label>Role Name</Label>
               <Input
                 value={newRole.name}
-                onChange={(e) => setNewRole({ ...newRole, name: e.target.value })}
+                onChange={(e) =>
+                  setNewRole({ ...newRole, name: e.target.value })
+                }
                 placeholder="e.g. HR Manager"
               />
             </div>
@@ -776,7 +859,9 @@ export default function UserManagement() {
               <Label>Description</Label>
               <Input
                 value={newRole.description}
-                onChange={(e) => setNewRole({ ...newRole, description: e.target.value })}
+                onChange={(e) =>
+                  setNewRole({ ...newRole, description: e.target.value })
+                }
                 placeholder="Short description"
               />
             </div>
@@ -806,7 +891,9 @@ export default function UserManagement() {
                   id="create-name"
                   placeholder="Enter full name"
                   value={newUser.displayName}
-                  onChange={(e) => setNewUser({ ...newUser, displayName: e.target.value })}
+                  onChange={(e) =>
+                    setNewUser({ ...newUser, displayName: e.target.value })
+                  }
                 />
               </div>
 
@@ -817,7 +904,9 @@ export default function UserManagement() {
                   type="email"
                   placeholder="user@example.com"
                   value={newUser.email}
-                  onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+                  onChange={(e) =>
+                    setNewUser({ ...newUser, email: e.target.value })
+                  }
                 />
               </div>
 
@@ -826,7 +915,12 @@ export default function UserManagement() {
                 <Input
                   placeholder="+92"
                   value={newUser.mobileCountryCode}
-                  onChange={(e) => setNewUser({ ...newUser, mobileCountryCode: e.target.value })}
+                  onChange={(e) =>
+                    setNewUser({
+                      ...newUser,
+                      mobileCountryCode: e.target.value,
+                    })
+                  }
                 />
               </div>
 
@@ -835,7 +929,9 @@ export default function UserManagement() {
                 <Input
                   placeholder="3001234567"
                   value={newUser.mobileNo}
-                  onChange={(e) => setNewUser({ ...newUser, mobileNo: e.target.value })}
+                  onChange={(e) =>
+                    setNewUser({ ...newUser, mobileNo: e.target.value })
+                  }
                 />
               </div>
 
@@ -844,7 +940,9 @@ export default function UserManagement() {
                 <Input
                   placeholder="Karachi / Lahore / Islamabad"
                   value={newUser.region}
-                  onChange={(e) => setNewUser({ ...newUser, region: e.target.value })}
+                  onChange={(e) =>
+                    setNewUser({ ...newUser, region: e.target.value })
+                  }
                 />
               </div>
 
@@ -853,7 +951,9 @@ export default function UserManagement() {
                 <Input
                   placeholder="Manager name / email"
                   value={newUser.reportingTo}
-                  onChange={(e) => setNewUser({ ...newUser, reportingTo: e.target.value })}
+                  onChange={(e) =>
+                    setNewUser({ ...newUser, reportingTo: e.target.value })
+                  }
                 />
               </div>
 
@@ -863,7 +963,9 @@ export default function UserManagement() {
                   type="number"
                   placeholder="0"
                   value={newUser.financialLimit}
-                  onChange={(e) => setNewUser({ ...newUser, financialLimit: e.target.value })}
+                  onChange={(e) =>
+                    setNewUser({ ...newUser, financialLimit: e.target.value })
+                  }
                 />
               </div>
 
@@ -872,7 +974,9 @@ export default function UserManagement() {
                 <Input
                   placeholder="Sales Executive"
                   value={newUser.designation}
-                  onChange={(e) => setNewUser({ ...newUser, designation: e.target.value })}
+                  onChange={(e) =>
+                    setNewUser({ ...newUser, designation: e.target.value })
+                  }
                 />
               </div>
 
@@ -881,7 +985,9 @@ export default function UserManagement() {
                 <Input
                   placeholder="Sales"
                   value={newUser.department}
-                  onChange={(e) => setNewUser({ ...newUser, department: e.target.value })}
+                  onChange={(e) =>
+                    setNewUser({ ...newUser, department: e.target.value })
+                  }
                 />
               </div>
 
@@ -891,7 +997,9 @@ export default function UserManagement() {
                   id="create-role"
                   className="w-full rounded-md border px-3 py-2"
                   value={newUser.role}
-                  onChange={(e) => setNewUser({ ...newUser, role: e.target.value })}
+                  onChange={(e) =>
+                    setNewUser({ ...newUser, role: e.target.value })
+                  }
                 >
                   <option value="">Select role</option>
                   {roles.map((r) => (
@@ -910,7 +1018,9 @@ export default function UserManagement() {
                     type={showPassword ? "text" : "password"}
                     placeholder="min 6 characters"
                     value={newUser.password}
-                    onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                    onChange={(e) =>
+                      setNewUser({ ...newUser, password: e.target.value })
+                    }
                   />
                   <Button
                     type="button"
@@ -921,7 +1031,8 @@ export default function UserManagement() {
                   </Button>
                 </div>
                 <p className="text-xs text-muted-foreground mt-1">
-                  Password can be shown here only while creating. It won’t be stored or retrievable later.
+                  Password can be shown here only while creating. It won’t be
+                  stored or retrievable later.
                 </p>
               </div>
             </div>

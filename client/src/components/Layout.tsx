@@ -14,7 +14,11 @@ const PANEL_ID = "IEDGE-SYSTEM";
 // 🔹 All available tabs (for main_admin full access)
 const AVAILABLE_TABS = [
   { path: "/dashboard", label: "Dashboard", icon: "fas fa-tachometer-alt" },
-  { path: "/sales-dashboard", label: "Sales Dashboard", icon: "fas fa-chart-line" },
+  {
+    path: "/sales-dashboard",
+    label: "Sales Dashboard",
+    icon: "fas fa-chart-line",
+  },
   { path: "/sales", label: "Sales", icon: "fas fa-chart-bar" },
   { path: "/clients", label: "Clients", icon: "fas fa-user" },
   { path: "/records", label: "Records", icon: "fas fa-archive" },
@@ -24,12 +28,19 @@ const AVAILABLE_TABS = [
   { path: "/expenses", label: "Expenses", icon: "fas fa-receipt" },
   { path: "/estimate", label: "Estimate", icon: "fas fa-receipt" },
   { path: "/users", label: "User Management", icon: "fas fa-users" },
-  { path: "/sales-management", label: "Sales Management", icon: "fas fa-chart-pie" },
+  {
+    path: "/sales-management",
+    label: "Sales Management",
+    icon: "fas fa-chart-pie",
+  },
   { path: "/settings", label: "Settings", icon: "fas fa-receipt" },
   { path: "/travel/hotel", label: "Travel ", icon: "fas fa-hotel" },
   { path: "/usertravel", label: "User Travel", icon: "fas fa-hotel" },
-
-
+  {
+    path: "/invoice-estimate",
+    label: "Invoice Estimiate",
+    icon: "fas fa-hotel",
+  },
 ];
 
 interface SidebarItem {
@@ -52,71 +63,78 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     setLocation("/login");
   };
 
- useEffect(() => {
-  let unsubRole: (() => void) | null = null;
+  useEffect(() => {
+    let unsubRole: (() => void) | null = null;
 
-  const unsubAuth = onAuthStateChanged(auth, async (user) => {
-    if (unsubRole) {
-      unsubRole();
-      unsubRole = null;
-    }
+    const unsubAuth = onAuthStateChanged(auth, async (user) => {
+      if (unsubRole) {
+        unsubRole();
+        unsubRole = null;
+      }
 
-    if (!user) {
-      setRole(null);
-      setSidebarItems([]);
-      setUserName("Guest");
-      setLoading(false);
-      setLocation("/login");
-      return;
-    }
-
-    // ✅ USER PROFILE (Panel scoped)
-const userRef = doc(db, "Panels", "IEDGE-SYSTEM", "users", user.uid);
-
-    const userSnap = await getDoc(userRef);
-
-    if (!userSnap.exists()) {
-      setSidebarItems([]);
-      setRole(null);
-      setLoading(false);
-      return;
-    }
-
-    const userData = userSnap.data();
-    const userRole = userData.role;
-
-    setRole(userRole);
-    setUserName(userData.displayName || user.displayName || "User");
-
-    // ✅ Main admin sees all tabs
-    if (userRole === "main_admin") {
-      setSidebarItems(AVAILABLE_TABS);
-      setLoading(false);
-      return;
-    }
-
-    // ✅ ROLE-BASED SIDEBAR (Panel scoped)
-    if (userRole) {const roleRef = doc(db, "Panels", "IEDGE-SYSTEM", "sidebarConfig", userRole);
-
-      unsubRole = onSnapshot(roleRef, (snap) => {
-        if (snap.exists()) {
-          setSidebarItems(snap.data().items || []);
-        } else {
-          setSidebarItems([]);
-        }
+      if (!user) {
+        setRole(null);
+        setSidebarItems([]);
+        setUserName("Guest");
         setLoading(false);
-      });
-    } else {
-      setSidebarItems([]);
-      setLoading(false);
-    }
-  });
+        setLocation("/login");
+        return;
+      }
 
-  return () => {
-    unsubAuth();
-    if (unsubRole) unsubRole();
-  };
-}, [setLocation]);
+      // ✅ USER PROFILE (Panel scoped)
+      const userRef = doc(db, "Panels", "IEDGE-SYSTEM", "users", user.uid);
+
+      const userSnap = await getDoc(userRef);
+
+      if (!userSnap.exists()) {
+        setSidebarItems([]);
+        setRole(null);
+        setLoading(false);
+        return;
+      }
+
+      const userData = userSnap.data();
+      const userRole = userData.role;
+
+      setRole(userRole);
+      setUserName(userData.displayName || user.displayName || "User");
+
+      // ✅ Main admin sees all tabs
+      if (userRole === "main_admin") {
+        setSidebarItems(AVAILABLE_TABS);
+        setLoading(false);
+        return;
+      }
+
+      // ✅ ROLE-BASED SIDEBAR (Panel scoped)
+      if (userRole) {
+        const roleRef = doc(
+          db,
+          "Panels",
+          "IEDGE-SYSTEM",
+          "sidebarConfig",
+          userRole,
+        );
+
+        unsubRole = onSnapshot(roleRef, (snap) => {
+          if (snap.exists()) {
+            setSidebarItems(snap.data().items || []);
+          } else {
+            setSidebarItems([]);
+          }
+          setLoading(false);
+        });
+      } else {
+        setSidebarItems([]);
+        setLoading(false);
+      }
+    });
+
+    return () => {
+      unsubAuth();
+      if (unsubRole) unsubRole();
+    };
+  }, [setLocation]);
 
   if (loading) {
     return (

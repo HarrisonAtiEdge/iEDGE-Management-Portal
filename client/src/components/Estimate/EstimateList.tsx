@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
-import { Estimate } from "../types";
-import { Button } from "./ui/button";
+import { Estimate } from "../../types";
+import { Button } from "@/components/ui/button";
 import { auth, db } from "@/lib/firebase";
 import {
   doc,
@@ -15,14 +15,8 @@ import {
 import { onAuthStateChanged } from "firebase/auth";
 import { deleteDoc, doc as docRef } from "firebase/firestore";
 import { buildEstimatePdfBlob } from "@/lib/estimatePdf"; // ✅ NEW
-import {
-  Eye,
-  Pencil,
-  Copy,
-  Trash2,
-} from "lucide-react";
+import { Eye, Pencil, Copy, Trash2 } from "lucide-react";
 import { updateDoc } from "firebase/firestore";
-
 
 type Props = {
   onEdit: (estimate: Estimate) => void;
@@ -32,19 +26,28 @@ type Props = {
 export default function EstimateList({ onEdit, onDuplicate }: Props) {
   const [estimates, setEstimates] = useState<Estimate[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
-  const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(null);
+  const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(
+    null,
+  );
   const [previewURL, setPreviewURL] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
   const [usersMap, setUsersMap] = useState<Record<string, any>>({});
   const [isAdmin, setIsAdmin] = useState(false);
+  const [isOperationAdmin, setIsOperationAdmin] = useState(false);
 
   const estimatesRef = collection(db, "Panels", "IEDGE-SYSTEM", "estimates");
 
   const companyList = [
     { name: "iEDGE", logo: "/Iedge-TM-Logos-01.png" },
-    { name: "iEDGE - Digital & Creative", logo: "/Iedge-Digital-and-Creative-TM-Logos-12.png" },
+    {
+      name: "iEDGE - Digital & Creative",
+      logo: "/Iedge-Digital-and-Creative-TM-Logos-12.png",
+    },
     { name: "iEDGE - Events & Activations", logo: "/iedge-events-logo.png" },
-    { name: "iEDGE - Health Sciences", logo: "/Iedge-Health-Sciences-TM-Logos-05.png" },
+    {
+      name: "iEDGE - Health Sciences",
+      logo: "/Iedge-Health-Sciences-TM-Logos-05.png",
+    },
     { name: "iEDGE - International Education", logo: "/iedge-edu-logo.png" },
     { name: "iEDGE - Trading", logo: "/Iedge-Trade-TM-Logos-10.png" },
     { name: "iEDGE - Travel & Tours", logo: "/iedge-travel-logo.png" },
@@ -65,17 +68,34 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
 
       const uid = user.uid;
 
-      const userSnap = await getDoc(doc(db, "Panels", "IEDGE-SYSTEM", "users", uid));
+      const userSnap = await getDoc(
+        doc(db, "Panels", "IEDGE-SYSTEM", "users", uid),
+      );
       const userData = userSnap.data();
-      const adminCheck = userData?.isAdmin === true;
-      setIsAdmin(adminCheck);
+      // const adminCheck = userData?.isAdmin === true;
+      // setIsAdmin(adminCheck);
 
-      const usersSnapshot = await getDocs(collection(db, "Panels", "IEDGE-SYSTEM", "users"));
+      const adminCheck = userData?.isAdmin === true;
+      const operationAdminCheck = userData?.isOperationAdmin === true;
+
+      setIsAdmin(adminCheck);
+      setIsOperationAdmin(operationAdminCheck);
+
+      const usersSnapshot = await getDocs(
+        collection(db, "Panels", "IEDGE-SYSTEM", "users"),
+      );
       const map: Record<string, any> = {};
       usersSnapshot.forEach((u) => (map[u.id] = u.data()));
       setUsersMap(map);
 
-      const q = adminCheck ? query(estimatesRef) : query(estimatesRef, where("createdBy", "==", uid));
+      // const q = adminCheck
+      //   ? query(estimatesRef)
+      //   : query(estimatesRef, where("createdBy", "==", uid));
+
+      const q =
+        adminCheck || operationAdminCheck
+          ? query(estimatesRef)
+          : query(estimatesRef, where("createdBy", "==", uid));
 
       unsubSnapshot = onSnapshot(q, (snap) => {
         const list = snap.docs.map((d) => ({
@@ -93,7 +113,9 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
   }, []);
 
   const handleDelete = async (id: string) => {
-    const confirmDelete = window.confirm("Are you sure you want to delete this estimate?");
+    const confirmDelete = window.confirm(
+      "Are you sure you want to delete this estimate?",
+    );
     if (!confirmDelete) return;
 
     try {
@@ -143,7 +165,7 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
     const date = new Date(
       Number(year),
       Number(month) - 1, // 👈 month index
-      Number(day)
+      Number(day),
     );
 
     return date.toLocaleDateString("en-GB", {
@@ -153,11 +175,11 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
     });
   };
 
-
   const StatusBadge = ({ status }: { status?: string }) => {
     const s = status || "RFQ Sent";
 
-    const base = "inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold";
+    const base =
+      "inline-flex items-center px-2 py-1 rounded-full text-xs font-semibold";
 
     const cls =
       s === "Approved"
@@ -203,7 +225,7 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
         {
           status: newStatus,
           updatedAt: new Date(),
-        }
+        },
       );
     } catch (error) {
       console.error("Status update failed:", error);
@@ -217,7 +239,6 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
   const [currentPage, setCurrentPage] = useState(1);
   const ITEMS_PER_PAGE = 10; // 👈 yahan change kar sakti ho (10, 20, 50)
 
-
   const [dateRange, setDateRange] = useState<
     "all" | "today" | "7days" | "thisMonth" | "lastMonth"
   >("all");
@@ -225,15 +246,13 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
   const [minAmount, setMinAmount] = useState("");
   const [maxAmount, setMaxAmount] = useState("");
 
-
   const isDateInRange = (dateStr?: string) => {
     if (!dateStr || dateRange === "all") return true;
 
     const d = new Date(dateStr);
     const now = new Date();
 
-    if (dateRange === "today")
-      return d.toDateString() === now.toDateString();
+    if (dateRange === "today") return d.toDateString() === now.toDateString();
 
     if (dateRange === "7days") {
       const x = new Date();
@@ -242,18 +261,19 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
     }
 
     if (dateRange === "thisMonth")
-      return d.getMonth() === now.getMonth() &&
-        d.getFullYear() === now.getFullYear();
+      return (
+        d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear()
+      );
 
     if (dateRange === "lastMonth") {
       const lm = new Date(now.getFullYear(), now.getMonth() - 1, 1);
-      return d.getMonth() === lm.getMonth() &&
-        d.getFullYear() === lm.getFullYear();
+      return (
+        d.getMonth() === lm.getMonth() && d.getFullYear() === lm.getFullYear()
+      );
     }
 
     return true;
   };
-
 
   const filteredEstimates = estimates.filter((e) => {
     const estimateMatch = e.estimateNo
@@ -288,7 +308,7 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
 
   const paginatedEstimates = filteredEstimates.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
-    currentPage * ITEMS_PER_PAGE
+    currentPage * ITEMS_PER_PAGE,
   );
 
   useEffect(() => {
@@ -302,13 +322,9 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
     maxAmount,
   ]);
 
-
-
-
-
   return (
     <div className="mt-8 px-4">
-      <div className="mb-4 flex gap-3">
+      {/* <div className="mb-4 flex gap-3">
         <input
           type="text"
           placeholder="Search by Estimate No, Client, Subject, Date, Amount..."
@@ -316,7 +332,7 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
           onChange={(e) => setSearchTerm(e.target.value)}
           className="border p-2 rounded flex-1"
         />
-      </div>
+      </div> */}
 
       <table className="w-full border text-xs">
         <thead className="bg-gray-100">
@@ -330,7 +346,6 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
             <th className="text-left ">Created By</th>
             <th className="text-left ">Actions</th>
             <th className="text-left ">Status</th>
-
           </tr>
 
           <tr className="bg-gray-50 text-xs">
@@ -394,13 +409,12 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
               </div>
             </th>
           </tr>
-
         </thead>
 
         <tbody>
           {paginatedEstimates.map((e, i) => (
             <tr key={i} className="text-left border-b hover:bg-gray-50">
-              <td  >{e.estimateNo}</td>
+              <td>{e.estimateNo}</td>
 
               <td>{e.client}</td>
               <td>{e.subject}</td>
@@ -410,38 +424,13 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
               <td className="text-right pr-6">
                 {/* PKR{" "} */}
                 Rs.{" "}
-                {Number(e.total ?? 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                {Number(e.total ?? 0).toLocaleString(undefined, {
+                  minimumFractionDigits: 2,
+                })}
               </td>
               <td className="text-right pr-6">{(e as any).editCount ?? 0}</td>
               <td>{usersMap[e.createdBy]?.displayName || "Unknown"}</td>
-
-              {/* <td>
-                <div className="flex items-center justify-center gap-2">
-                  <Button onClick={() => handleViewDetail(e)}>Detail</Button>
-
-                  <Button onClick={() => onEdit(e)}>Edit</Button>
-
-                  <Button
-                    onClick={() => {
-                      const dup = { ...e, id: undefined, estimateNo: "" };
-                      onDuplicate(dup);
-                    }}
-                  >
-                    Duplicate
-                  </Button>
-
-                  {isAdmin && (
-                    <Button
-                      className="bg-red-600 text-white hover:bg-red-700"
-                      onClick={() => handleDelete((e as any).id!)}
-                    >
-                      Delete
-                    </Button>
-                  )}
-                </div>
-              </td> */}
-
-              <td >
+              <td>
                 <div className="flex items-center justify-center gap-2">
                   {/* Detail */}
                   <Button
@@ -490,20 +479,15 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
                   )}
                 </div>
               </td>
-
-              {/* <td>
-                <StatusBadge status={e.status} />
-              </td> */}
-
               <td>
-                {isAdmin ? (
+                {isAdmin || isOperationAdmin ? (
                   <select
                     value={e.status || "RFQ Sent"}
                     onChange={(ev) =>
                       handleStatusChange((e as any).id!, ev.target.value)
                     }
-                    className={`text-xs font-semibold px-2 py-1 rounded border outline-none
-        ${STATUS_STYLES[e.status || "RFQ Sent"]}`}
+                    className={`text-xs font-semibold px-2 py-1 rounded border
+      ${STATUS_STYLES[e.status || "RFQ Sent"]}`}
                   >
                     {STATUS_OPTIONS.map((s) => (
                       <option key={s} value={s}>
@@ -515,27 +499,6 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
                   <StatusBadge status={e.status} />
                 )}
               </td>
-
-              {/* <td>
-                <select
-                  value={e.status || "RFQ Sent"}
-                  onChange={(ev) =>
-                    handleStatusChange((e as any).id!, ev.target.value)
-                  }
-                  className={`text-xs font-semibold px-2 py-1 rounded border outline-none
-      ${STATUS_STYLES[e.status || "RFQ Sent"]}
-    `}
-                >
-                  {STATUS_OPTIONS.map((s) => (
-                    <option key={s} value={s}>
-                      {s}
-                    </option>
-                  ))}
-                </select>
-              </td> */}
-
-
-
             </tr>
           ))}
 
@@ -551,8 +514,7 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
 
       <div className="flex justify-between items-center mt-4 text-sm">
         <div>
-          Showing{" "}
-          {(currentPage - 1) * ITEMS_PER_PAGE + 1}–
+          Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–
           {Math.min(currentPage * ITEMS_PER_PAGE, filteredEstimates.length)} of{" "}
           {filteredEstimates.length}
         </div>
@@ -588,7 +550,6 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
         </div>
       </div>
 
-
       {isDrawerOpen && previewURL && (
         <div className="fixed inset-0 z-50 flex">
           <div
@@ -601,7 +562,11 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
               <button onClick={() => setIsDrawerOpen(false)}>❌</button>
             </div>
 
-            <iframe src={previewURL} className="flex-1 border" title="PDF Preview" />
+            <iframe
+              src={previewURL}
+              className="flex-1 border"
+              title="PDF Preview"
+            />
 
             <div className="mt-4 flex justify-end gap-2">
               <Button
@@ -627,7 +592,11 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
               <Button
                 onClick={() => {
                   if (selectedEstimate) {
-                    const dup = { ...selectedEstimate, id: undefined, estimateNo: "" } as Estimate;
+                    const dup = {
+                      ...selectedEstimate,
+                      id: undefined,
+                      estimateNo: "",
+                    } as Estimate;
                     onDuplicate(dup);
                   }
                   setIsDrawerOpen(false);

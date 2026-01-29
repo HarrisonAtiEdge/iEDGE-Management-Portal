@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { db } from "../lib/firebase";
+import { db } from "../../lib/firebase";
 import {
   collection,
   getDocs,
@@ -13,8 +13,8 @@ import {
   serverTimestamp,
   runTransaction,
 } from "firebase/firestore";
-import { Estimate } from "../types";
-import { Button } from "./ui/button";
+import { Estimate } from "../../types";
+import { Button } from "@/components/ui/button";
 import {
   ToastProvider,
   Toast,
@@ -91,6 +91,16 @@ type Props = {
   onSave?: (estimate: Estimate) => void;
 };
 
+const num = (v: any) => {
+  const n = Number(v);
+  return isNaN(n) || n <= 0 ? 0 : n;
+};
+
+const convert = (pkr: number, rate: any) => {
+  const r = num(rate);
+  return r > 0 ? pkr / r : 0;
+};
+
 const NO_TAX_ID = "__NO_TAX__";
 const NO_WHT_ID = "__NO_WHT__";
 
@@ -105,7 +115,9 @@ const fmtIntLoose = (n: number) => {
 };
 
 const parseIntLoose = (v: string) => {
-  const cleaned = String(v || "").replace(/,/g, "").trim();
+  const cleaned = String(v || "")
+    .replace(/,/g, "")
+    .trim();
   if (cleaned === "") return 0;
   const num = parseInt(cleaned, 10);
   return Number.isFinite(num) ? num : 0;
@@ -129,7 +141,9 @@ const parseRateInput = (raw: string) => {
   const cleanedRaw = sanitizeDecimalText(raw).trim();
 
   const isPercent = cleanedRaw.endsWith("%");
-  const withoutPercent = isPercent ? cleanedRaw.slice(0, -1).trim() : cleanedRaw;
+  const withoutPercent = isPercent
+    ? cleanedRaw.slice(0, -1).trim()
+    : cleanedRaw;
 
   // allow one leading minus only
   let s = withoutPercent.replace(/[^0-9.\-]/g, "");
@@ -143,11 +157,13 @@ const parseRateInput = (raw: string) => {
   const body = s.startsWith("-") ? s.slice(1) : s;
   const parts = body.split(".");
   let normalizedBody = body;
-  if (parts.length > 2) normalizedBody = parts[0] + "." + parts.slice(1).join("");
+  if (parts.length > 2)
+    normalizedBody = parts[0] + "." + parts.slice(1).join("");
   s = negPrefix + normalizedBody;
 
   // numeric value
-  const numeric = s === "" || s === "-" || s === "." || s === "-." ? 0 : Number(s);
+  const numeric =
+    s === "" || s === "-" || s === "." || s === "-." ? 0 : Number(s);
 
   return {
     mode: isPercent ? ("percent" as const) : ("amount" as const),
@@ -210,7 +226,9 @@ export default function EstimateForm({
   onSave,
 }: Props) {
   const [paymentTerms, setPaymentTerms] = useState<string[]>([]);
-  const [termsConditions, setTermsConditions] = useState<TermsConditionDoc[]>([]);
+  const [termsConditions, setTermsConditions] = useState<TermsConditionDoc[]>(
+    [],
+  );
   const [selectedTermsId, setSelectedTermsId] = useState<string>("");
   const [termsConditionTitle, setTermsConditionTitle] = useState<string>("");
   const [termsConditionText, setTermsConditionText] = useState<string>("");
@@ -299,7 +317,7 @@ export default function EstimateForm({
         whtPercent: 0,
       },
     ],
-    []
+    [],
   );
 
   const [services, setServices] = useState<ServiceItem[]>(initialServices);
@@ -318,9 +336,15 @@ export default function EstimateForm({
 
   const companyList = [
     { name: "iEDGE", logo: "/Iedge-TM-Logos-01.png" },
-    { name: "iEDGE - Digital & Creative", logo: "/Iedge-Digital-and-Creative-TM-Logos-12.png" },
+    {
+      name: "iEDGE - Digital & Creative",
+      logo: "/Iedge-Digital-and-Creative-TM-Logos-12.png",
+    },
     { name: "iEDGE - Events & Activations", logo: "/iedge-events-logo.png" },
-    { name: "iEDGE - Health Sciences", logo: "/Iedge-Health-Sciences-TM-Logos-05.png" },
+    {
+      name: "iEDGE - Health Sciences",
+      logo: "/Iedge-Health-Sciences-TM-Logos-05.png",
+    },
     { name: "iEDGE - International Education", logo: "/iedge-edu-logo.png" },
     { name: "iEDGE - Trading", logo: "/Iedge-Trade-TM-Logos-10.png" },
     { name: "iEDGE - Travel & Tours", logo: "/iedge-travel-logo.png" },
@@ -335,7 +359,8 @@ export default function EstimateForm({
     setToastOpen(true);
   };
 
-  const fieldClass = (base: string, invalid: boolean) => `${base} ${invalid ? "blink-red" : ""}`;
+  const fieldClass = (base: string, invalid: boolean) =>
+    `${base} ${invalid ? "blink-red" : ""}`;
 
   // ✅ calc line uses rateMode
   const calcLine = (s: ServiceItem) => {
@@ -343,11 +368,13 @@ export default function EstimateForm({
     const rateMode = s.rateMode || "amount";
     const rateNum = Number(s.rate) || 0;
 
-    const base = rateMode === "percent" ? units * (rateNum / 100) : units * rateNum;
+    const base =
+      rateMode === "percent" ? units * (rateNum / 100) : units * rateNum;
 
     const pct = Number(s.taxPercent ?? 0);
 
-    if (taxType === "none" || pct <= 0) return { base, taxAmount: 0, lineTotal: base };
+    if (taxType === "none" || pct <= 0)
+      return { base, taxAmount: 0, lineTotal: base };
 
     if (taxType === "exclusive") {
       const taxAmount = (base * pct) / 100;
@@ -402,7 +429,9 @@ export default function EstimateForm({
   const handleServiceChange = (i: number, value: string) => {
     const copy = [...services];
     copy[i].detail = value;
-    const found = servicesList.find((sv) => sv.name.toLowerCase() === value.toLowerCase());
+    const found = servicesList.find(
+      (sv) => sv.name.toLowerCase() === value.toLowerCase(),
+    );
     copy[i].description = found?.description || copy[i].description || "";
     setServices(copy);
   };
@@ -411,8 +440,13 @@ export default function EstimateForm({
     if (taxCategories.length > 0) return;
     setLoadingTax(true);
     try {
-      const snapshot = await getDocs(collection(db, "Panels", "IEDGE-SYSTEM", "tax"));
-      const data = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const snapshot = await getDocs(
+        collection(db, "Panels", "IEDGE-SYSTEM", "tax"),
+      );
+      const data = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as any),
+      }));
       setTaxCategories(data);
     } catch (err) {
       console.error("Error loading tax categories:", err);
@@ -425,8 +459,13 @@ export default function EstimateForm({
     if (whtCategories.length > 0) return;
     setLoadingWht(true);
     try {
-      const snapshot = await getDocs(collection(db, "Panels", "IEDGE-SYSTEM", "withholdingTax"));
-      const data = snapshot.docs.map((d) => ({ id: d.id, ...(d.data() as any) }));
+      const snapshot = await getDocs(
+        collection(db, "Panels", "IEDGE-SYSTEM", "withholdingTax"),
+      );
+      const data = snapshot.docs.map((d) => ({
+        id: d.id,
+        ...(d.data() as any),
+      }));
       setWhtCategories(data);
     } catch (err) {
       console.error("Error loading WHT categories:", err);
@@ -444,13 +483,17 @@ export default function EstimateForm({
       return;
     }
     setTermsConditionTitle(found.name);
-    setTermsConditionText(String(found.description || "").replace(/\r\n/g, "\n"));
+    setTermsConditionText(
+      String(found.description || "").replace(/\r\n/g, "\n"),
+    );
   };
 
   // ✅ dnd-kit sensors
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
-    useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates })
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    }),
   );
 
   const rowIds = useMemo(() => services.map((s) => s.rowId), [services]);
@@ -486,8 +529,8 @@ export default function EstimateForm({
     setStatus((existingEstimate as any)?.status ?? "RFQ Sent");
     setApprovalReceivedOn((existingEstimate as any)?.approvalReceivedOn ?? "");
 
-    setEditId(duplicateMode ? null : existingEstimate.id ?? null);
-    setEstimateNo(duplicateMode ? "" : existingEstimate.estimateNo ?? "");
+    setEditId(duplicateMode ? null : (existingEstimate.id ?? null));
+    setEstimateNo(duplicateMode ? "" : (existingEstimate.estimateNo ?? ""));
     setClient(existingEstimate.client ?? "");
     setDate(existingEstimate.date ?? "");
     setExpiryDate(existingEstimate.expiryDate ?? "");
@@ -500,16 +543,24 @@ export default function EstimateForm({
     setCompany(existingEstimate.company ?? "");
 
     // ✅ currencies restore
-    setAddCurrencies(Boolean((existingEstimate as any)?.addCurrencies ?? false));
+    setAddCurrencies(
+      Boolean((existingEstimate as any)?.addCurrencies ?? false),
+    );
     setUsdRate(String((existingEstimate as any)?.usdRate ?? ""));
     setEuroRate(String((existingEstimate as any)?.euroRate ?? ""));
 
     const savedId =
-      (existingEstimate as any)?.termsConditionId || (existingEstimate as any)?.selectedTermsId || "";
+      (existingEstimate as any)?.termsConditionId ||
+      (existingEstimate as any)?.selectedTermsId ||
+      "";
     const savedTitle =
-      (existingEstimate as any)?.termsConditionTitle || (existingEstimate as any)?.termsTitle || "";
+      (existingEstimate as any)?.termsConditionTitle ||
+      (existingEstimate as any)?.termsTitle ||
+      "";
     const savedText =
-      (existingEstimate as any)?.termsConditionText || (existingEstimate as any)?.termsCondition || "";
+      (existingEstimate as any)?.termsConditionText ||
+      (existingEstimate as any)?.termsCondition ||
+      "";
 
     setSelectedTermsId(savedId);
     setTermsConditionTitle(savedTitle);
@@ -523,14 +574,10 @@ export default function EstimateForm({
         units: s.units ?? 1,
         unitsInput: s.units ? fmtIntLoose(s.units) : "",
         rate: s.rate ?? 0,
-      rateInput:
-  typeof s.rate === "number"
-    ? (s.rateMode === "percent"
-        ? `${fmtDecimalLoose(s.rate)}%`
-        : fmtDecimalLoose(s.rate))
-    : (s.rateInput ?? ""),
-
-
+        rateInput:
+          typeof s.rate === "number" && s.rate !== 0
+            ? fmtDecimalLoose(s.rate)
+            : "",
         rateMode: s.rateMode ?? "amount",
         taxType: s.taxType ?? "none",
         taxPercent: s.taxPercent ?? 0,
@@ -539,7 +586,7 @@ export default function EstimateForm({
         whtId: s.whtId ?? "",
         whtLabel: s.whtLabel ?? "",
         whtPercent: typeof s.whtPercent === "number" ? s.whtPercent : 0,
-      }))
+      })),
     );
 
     setSelectedClient({
@@ -558,7 +605,7 @@ export default function EstimateForm({
           name: docSnap.data().name,
           address: docSnap.data().address || "",
           addtionalInfo: docSnap.data().addtionalInfo || "",
-        }))
+        })),
       );
     });
     return () => unsubscribe();
@@ -572,7 +619,7 @@ export default function EstimateForm({
           id: docSnap.id,
           name: docSnap.data().name,
           description: docSnap.data().description,
-        }))
+        })),
       );
     });
     return () => unsubscribe();
@@ -606,7 +653,9 @@ export default function EstimateForm({
   }, []);
 
   useEffect(() => {
-    const q = query(collection(db, "Panels", "IEDGE-SYSTEM", "termsConditions"));
+    const q = query(
+      collection(db, "Panels", "IEDGE-SYSTEM", "termsConditions"),
+    );
     const unsubscribe = onSnapshot(q, (snapshot) => {
       const list: TermsConditionDoc[] = snapshot.docs
         .map((d) => {
@@ -640,7 +689,7 @@ export default function EstimateForm({
         taxId: "",
         taxLabel: "",
         taxPercent: 0,
-      }))
+      })),
     );
   }, [taxType]);
 
@@ -742,18 +791,19 @@ export default function EstimateForm({
     const rowMissing = sanitizedServices.find((s) => {
       const missingService = !String(s.detail || "").trim();
       const missingUnits = !(Number(s.units) > 0);
-     const missingRate = String(s.rateInput ?? "").trim() === ""; 
-
-      const missingTax = taxType !== "none" ? !String(s.taxId || "").trim() : false;
+      const missingRate = Number(s.rate) === 0; // allow negative, disallow 0
+      const missingTax =
+        taxType !== "none" ? !String(s.taxId || "").trim() : false;
       return missingService || missingUnits || missingRate || missingTax;
     });
 
     if (rowMissing) {
-      if (!String(rowMissing.detail || "").trim()) showToast("Service is required");
+      if (!String(rowMissing.detail || "").trim())
+        showToast("Service is required");
       else if (!(Number(rowMissing.units) > 0)) showToast("Units is required");
-      else if (String(rowMissing.rateInput ?? "").trim() === "") showToast("Rate is required");
-
-      else if (taxType !== "none" && !(Number(rowMissing.taxPercent ?? 0) > 0)) showToast("Tax is required");
+      else if (Number(rowMissing.rate) === 0) showToast("Rate is required");
+      else if (taxType !== "none" && !(Number(rowMissing.taxPercent ?? 0) > 0))
+        showToast("Tax is required");
       savingRef.current = false;
       return;
     }
@@ -820,7 +870,10 @@ export default function EstimateForm({
         // EDIT MODE (NO NUMBER CHANGE)
         // ===============================
         const ref = doc(db, "Panels", "IEDGE-SYSTEM", "estimates", editId);
-        const estimateToUpdate: Estimate = { ...estimateBase, estimateNo: estimateNo } as any;
+        const estimateToUpdate: Estimate = {
+          ...estimateBase,
+          estimateNo: estimateNo,
+        } as any;
 
         await updateDoc(ref, {
           ...estimateToUpdate,
@@ -846,10 +899,18 @@ export default function EstimateForm({
         // CREATE MODE (SINGLE ATOMIC INCREMENT)
         // ===============================
         const createdEstimate = await runTransaction(db, async (tx) => {
-          const counterRef = doc(db, "Panels", "IEDGE-SYSTEM", "counters", "estimates");
+          const counterRef = doc(
+            db,
+            "Panels",
+            "IEDGE-SYSTEM",
+            "counters",
+            "estimates",
+          );
           const counterSnap = await tx.get(counterRef);
 
-          const current = Number(counterSnap.exists() ? counterSnap.data()?.current : 200000);
+          const current = Number(
+            counterSnap.exists() ? counterSnap.data()?.current : 200000,
+          );
           const nextNumber = current + 1;
 
           // 🔐 single atomic increment
@@ -863,7 +924,9 @@ export default function EstimateForm({
             createdAt: serverTimestamp(),
           } as any;
 
-          const newRef = doc(collection(db, "Panels", "IEDGE-SYSTEM", "estimates"));
+          const newRef = doc(
+            collection(db, "Panels", "IEDGE-SYSTEM", "estimates"),
+          );
           tx.set(newRef, estimateToSave);
 
           return estimateToSave;
@@ -937,7 +1000,9 @@ export default function EstimateForm({
     for (const s of services) {
       // TAX
       if (taxType !== "none" && Number(s.taxPercent ?? 0) > 0) {
-        const label = String(s.taxLabel || "").trim() || `Tax (${Number(s.taxPercent ?? 0)}%)`;
+        const label =
+          String(s.taxLabel || "").trim() ||
+          `Tax (${Number(s.taxPercent ?? 0)}%)`;
         const amt = calcLine(s).taxAmount;
         if (amt !== 0) {
           const prev = taxMap.get(label);
@@ -947,7 +1012,9 @@ export default function EstimateForm({
 
       // WHT
       if (Number(s.whtPercent ?? 0) > 0) {
-        const label = String(s.whtLabel || "").trim() || `WHT (${Number(s.whtPercent ?? 0)}%)`;
+        const label =
+          String(s.whtLabel || "").trim() ||
+          `WHT (${Number(s.whtPercent ?? 0)}%)`;
         const amt = calcWhtAmount(s);
         if (amt !== 0) {
           const prev = whtMap.get(label);
@@ -957,8 +1024,12 @@ export default function EstimateForm({
     }
 
     return {
-      taxRows: Array.from(taxMap.values()).filter((x) => Number.isFinite(x.amount)),
-      whtRows: Array.from(whtMap.values()).filter((x) => Number.isFinite(x.amount)),
+      taxRows: Array.from(taxMap.values()).filter((x) =>
+        Number.isFinite(x.amount),
+      ),
+      whtRows: Array.from(whtMap.values()).filter((x) =>
+        Number.isFinite(x.amount),
+      ),
     };
   }, [services, taxType]);
 
@@ -972,9 +1043,30 @@ export default function EstimateForm({
   const invalidTaxType = submitAttempted && !String(taxType || "").trim();
   const invalidSubject = submitAttempted && !String(subject || "").trim();
   const invalidTerms = submitAttempted && !String(selectedTermsId || "").trim();
-  const invalidTermsText = submitAttempted && !String(termsConditionText || "").trim();
-  const invalidUsd = submitAttempted && addCurrencies && !String(usdRate || "").trim();
-  const invalidEuro = submitAttempted && addCurrencies && !String(euroRate || "").trim();
+  const invalidTermsText =
+    submitAttempted && !String(termsConditionText || "").trim();
+  const invalidUsd =
+    submitAttempted && addCurrencies && !String(usdRate || "").trim();
+  const invalidEuro =
+    submitAttempted && addCurrencies && !String(euroRate || "").trim();
+
+  const usdTotals = addCurrencies
+    ? {
+        subtotal: convert(liveTotals.liveSubtotal, usdRate),
+        tax: convert(liveTotals.liveTax, usdRate),
+        wht: convert(liveTotals.liveWht, usdRate),
+        total: convert(liveTotals.liveTotal, usdRate),
+      }
+    : null;
+
+  const euroTotals = addCurrencies
+    ? {
+        subtotal: convert(liveTotals.liveSubtotal, euroRate),
+        tax: convert(liveTotals.liveTax, euroRate),
+        wht: convert(liveTotals.liveWht, euroRate),
+        total: convert(liveTotals.liveTotal, euroRate),
+      }
+    : null;
 
   return (
     <div className="px-6 space-y-2 bg-gray-50 min-h-screen pb-28">
@@ -992,11 +1084,15 @@ export default function EstimateForm({
 `}</style>
 
       <div className="bg-white p-5 rounded-xl shadow border border-gray-100">
-        <h3 className="text-sm font-semibold mb-3 text-gray-700">Basic Information</h3>
+        <h3 className="text-sm font-semibold mb-3 text-gray-700">
+          Basic Information
+        </h3>
 
         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">Estimate No</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              Estimate No
+            </label>
             <input
               value={estimateNo || "Will be assigned on Save"}
               readOnly
@@ -1005,9 +1101,14 @@ export default function EstimateForm({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">Client</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              Client
+            </label>
             <select
-              className={fieldClass("w-full rounded-lg border border-gray-300 p-2 text-sm", invalidClient)}
+              className={fieldClass(
+                "w-full rounded-lg border border-gray-300 p-2 text-sm",
+                invalidClient,
+              )}
               value={client}
               onChange={(e) => {
                 const selected = clients.find((c) => c.name === e.target.value);
@@ -1026,48 +1127,70 @@ export default function EstimateForm({
             {selectedClient && (
               <div className="mt-2 bg-blue-50 border border-blue-200 p-2 rounded-lg text-sm text-gray-700">
                 <p>
-                  <span className="font-medium">Address:</span> {selectedClient.address || "—"}
+                  <span className="font-medium">Address:</span>{" "}
+                  {selectedClient.address || "—"}
                 </p>
                 <p>
-                  <span className="font-medium">Additional Info:</span> {selectedClient.addtionalInfo || "—"}
+                  <span className="font-medium">Additional Info:</span>{" "}
+                  {selectedClient.addtionalInfo || "—"}
                 </p>
               </div>
             )}
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">Issue Date</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              Issue Date
+            </label>
             <input
               type="date"
-              className={fieldClass("w-full rounded-lg border border-gray-300 p-2 text-sm", invalidDate)}
+              className={fieldClass(
+                "w-full rounded-lg border border-gray-300 p-2 text-sm",
+                invalidDate,
+              )}
               value={date}
               onChange={(e) => setDate(e.target.value)}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">Expiry Date</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              Expiry Date
+            </label>
             <input
               type="date"
-              className={fieldClass("w-full rounded-lg border border-gray-300 p-2 text-sm accent-black", invalidExpiry)}
+              className={fieldClass(
+                "w-full rounded-lg border border-gray-300 p-2 text-sm accent-black",
+                invalidExpiry,
+              )}
               value={expiryDate}
               onChange={(e) => setExpiryDate(e.target.value)}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">Project Owner</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              Project Owner
+            </label>
             <input
-              className={fieldClass("w-full rounded-lg border border-gray-300 p-2 text-sm", invalidOwner)}
+              className={fieldClass(
+                "w-full rounded-lg border border-gray-300 p-2 text-sm",
+                invalidOwner,
+              )}
               value={projectOwner}
               onChange={(e) => setProjectOwner(e.target.value)}
             />
           </div>
 
           <div className="col-span-2">
-            <label className="block text-sm font-medium text-gray-600 mb-1">Payment Terms</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              Payment Terms
+            </label>
             <select
-              className={fieldClass("w-full border border-gray-300 rounded-lg p-2 text-sm whitespace-normal", invalidPayment)}
+              className={fieldClass(
+                "w-full border border-gray-300 rounded-lg p-2 text-sm whitespace-normal",
+                invalidPayment,
+              )}
               value={paymentTerm}
               onChange={(e) => setPaymentTerm(e.target.value)}
             >
@@ -1081,11 +1204,16 @@ export default function EstimateForm({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">Select Company</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              Select Company
+            </label>
             <div className="flex items-center gap-2">
               <input
                 list="company-list-options"
-                className={fieldClass("flex-1 border border-gray-300 rounded-lg p-2 text-sm", invalidCompany)}
+                className={fieldClass(
+                  "flex-1 border border-gray-300 rounded-lg p-2 text-sm",
+                  invalidCompany,
+                )}
                 value={company}
                 onChange={(e) => setCompany(e.target.value)}
                 placeholder="Type or select Company"
@@ -1108,31 +1236,47 @@ export default function EstimateForm({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">Tax Type</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              Tax Type
+            </label>
             <select
               value={taxType}
               onChange={(e) => setTaxType(e.target.value)}
-              className={fieldClass("w-full border border-gray-300 rounded-lg p-2 text-sm accent-black", invalidTaxType)}
+              className={fieldClass(
+                "w-full border border-gray-300 rounded-lg p-2 text-sm accent-black",
+                invalidTaxType,
+              )}
             >
               <option value="">Select Tax Type</option>
               <option value="inclusive">Inclusive</option>
               <option value="exclusive">Exclusive</option>
               <option value="none">Not Applicable</option>
             </select>
-            {taxType && <p className="mt-1 text-xs text-gray-500">Selected Tax: {taxType}</p>}
+            {taxType && (
+              <p className="mt-1 text-xs text-gray-500">
+                Selected Tax: {taxType}
+              </p>
+            )}
           </div>
 
           <div className="col-span-2">
-            <label className="block text-sm font-medium text-gray-600 mb-1">Subject</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              Subject
+            </label>
             <input
-              className={fieldClass("w-full rounded-lg border border-gray-300 p-2 text-sm", invalidSubject)}
+              className={fieldClass(
+                "w-full rounded-lg border border-gray-300 p-2 text-sm",
+                invalidSubject,
+              )}
               value={subject}
               onChange={(e) => setSubject(e.target.value)}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">PO Number</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              PO Number
+            </label>
             <input
               className="w-full rounded-lg border border-gray-300 p-2 text-sm"
               value={poNumber}
@@ -1141,7 +1285,9 @@ export default function EstimateForm({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">Status</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              Status
+            </label>
             <select
               className="w-full border border-gray-300 rounded-lg p-2 text-sm accent-black"
               value={status}
@@ -1158,7 +1304,9 @@ export default function EstimateForm({
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">Approval received on email</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              Approval received on email
+            </label>
             <input
               type="date"
               className="w-full rounded-lg border border-gray-300 p-2 text-sm"
@@ -1181,22 +1329,32 @@ export default function EstimateForm({
             {addCurrencies ? (
               <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">USD Rate</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    USD Rate
+                  </label>
                   <input
                     inputMode="decimal"
                     value={usdRate}
                     onChange={(e) => setUsdRate(e.target.value)}
-                    className={fieldClass("w-full rounded-lg border border-gray-300 p-2 text-sm", invalidUsd)}
+                    className={fieldClass(
+                      "w-full rounded-lg border border-gray-300 p-2 text-sm",
+                      invalidUsd,
+                    )}
                     placeholder="e.g. 280"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">EURO Rate</label>
+                  <label className="block text-xs font-medium text-gray-600 mb-1">
+                    EURO Rate
+                  </label>
                   <input
                     inputMode="decimal"
                     value={euroRate}
                     onChange={(e) => setEuroRate(e.target.value)}
-                    className={fieldClass("w-full rounded-lg border border-gray-300 p-2 text-sm", invalidEuro)}
+                    className={fieldClass(
+                      "w-full rounded-lg border border-gray-300 p-2 text-sm",
+                      invalidEuro,
+                    )}
                     placeholder="e.g. 305"
                   />
                 </div>
@@ -1210,34 +1368,79 @@ export default function EstimateForm({
         <h3 className="text-sm font-semibold mb-4 text-gray-700">Services</h3>
 
         <div className="overflow-x-auto">
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="bg-gray-100 text-gray-700 text-left">
-                  <th className="p-3 font-semibold border-b w-10 text-center">↕</th>
+                  <th className="p-3 font-semibold border-b w-10 text-center">
+                    ↕
+                  </th>
                   <th className="p-3 font-semibold border-b">Service</th>
                   <th className="p-3 font-semibold border-b">Description</th>
-                  <th className="p-3 font-semibold border-b text-center">Units</th>
-                  <th className="p-3 font-semibold border-b text-center">Rate</th>
-                  <th className="p-3 font-semibold border-b text-center">Tax</th>
-                  <th className="p-3 font-semibold border-b text-center">WHT</th>
-                  <th className="p-3 font-semibold border-b text-right">Amount</th>
+                  <th className="p-3 font-semibold border-b text-center">
+                    Units
+                  </th>
+                  <th className="p-3 font-semibold border-b text-center">
+                    Rate
+                  </th>
+                  <th className="p-3 font-semibold border-b text-center">
+                    Tax
+                  </th>
+                  <th className="p-3 font-semibold border-b text-center">
+                    WHT
+                  </th>
+                  <th className="p-3 font-semibold border-b text-right">
+                    Amount
+                  </th>
+                  {addCurrencies && (
+                    <>
+                      <th>Amount (USD)</th>
+                      <th>Amount (EURO)</th>
+                    </>
+                  )}
                   <th className="p-3 font-semibold border-b text-center w-12"></th>
                 </tr>
               </thead>
 
-              <SortableContext items={rowIds} strategy={verticalListSortingStrategy}>
+              <SortableContext
+                items={rowIds}
+                strategy={verticalListSortingStrategy}
+              >
                 <tbody>
                   {services.map((s, i) => {
                     const filtered = servicesList.filter((sv) =>
-                      sv.name.toLowerCase().includes((s.detail || "").toLowerCase())
+                      sv.name
+                        .toLowerCase()
+                        .includes((s.detail || "").toLowerCase()),
                     );
 
-                    const invalidService = submitAttempted && !String(s.detail || "").trim();
-                    const invalidUnits = submitAttempted && !(Number(s.units) > 0);
-                    const invalidRate = submitAttempted && String(s.rateInput ?? "").trim() === "";
+                    const invalidService =
+                      submitAttempted && !String(s.detail || "").trim();
+                    const invalidUnits =
+                      submitAttempted && !(Number(s.units) > 0);
+                    const invalidRate = submitAttempted && Number(s.rate) === 0;
+                    const invalidTax =
+                      submitAttempted &&
+                      taxType !== "none" &&
+                      !String(s.taxId || "").trim();
 
-                    const invalidTax = submitAttempted && taxType !== "none" && !String(s.taxId || "").trim();
+                    /* ============================
+       ✅ ADD THIS PART (CALCULATION)
+       ============================ */
+                    const pkrAmount = calcLineTotalWithWht(s);
+                    const usdAmount =
+                      addCurrencies && usdRate
+                        ? pkrAmount / Number(usdRate)
+                        : 0;
+                    const euroAmount =
+                      addCurrencies && euroRate
+                        ? pkrAmount / Number(euroRate)
+                        : 0;
+                    /* ============================ */
 
                     return (
                       <SortableRow key={s.rowId} id={s.rowId}>
@@ -1258,26 +1461,38 @@ export default function EstimateForm({
 
                             {/* ✅ Service */}
                             <td className="p-2">
-                              <div className="relative" ref={openServiceRowId === s.rowId ? serviceDropdownRef : null}>
+                              <div
+                                className="relative"
+                                ref={
+                                  openServiceRowId === s.rowId
+                                    ? serviceDropdownRef
+                                    : null
+                                }
+                              >
                                 <div className="flex items-center gap-1">
                                   <input
                                     value={s.detail}
                                     onChange={(e) => {
                                       handleServiceChange(i, e.target.value);
-                                      if (openServiceRowId !== s.rowId) setOpenServiceRowId(s.rowId);
+                                      if (openServiceRowId !== s.rowId)
+                                        setOpenServiceRowId(s.rowId);
                                     }}
                                     onFocus={() => setOpenServiceRowId(null)}
                                     placeholder="Type or select service"
                                     className={fieldClass(
                                       "w-full border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500",
-                                      invalidService
+                                      invalidService,
                                     )}
                                   />
                                   <button
                                     type="button"
                                     className="border border-gray-300 rounded-md p-2 hover:bg-gray-50"
                                     title="Show services"
-                                    onClick={() => setOpenServiceRowId((prev) => (prev === s.rowId ? null : s.rowId))}
+                                    onClick={() =>
+                                      setOpenServiceRowId((prev) =>
+                                        prev === s.rowId ? null : s.rowId,
+                                      )
+                                    }
                                   >
                                     <ChevronDown size={16} />
                                   </button>
@@ -1286,7 +1501,9 @@ export default function EstimateForm({
                                 {openServiceRowId === s.rowId ? (
                                   <div className="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-lg shadow-lg max-h-56 overflow-auto">
                                     {filtered.length === 0 ? (
-                                      <div className="p-2 text-xs text-gray-500">No matching services</div>
+                                      <div className="p-2 text-xs text-gray-500">
+                                        No matching services
+                                      </div>
                                     ) : (
                                       filtered.map((sv) => (
                                         <button
@@ -1298,9 +1515,13 @@ export default function EstimateForm({
                                             setOpenServiceRowId(null);
                                           }}
                                         >
-                                          <div className="text-sm text-gray-800">{sv.name}</div>
+                                          <div className="text-sm text-gray-800">
+                                            {sv.name}
+                                          </div>
                                           {sv.description ? (
-                                            <div className="text-xs text-gray-500 line-clamp-2">{sv.description}</div>
+                                            <div className="text-xs text-gray-500 line-clamp-2">
+                                              {sv.description}
+                                            </div>
                                           ) : null}
                                         </button>
                                       ))
@@ -1330,7 +1551,10 @@ export default function EstimateForm({
                               <input
                                 type="text"
                                 inputMode="numeric"
-                                value={s.unitsInput ?? (s.units === 0 ? "" : fmtIntLoose(s.units))}
+                                value={
+                                  s.unitsInput ??
+                                  (s.units === 0 ? "" : fmtIntLoose(s.units))
+                                }
                                 onChange={(e) => {
                                   const raw = e.target.value;
                                   const copy = [...services];
@@ -1341,13 +1565,14 @@ export default function EstimateForm({
                                 onBlur={() => {
                                   const copy = [...services];
                                   const n = Number(copy[i].units) || 0;
-                                  copy[i].unitsInput = n === 0 ? "" : fmtIntLoose(n);
+                                  copy[i].unitsInput =
+                                    n === 0 ? "" : fmtIntLoose(n);
                                   setServices(copy);
                                 }}
                                 placeholder="Units"
                                 className={fieldClass(
                                   "w-24 border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 text-center",
-                                  invalidUnits
+                                  invalidUnits,
                                 )}
                               />
                             </td>
@@ -1357,7 +1582,10 @@ export default function EstimateForm({
                               <input
                                 type="text"
                                 inputMode="decimal"
-                                value={s.rateInput ?? fmtDecimalLoose(Number(s.rate) || 0)}
+                                value={
+                                  s.rateInput ??
+                                  fmtDecimalLoose(Number(s.rate) || 0)
+                                }
                                 onChange={(e) => {
                                   const raw = e.target.value;
                                   const copy = [...services];
@@ -1371,7 +1599,9 @@ export default function EstimateForm({
                                   const copy = [...services];
 
                                   // if user left it empty, keep it empty (don’t force 0)
-                                  const raw = String(copy[i].rateInput ?? "").trim();
+                                  const raw = String(
+                                    copy[i].rateInput ?? "",
+                                  ).trim();
                                   if (raw === "") {
                                     copy[i].rateInput = "";
                                     setServices(copy);
@@ -1382,18 +1612,23 @@ export default function EstimateForm({
                                   const n = Number(copy[i].rate) || 0;
 
                                   // ✅ keep 0 visible after blur
-                                  copy[i].rateInput = mode === "percent" ? `${fmtDecimalLoose(n)}%` : fmtDecimalLoose(n);
+                                  copy[i].rateInput =
+                                    mode === "percent"
+                                      ? `${fmtDecimalLoose(n)}%`
+                                      : fmtDecimalLoose(n);
 
                                   setServices(copy);
                                 }}
-                                placeholder='Rate (e.g. -1,000 or 15%)'
+                                placeholder="Rate (e.g. -1,000 or 15%)"
                                 className={fieldClass(
                                   "w-28 border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 text-center",
-                                  invalidRate
+                                  invalidRate,
                                 )}
                               />
                               {s.rateMode === "percent" ? (
-                                <div className="text-[11px] text-gray-500 mt-1">Rate mode: %</div>
+                                <div className="text-[11px] text-gray-500 mt-1">
+                                  Rate mode: %
+                                </div>
                               ) : null}
                             </td>
 
@@ -1423,16 +1658,20 @@ export default function EstimateForm({
                                     return;
                                   }
 
-                                  const selected = taxCategories.find((t) => String(t.id) === String(id));
+                                  const selected = taxCategories.find(
+                                    (t) => String(t.id) === String(id),
+                                  );
                                   copy[i].taxId = id;
                                   copy[i].taxLabel = selected?.name || "";
-                                  copy[i].taxPercent = Number(selected?.percent ?? 0);
+                                  copy[i].taxPercent = Number(
+                                    selected?.percent ?? 0,
+                                  );
                                   setServices(copy);
                                 }}
                                 disabled={taxType === "none"}
                                 className={fieldClass(
                                   "w-full border text-xs border-gray-300 rounded-md px-0 py-2 text-center bg-white disabled:bg-gray-100",
-                                  invalidTax
+                                  invalidTax,
                                 )}
                               >
                                 <option value="">
@@ -1442,7 +1681,9 @@ export default function EstimateForm({
                                       ? "Loading..."
                                       : "Select Tax"}
                                 </option>
-                                {taxType !== "none" && <option value={NO_TAX_ID}>No Tax (0%)</option>}
+                                {taxType !== "none" && (
+                                  <option value={NO_TAX_ID}>No Tax (0%)</option>
+                                )}
                                 {taxCategories.map((t) => (
                                   <option key={t.id} value={String(t.id)}>
                                     {t.name} ({Number(t.percent ?? 0)}%)
@@ -1451,7 +1692,9 @@ export default function EstimateForm({
                               </select>
 
                               {taxType !== "none" && (s.taxPercent ?? 0) > 0 ? (
-                                <div className="text-xs text-gray-500 mt-1">Tax: {formatMoney(calcLine(s).taxAmount)}</div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  Tax: {formatMoney(calcLine(s).taxAmount)}
+                                </div>
                               ) : null}
                             </td>
 
@@ -1481,16 +1724,22 @@ export default function EstimateForm({
                                     return;
                                   }
 
-                                  const selected = whtCategories.find((t) => String(t.id) === String(id));
+                                  const selected = whtCategories.find(
+                                    (t) => String(t.id) === String(id),
+                                  );
                                   copy[i].whtId = id;
                                   copy[i].whtLabel = selected?.name || "";
-                                  copy[i].whtPercent = Number(selected?.percent ?? 0);
+                                  copy[i].whtPercent = Number(
+                                    selected?.percent ?? 0,
+                                  );
                                   setServices(copy);
                                 }}
                                 className="w-full border text-xs border-gray-300 rounded-md px-0 py-2 text-center bg-white"
                               >
                                 <option value="">
-                                  {loadingWht && whtCategories.length === 0 ? "Loading..." : "Select WHT"}
+                                  {loadingWht && whtCategories.length === 0
+                                    ? "Loading..."
+                                    : "Select WHT"}
                                 </option>
                                 <option value={NO_WHT_ID}>No WHT (0%)</option>
                                 {whtCategories.map((t) => (
@@ -1501,11 +1750,26 @@ export default function EstimateForm({
                               </select>
 
                               {(s.whtPercent ?? 0) > 0 ? (
-                                <div className="text-xs text-gray-500 mt-1">WHT: {formatMoney(calcWhtAmount(s))}</div>
+                                <div className="text-xs text-gray-500 mt-1">
+                                  WHT: {formatMoney(calcWhtAmount(s))}
+                                </div>
                               ) : null}
                             </td>
 
-                            <td className="p-2 text-right tabular-nums">{formatMoney(calcLineTotalWithWht(s))}</td>
+                            <td className="p-2 text-right tabular-nums">
+                              {formatMoney(calcLineTotalWithWht(s))}
+                            </td>
+
+                            {addCurrencies && (
+                              <>
+                                <td className="p-2 text-right tabular-nums text-gray-600 whitespace-nowrap">
+                                  ${usdAmount.toFixed(2)}
+                                </td>
+                                <td className="p-2 text-right tabular-nums text-gray-600 whitespace-nowrap">
+                                  €{euroAmount.toFixed(2)}
+                                </td>
+                              </>
+                            )}
 
                             <td className="p-2 text-center">
                               {services.length > 1 && (
@@ -1540,20 +1804,101 @@ export default function EstimateForm({
             <div className="w-full border rounded-lg bg-gray-50 p-4">
               <div className="flex justify-between">
                 <span className="font-semibold">SUBTOTAL</span>
-                <span className="tabular-nums text-right">{formatMoney(liveTotals.liveSubtotal)}</span>
+                <span className="tabular-nums text-right">
+                  {formatMoney(liveTotals.liveSubtotal)}
+                </span>
               </div>
               <div className="flex justify-between mt-1">
                 <span className="font-semibold">TAX</span>
-                <span className="tabular-nums text-right">{formatMoney(liveTotals.liveTax)}</span>
+                <span className="tabular-nums text-right">
+                  {formatMoney(liveTotals.liveTax)}
+                </span>
               </div>
               <div className="flex justify-between mt-1">
                 <span className="font-semibold">WHT</span>
-                <span className="tabular-nums text-right">{formatMoney(liveTotals.liveWht)}</span>
+                <span className="tabular-nums text-right">
+                  {formatMoney(liveTotals.liveWht)}
+                </span>
               </div>
               <div className="flex justify-between mt-2 pt-2 border-t">
                 <span className="font-bold text-lg">TOTAL</span>
-                <span className="font-bold text-lg tabular-nums text-right">{formatMoney(liveTotals.liveTotal)}</span>
+                <span className="font-bold text-lg tabular-nums text-right">
+                  {formatMoney(liveTotals.liveTotal)}
+                </span>
               </div>
+              {addCurrencies && (
+                <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* USD */}
+                  <div className="border rounded-lg bg-gray-50 p-4">
+                    <div className="font-semibold text-gray-700 mb-2">
+                      USD (Converted)
+                    </div>
+
+                    <div className="flex justify-between">
+                      <span>Subtotal</span>
+                      <span className="tabular-nums">
+                        ${usdTotals?.subtotal.toFixed(2)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between mt-1">
+                      <span>Tax</span>
+                      <span className="tabular-nums">
+                        ${usdTotals?.tax.toFixed(2)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between mt-1">
+                      <span>WHT</span>
+                      <span className="tabular-nums">
+                        ${usdTotals?.wht.toFixed(2)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between mt-2 pt-2 border-t font-bold">
+                      <span>Total</span>
+                      <span className="tabular-nums">
+                        ${usdTotals?.total.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+
+                  {/* EURO */}
+                  <div className="border rounded-lg bg-gray-50 p-4">
+                    <div className="font-semibold text-gray-700 mb-2">
+                      EURO (Converted)
+                    </div>
+
+                    <div className="flex justify-between">
+                      <span>Subtotal</span>
+                      <span className="tabular-nums">
+                        €{euroTotals?.subtotal.toFixed(2)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between mt-1">
+                      <span>Tax</span>
+                      <span className="tabular-nums">
+                        €{euroTotals?.tax.toFixed(2)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between mt-1">
+                      <span>WHT</span>
+                      <span className="tabular-nums">
+                        €{euroTotals?.wht.toFixed(2)}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between mt-2 pt-2 border-t font-bold">
+                      <span>Total</span>
+                      <span className="tabular-nums">
+                        €{euroTotals?.total.toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Summary */}
@@ -1563,19 +1908,26 @@ export default function EstimateForm({
                 <span className="text-xs text-gray-500">(Live)</span>
               </div>
 
-              {liveSummary.taxRows.length === 0 && liveSummary.whtRows.length === 0 ? (
+              {liveSummary.taxRows.length === 0 &&
+              liveSummary.whtRows.length === 0 ? (
                 <p className="text-sm text-gray-600">No tax/WHT applied yet.</p>
               ) : (
                 <div className="space-y-3">
                   {liveSummary.taxRows.length > 0 ? (
                     <div>
-                      <div className="text-xs font-semibold text-gray-600 mb-1">TAX</div>
+                      <div className="text-xs font-semibold text-gray-600 mb-1">
+                        TAX
+                      </div>
                       <table className="w-full text-sm">
                         <tbody>
                           {liveSummary.taxRows.map((r) => (
                             <tr key={r.label}>
-                              <td className="py-1 pr-2 text-gray-700">{r.label}</td>
-                              <td className="py-1 text-right tabular-nums">{formatMoney(r.amount)}</td>
+                              <td className="py-1 pr-2 text-gray-700">
+                                {r.label}
+                              </td>
+                              <td className="py-1 text-right tabular-nums">
+                                {formatMoney(r.amount)}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -1585,13 +1937,19 @@ export default function EstimateForm({
 
                   {liveSummary.whtRows.length > 0 ? (
                     <div className="pt-2 border-t">
-                      <div className="text-xs font-semibold text-gray-600 mb-1">WITH HOLDING TAX (WHT)</div>
+                      <div className="text-xs font-semibold text-gray-600 mb-1">
+                        WITH HOLDING TAX (WHT)
+                      </div>
                       <table className="w-full text-sm">
                         <tbody>
                           {liveSummary.whtRows.map((r) => (
                             <tr key={r.label}>
-                              <td className="py-1 pr-2 text-gray-700">{r.label}</td>
-                              <td className="py-1 text-right tabular-nums">{formatMoney(r.amount)}</td>
+                              <td className="py-1 pr-2 text-gray-700">
+                                {r.label}
+                              </td>
+                              <td className="py-1 text-right tabular-nums">
+                                {formatMoney(r.amount)}
+                              </td>
                             </tr>
                           ))}
                         </tbody>
@@ -1605,7 +1963,9 @@ export default function EstimateForm({
 
           {/* Message */}
           <div className="col-span-2 mt-4">
-            <label className="block text-sm font-medium text-gray-600 mb-1">Message</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              Message
+            </label>
             <input
               className="w-full rounded-lg border border-gray-300 p-2 text-sm"
               value={message}
@@ -1617,10 +1977,15 @@ export default function EstimateForm({
         {/* Terms */}
         <div className="mt-4 space-y-3">
           <div>
-            <label className="block text-sm font-medium text-gray-600 mb-1">Terms & Conditions</label>
+            <label className="block text-sm font-medium text-gray-600 mb-1">
+              Terms & Conditions
+            </label>
 
             <select
-              className={fieldClass("w-full border border-gray-300 rounded-lg p-2 text-sm whitespace-normal", invalidTerms)}
+              className={fieldClass(
+                "w-full border border-gray-300 rounded-lg p-2 text-sm whitespace-normal",
+                invalidTerms,
+              )}
               value={selectedTermsId}
               onChange={(e) => handleSelectTerms(e.target.value)}
             >
@@ -1644,12 +2009,13 @@ export default function EstimateForm({
                 onChange={(e) => setTermsConditionText(e.target.value)}
                 className={fieldClass(
                   "w-full border border-gray-300 rounded-lg p-2 text-sm whitespace-pre-wrap",
-                  invalidTermsText
+                  invalidTermsText,
                 )}
                 placeholder="Terms & Conditions will appear here..."
               />
               <p className="text-xs text-gray-400 mt-1">
-                This text is editable and will be saved + printed exactly (including line breaks).
+                This text is editable and will be saved + printed exactly
+                (including line breaks).
               </p>
             </div>
           ) : null}
@@ -1668,7 +2034,11 @@ export default function EstimateForm({
                 <h2 className="font-semibold text-sm">PDF Preview</h2>
                 <button onClick={() => setIsPreviewOpen(false)}>❌</button>
               </div>
-              <iframe src={previewURL} className="flex-1 border" title="PDF Preview" />
+              <iframe
+                src={previewURL}
+                className="flex-1 border"
+                title="PDF Preview"
+              />
               <div className="mt-4 flex justify-end gap-3">
                 <Button
                   onClick={() => {
@@ -1687,7 +2057,11 @@ export default function EstimateForm({
 
         <ToastProvider>
           {toastOpen && (
-            <Toast onOpenChange={setToastOpen} open={toastOpen} variant={"destructive"}>
+            <Toast
+              onOpenChange={setToastOpen}
+              open={toastOpen}
+              variant={"destructive"}
+            >
               <ToastTitle>Missing Field</ToastTitle>
               <ToastDescription>{toastMsg}</ToastDescription>
               <ToastClose />

@@ -1,5 +1,3 @@
-
-
 import { Switch, Route, Redirect, useLocation } from "wouter";
 import { AuthProvider, useAuth } from "./contexts/AuthContext";
 import { queryClient } from "./lib/queryClient";
@@ -25,6 +23,7 @@ import ProtectedRoute from "@/components/ProtectedRoute";
 import { Clients } from "@/pages/Clients";
 import Settings from "@/pages/Settings";
 import SalesDashboard from "./components/SalesDashboard";
+import InvoiceEstimate from "./pages/EstimateInvoice";
 import {
   TravelHome,
   TravelHotel,
@@ -118,6 +117,12 @@ function AuthenticatedApp() {
           </ProtectedRoute>
         </Route>
 
+        <Route path="/invoice-estimate">
+          <ProtectedRoute>
+            <InvoiceEstimate />
+          </ProtectedRoute>
+        </Route>
+
         <Route path="/sales-management">
           <ProtectedRoute>
             <SalesManagement />
@@ -152,7 +157,6 @@ function AuthenticatedApp() {
           <Redirect to="/dashboard" />
         </Route>
 
-
         <Route path="/travel">
           <ProtectedRoute>
             <TravelHome />
@@ -166,15 +170,12 @@ function AuthenticatedApp() {
         </Route>
         <Route path="/travel/HotelSettings">
           <ProtectedRoute>
-            <HotelSettings/>
+            <HotelSettings />
           </ProtectedRoute>
         </Route>
 
-
         <Route path="/usertravel">
-
           <UserTravel />
-
         </Route>
 
         <Route path="/travel/transport">
