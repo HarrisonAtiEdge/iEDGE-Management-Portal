@@ -16,6 +16,7 @@ export const pakistanCities = [
   { id: "bahawalpur", name: "Bahawalpur" },
   { id: "rahimyar_khan", name: "Rahim Yar Khan" },
   { id: "dera_ghazi_khan", name: "Dera Ghazi Khan" },
+  { id: "dera_ismail_khan", name: "Dera Ismail Khan" },
   { id: "sargodha", name: "Sargodha" },
   { id: "okara", name: "Okara" },
   { id: "kasur", name: "Kasur" },
