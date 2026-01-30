@@ -48,6 +48,8 @@ const AVAILABLE_TABS = [
   { path: "/sales-management", label: "Sales Management" },
   { path: "/travel/hotel", label: "Travel" },
   { path: "/invoice-estimate", label: "Invoice Estimiates" },
+  { path: "/usertravel", label: "Book Hotel" },
+  { path: "/booking", label: "Bookings" },
 ];
 
 const PANEL_ID = "IEDGE-SYSTEM";

@@ -34,15 +34,15 @@ const AVAILABLE_TABS = [
     icon: "fas fa-chart-pie",
   },
   { path: "/settings", label: "Settings", icon: "fas fa-receipt" },
-  { path: "/travel/hotel", label: "Travel ", icon: "fas fa-hotel" },
-  { path: "/usertravel", label: "User Travel", icon: "fas fa-hotel" },
+  { path: "/travel/hotel", label: "Travel", icon: "fas fa-hotel" },
+  { path: "/usertravel", label: "Book Hotel", icon: "fas fa-hotel" },
+  { path: "/booking", label: "Bookings", icon: "fas fa-hotel" },
   {
     path: "/invoice-estimate",
     label: "Invoice Estimiate",
     icon: "fas fa-hotel",
   },
 ];
-
 interface SidebarItem {
   path: string;
   label: string;
