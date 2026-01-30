@@ -42,4 +42,6 @@ export const pakistanCities = [
   { id: "mardan", name: "Mardan" },
   { id: "upper_dir", name: "Upper Dir" },
   { id: "lower_dir", name: "Lower Dir" },
+  { id: "hunza", name: "Hunza" },
+  { id: "malam_jabba", name: "Malam Jabba" },
 ];
