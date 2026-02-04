@@ -34,6 +34,7 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
   const [usersMap, setUsersMap] = useState<Record<string, any>>({});
   const [isAdmin, setIsAdmin] = useState(false);
   const [isOperationAdmin, setIsOperationAdmin] = useState(false);
+  const [isFinancialAdmin, setIsFinancialAdmin] = useState(false);
 
   const estimatesRef = collection(db, "Panels", "IEDGE-SYSTEM", "estimates");
 
@@ -77,9 +78,11 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
 
       const adminCheck = userData?.isAdmin === true;
       const operationAdminCheck = userData?.isOperationAdmin === true;
+      const financialAdminCheck = userData?.isFinancialAdmin === true;
 
       setIsAdmin(adminCheck);
       setIsOperationAdmin(operationAdminCheck);
+      setIsFinancialAdmin(financialAdminCheck);
 
       const usersSnapshot = await getDocs(
         collection(db, "Panels", "IEDGE-SYSTEM", "users"),
@@ -93,7 +96,7 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
       //   : query(estimatesRef, where("createdBy", "==", uid));
 
       const q =
-        adminCheck || operationAdminCheck
+        adminCheck || operationAdminCheck || financialAdminCheck
           ? query(estimatesRef)
           : query(estimatesRef, where("createdBy", "==", uid));
 
