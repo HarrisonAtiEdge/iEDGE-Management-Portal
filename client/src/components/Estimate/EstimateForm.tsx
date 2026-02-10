@@ -76,6 +76,9 @@ export interface ServiceItem {
   whtId?: string;
   whtLabel?: string;
   whtPercent?: number;
+
+  // ✅ NEW: per-row PDF control (default true)
+  showFinancialsInPdf?: boolean; // if false -> PDF should show only Service+Description for that row
 }
 
 interface Tax {
@@ -487,6 +490,9 @@ export default function EstimateForm({
         whtId: "",
         whtLabel: "",
         whtPercent: 0,
+
+        // ✅ NEW default: show financial columns in PDF
+        showFinancialsInPdf: true,
       },
     ],
     [],
@@ -600,6 +606,9 @@ export default function EstimateForm({
         whtId: "",
         whtLabel: "",
         whtPercent: 0,
+
+        // ✅ NEW default: show financial columns in PDF
+        showFinancialsInPdf: true,
       },
     ]);
   };
@@ -807,6 +816,12 @@ export default function EstimateForm({
           whtId: s.whtId ?? "",
           whtLabel: s.whtLabel ?? "",
           whtPercent: typeof s.whtPercent === "number" ? s.whtPercent : 0,
+
+          // ✅ NEW: restore per-row PDF toggle (default true if missing)
+          showFinancialsInPdf:
+            typeof s.showFinancialsInPdf === "boolean"
+              ? s.showFinancialsInPdf
+              : true,
         };
       }),
     );
@@ -1224,6 +1239,9 @@ export default function EstimateForm({
         whtId: "",
         whtLabel: "",
         whtPercent: 0,
+
+        // ✅ NEW default: show financial columns in PDF
+        showFinancialsInPdf: true,
       },
     ]);
 
@@ -1255,6 +1273,9 @@ export default function EstimateForm({
       rateUsdInput: String(s.rateUsdInput ?? ""),
       rateEuroInput: String(s.rateEuroInput ?? ""),
       rateCurrency: (s.rateCurrency ?? "PKR") as any,
+
+      // ✅ NEW: persist per-row PDF toggle (default true)
+      showFinancialsInPdf: s.showFinancialsInPdf !== false,
     }));
 
     const requiredFields = [
@@ -1908,6 +1929,12 @@ export default function EstimateForm({
                       <th>Amount (EURO)</th>
                     </>
                   )}
+
+                  {/* ✅ NEW: per-row PDF toggle column */}
+                  <th className="p-3 font-semibold border-b text-center">
+                    PDF
+                  </th>
+
                   <th className="p-3 font-semibold border-b text-center w-12"></th>
                 </tr>
               </thead>
@@ -2345,6 +2372,24 @@ export default function EstimateForm({
                                 </td>
                               </>
                             )}
+
+                            {/* ✅ NEW: per-row checkbox (every row) */}
+                            <td className="p-2 align-top">
+                              <label className="flex items-start gap-2 text-[11px] text-gray-700 leading-snug max-w-[220px]">
+                                <input
+                                  type="checkbox"
+                                  className="accent-black mt-0.5"
+                                  checked={s.showFinancialsInPdf ?? true}
+                                  onChange={(e) => {
+                                    const copy = [...services];
+                                    copy[i].showFinancialsInPdf =
+                                      e.target.checked;
+                                    setServices(copy);
+                                  }}
+                                />
+                                <span>Show Calcs</span>
+                              </label>
+                            </td>
 
                             <td className="p-2 text-center">
                               {services.length > 1 && (

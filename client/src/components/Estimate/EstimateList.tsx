@@ -58,6 +58,26 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
     { name: "Emaan Biz", logo: "/Emaan-Biz-TM-Logos-06.png" },
   ];
 
+  // ✅ Window size
+  const PAGE_WINDOW = 3;
+
+  // ✅ returns only the 3-page window that "slides" like you asked:
+  // 1-3, then when on 3 -> 4-6, then when on 6 -> 7-9, etc.
+  function getVisiblePages(currentPage: number, totalPages: number) {
+    if (totalPages <= 0) return [];
+    if (totalPages <= PAGE_WINDOW) {
+      return Array.from({ length: totalPages }, (_, i) => i + 1);
+    }
+
+    const maxStart = Math.max(1, totalPages - PAGE_WINDOW + 1);
+    const rawStart = Math.floor(currentPage / PAGE_WINDOW) * PAGE_WINDOW + 1;
+
+    const start = Math.min(rawStart, maxStart);
+    const end = Math.min(start + PAGE_WINDOW - 1, totalPages);
+
+    return Array.from({ length: end - start + 1 }, (_, i) => start + i);
+  }
+
   useEffect(() => {
     let unsubSnapshot: (() => void) | null = null;
 
@@ -73,8 +93,6 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
         doc(db, "Panels", "IEDGE-SYSTEM", "users", uid),
       );
       const userData = userSnap.data();
-      // const adminCheck = userData?.isAdmin === true;
-      // setIsAdmin(adminCheck);
 
       const adminCheck = userData?.isAdmin === true;
       const operationAdminCheck = userData?.isOperationAdmin === true;
@@ -91,10 +109,6 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
       usersSnapshot.forEach((u) => (map[u.id] = u.data()));
       setUsersMap(map);
 
-      // const q = adminCheck
-      //   ? query(estimatesRef)
-      //   : query(estimatesRef, where("createdBy", "==", uid));
-
       const q =
         adminCheck || operationAdminCheck || financialAdminCheck
           ? query(estimatesRef)
@@ -105,6 +119,37 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
           id: d.id,
           ...(d.data() as Estimate),
         }));
+
+        // ✅ Latest record on top (without changing anything else)
+        const getTime = (x: any) => {
+          const v = x?.createdAt ?? x?.updatedAt;
+
+          if (v?.toMillis) return v.toMillis(); // Firestore Timestamp
+          if (v instanceof Date) return v.getTime();
+          if (typeof v === "number") return v;
+
+          if (typeof v === "string") {
+            const t = new Date(v).getTime();
+            if (!Number.isNaN(t)) return t;
+          }
+
+          const ds = x?.date;
+          if (typeof ds === "string") {
+            const t = new Date(ds).getTime();
+            if (!Number.isNaN(t)) return t;
+          }
+
+          const eno = x?.estimateNo;
+          if (typeof eno === "string") {
+            const m = eno.match(/(\d+)(?!.*\d)/);
+            if (m) return Number(m[1]);
+          }
+
+          return 0;
+        };
+
+        list.sort((a: any, b: any) => getTime(b) - getTime(a));
+
         setEstimates(list);
       });
     });
@@ -130,19 +175,6 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
     }
   };
 
-  // const filteredEstimates = estimates.filter((e) => {
-  //   const s = searchTerm.toLowerCase();
-  //   return (
-  //     e.estimateNo.toLowerCase().includes(s) ||
-  //     (e.client ?? "").toLowerCase().includes(s) ||
-  //     (e.subject ?? "").toLowerCase().includes(s) ||
-  //     (e.date ?? "").toLowerCase().includes(s) ||
-  //     e.total?.toString().toLowerCase().includes(s) ||
-  //     (e as any).status?.toLowerCase().includes(s)
-
-  //   );
-  // });
-
   const handleViewDetail = async (estimate: Estimate) => {
     setSelectedEstimate(estimate);
 
@@ -150,7 +182,6 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
       estimate,
       companyList,
       usersMap, // ✅ createdBy footer
-      // withLogo comes from saved estimate.withLogo (or defaults true in builder)
       companyName: estimate.company || "",
     });
 
@@ -162,14 +193,9 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
   const formatDateWithMonthName = (dateStr?: string) => {
     if (!dateStr) return "";
 
-    // expected format: YYYY-MM-DD
     const [year, month, day] = dateStr.split("-");
 
-    const date = new Date(
-      Number(year),
-      Number(month) - 1, // 👈 month index
-      Number(day),
-    );
+    const date = new Date(Number(year), Number(month) - 1, Number(day));
 
     return date.toLocaleDateString("en-GB", {
       day: "2-digit",
@@ -197,7 +223,7 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
                 ? "bg-emerald-100 text-emerald-800"
                 : s === "PO Received"
                   ? "bg-purple-100 text-purple-800"
-                  : "bg-yellow-100 text-yellow-800"; // RFQ Sent default
+                  : "bg-yellow-100 text-yellow-800";
 
     return <span className={`${base} ${cls}`}>{s}</span>;
   };
@@ -240,7 +266,7 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
   const [clientFilter, setClientFilter] = useState("");
   const [subjectFilter, setSubjectFilter] = useState("");
   const [currentPage, setCurrentPage] = useState(1);
-  const ITEMS_PER_PAGE = 10; // 👈 yahan change kar sakti ho (10, 20, 50)
+  const ITEMS_PER_PAGE = 10;
 
   const [dateRange, setDateRange] = useState<
     "all" | "today" | "7days" | "thisMonth" | "lastMonth"
@@ -309,6 +335,16 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
 
   const totalPages = Math.ceil(filteredEstimates.length / ITEMS_PER_PAGE);
 
+  // ✅ keep page valid if filters reduce pages / delete etc.
+  useEffect(() => {
+    if (totalPages <= 0) {
+      if (currentPage !== 1) setCurrentPage(1);
+      return;
+    }
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [totalPages]);
+
   const paginatedEstimates = filteredEstimates.slice(
     (currentPage - 1) * ITEMS_PER_PAGE,
     currentPage * ITEMS_PER_PAGE,
@@ -325,18 +361,20 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
     maxAmount,
   ]);
 
+  // ✅ window (3 buttons) + always show last page like: 1 2 3 … 11
+  const visiblePages = getVisiblePages(currentPage, totalPages);
+  const windowStart = visiblePages[0] ?? 1;
+  const windowEnd = visiblePages[visiblePages.length - 1] ?? 1;
+
+  const startRow =
+    filteredEstimates.length === 0 ? 0 : (currentPage - 1) * ITEMS_PER_PAGE + 1;
+  const endRow = Math.min(
+    currentPage * ITEMS_PER_PAGE,
+    filteredEstimates.length,
+  );
+
   return (
     <div className="mt-8 px-4">
-      {/* <div className="mb-4 flex gap-3">
-        <input
-          type="text"
-          placeholder="Search by Estimate No, Client, Subject, Date, Amount..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          className="border p-2 rounded flex-1"
-        />
-      </div> */}
-
       <table className="w-full border text-xs">
         <thead className="bg-gray-100">
           <tr className=" border-b hover:bg-gray-50">
@@ -421,11 +459,9 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
 
               <td>{e.client}</td>
               <td>{e.subject}</td>
-              {/* <td>{e.date}</td> */}
               <td>{formatDateWithMonthName(e.date)}</td>
 
               <td className="text-right pr-6">
-                {/* PKR{" "} */}
                 Rs.{" "}
                 {Number(e.total ?? 0).toLocaleString(undefined, {
                   minimumFractionDigits: 2,
@@ -435,7 +471,6 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
               <td>{usersMap[e.createdBy]?.displayName || "Unknown"}</td>
               <td>
                 <div className="flex items-center justify-center gap-2">
-                  {/* Detail */}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -445,7 +480,6 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
                     <Eye className="h-4 w-4" />
                   </Button>
 
-                  {/* Edit */}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -455,7 +489,6 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
                     <Pencil className="h-4 w-4" />
                   </Button>
 
-                  {/* Duplicate */}
                   <Button
                     variant="ghost"
                     size="icon"
@@ -468,7 +501,6 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
                     <Copy className="h-4 w-4" />
                   </Button>
 
-                  {/* Delete (Admin only) */}
                   {isAdmin && (
                     <Button
                       variant="ghost"
@@ -517,35 +549,71 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
 
       <div className="flex justify-between items-center mt-4 text-sm">
         <div>
-          Showing {(currentPage - 1) * ITEMS_PER_PAGE + 1}–
-          {Math.min(currentPage * ITEMS_PER_PAGE, filteredEstimates.length)} of{" "}
-          {filteredEstimates.length}
+          Showing {startRow}–{endRow} of {filteredEstimates.length}
         </div>
 
-        <div className="flex gap-1">
+        <div className="flex gap-1 items-center">
           <button
             disabled={currentPage === 1}
-            onClick={() => setCurrentPage((p) => p - 1)}
+            onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
             className="px-3 py-1 border rounded disabled:opacity-40"
           >
             Prev
           </button>
 
-          {Array.from({ length: totalPages }).map((_, i) => (
-            <button
-              key={i}
-              onClick={() => setCurrentPage(i + 1)}
-              className={`px-3 py-1 border rounded
-          ${currentPage === i + 1 ? "bg-black text-white" : ""}
-        `}
-            >
-              {i + 1}
-            </button>
-          ))}
+          {/* ✅ Page buttons with "… lastPage" like: 1 2 3 … 11 */}
+          {totalPages > 0 && (
+            <>
+              {/* If window starts after 1, show page 1 first */}
+              {windowStart > 1 && (
+                <>
+                  <button
+                    onClick={() => setCurrentPage(1)}
+                    className={`px-3 py-1 border rounded ${
+                      currentPage === 1 ? "bg-black text-white" : ""
+                    }`}
+                  >
+                    1
+                  </button>
+                  <span className="px-2 select-none text-gray-500">…</span>
+                </>
+              )}
+
+              {/* Window pages (max 3) */}
+              {visiblePages.map((p) => (
+                <button
+                  key={p}
+                  onClick={() => setCurrentPage(p)}
+                  className={`px-3 py-1 border rounded ${
+                    currentPage === p ? "bg-black text-white" : ""
+                  }`}
+                >
+                  {p}
+                </button>
+              ))}
+
+              {/* If window doesn't reach last, show "… last" */}
+              {windowEnd < totalPages && (
+                <>
+                  <span className="px-2 select-none text-gray-500">…</span>
+                  <button
+                    onClick={() => setCurrentPage(totalPages)}
+                    className={`px-3 py-1 border rounded ${
+                      currentPage === totalPages ? "bg-black text-white" : ""
+                    }`}
+                  >
+                    {totalPages}
+                  </button>
+                </>
+              )}
+            </>
+          )}
 
           <button
-            disabled={currentPage === totalPages}
-            onClick={() => setCurrentPage((p) => p + 1)}
+            disabled={totalPages <= 0 || currentPage === totalPages}
+            onClick={() =>
+              setCurrentPage((p) => Math.min(totalPages || 1, p + 1))
+            }
             className="px-3 py-1 border rounded disabled:opacity-40"
           >
             Next
@@ -576,7 +644,9 @@ export default function EstimateList({ onEdit, onDuplicate }: Props) {
                 onClick={() => {
                   const link = document.createElement("a");
                   link.href = previewURL;
-                  link.download = `${selectedEstimate?.estimateNo || "estimate"}.pdf`;
+                  link.download = `${
+                    selectedEstimate?.estimateNo || "estimate"
+                  }.pdf`;
                   link.click();
                 }}
               >
