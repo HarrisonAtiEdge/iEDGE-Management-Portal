@@ -54,9 +54,16 @@ export interface ServiceItem {
   units: number;
   unitsInput?: string; // raw typing
 
-  rate: number; // numeric for calc
-  rateInput?: string; // raw typing
+  rate: number; // numeric PKR base for calc
+  rateInput?: string; // PKR raw typing
   rateMode?: "amount" | "percent"; // if percent, base = units * (rate/100)
+
+  // ✅ NEW: multi-currency rate inputs
+  rateUsdInput?: string;
+  rateEuroInput?: string;
+
+  // ✅ NEW: which field user last used (helps when FX changes)
+  rateCurrency?: "PKR" | "USD" | "EUR";
 
   taxType?: string;
   taxPercent?: number;
@@ -128,49 +135,208 @@ const fmtDecimalLoose = (n: number) => {
   return n.toLocaleString(undefined, { maximumFractionDigits: 6 });
 };
 
-// ✅ keep user's partial typing like "0." or "." or "-" without breaking typing
-const sanitizeDecimalText = (raw: string) => {
-  let s = String(raw || "");
-  s = s.replace(/,/g, "");
-  // ✅ allow digits, dot, percent, and minus (for negative rates)
-  s = s.replace(/[^0-9.%\-]/g, "");
+// ✅ allow calculator operators in Rate field
+const sanitizeRateText = (raw: string) => {
+  let s = String(raw ?? "");
+  // allow digits, dot, percent, spaces, commas, and calculator ops
+  s = s.replace(/[^0-9.%+\-*/() ,]/g, "");
   return s;
 };
 
-const parseRateInput = (raw: string) => {
-  const cleanedRaw = sanitizeDecimalText(raw).trim();
+type EvalResult =
+  | { ok: true; value: number; mode: "amount" | "percent" }
+  | { ok: false; error: string; mode: "amount" | "percent" };
 
-  const isPercent = cleanedRaw.endsWith("%");
-  const withoutPercent = isPercent
-    ? cleanedRaw.slice(0, -1).trim()
-    : cleanedRaw;
+// ✅ safe expression evaluator (no eval)
+const evalRateExpression = (rawInput: string): EvalResult => {
+  const raw = sanitizeRateText(rawInput).trim();
+  if (!raw) return { ok: false, error: "Empty", mode: "amount" };
 
-  // allow one leading minus only
-  let s = withoutPercent.replace(/[^0-9.\-]/g, "");
-  if (s.includes("-")) {
-    const neg = s.startsWith("-");
-    s = (neg ? "-" : "") + s.replace(/-/g, "");
+  // detect trailing % (ignoring spaces)
+  const trimmed = raw.replace(/\s+/g, " ");
+  const endsWithPercent = /%\s*$/.test(trimmed);
+  const mode: "amount" | "percent" = endsWithPercent ? "percent" : "amount";
+
+  // remove trailing %
+  const expr = endsWithPercent ? trimmed.replace(/%\s*$/, "").trim() : trimmed;
+
+  // remove commas for evaluation
+  const clean = expr.replace(/,/g, "").trim();
+  if (!clean) return { ok: false, error: "Empty", mode };
+
+  // allow only these chars now
+  if (/[^0-9+\-*/().\s]/.test(clean)) {
+    return { ok: false, error: "Invalid characters", mode };
   }
 
-  // allow only one dot (after minus)
-  const negPrefix = s.startsWith("-") ? "-" : "";
-  const body = s.startsWith("-") ? s.slice(1) : s;
-  const parts = body.split(".");
-  let normalizedBody = body;
-  if (parts.length > 2)
-    normalizedBody = parts[0] + "." + parts.slice(1).join("");
-  s = negPrefix + normalizedBody;
+  type Tok =
+    | { t: "num"; v: number }
+    | { t: "op"; v: "+" | "-" | "*" | "/" }
+    | { t: "lp" }
+    | { t: "rp" }
+    | { t: "u-" }; // unary minus
 
-  // numeric value
-  const numeric =
-    s === "" || s === "-" || s === "." || s === "-." ? 0 : Number(s);
+  const tokens: Tok[] = [];
+  let i = 0;
 
-  return {
-    mode: isPercent ? ("percent" as const) : ("amount" as const),
-    text: cleanedRaw,
-    number: Number.isFinite(numeric) ? numeric : 0,
-    isPartial: s.endsWith(".") || s === "." || s === "-" || s === "-.",
+  const isOp = (c: string) => c === "+" || c === "-" || c === "*" || c === "/";
+
+  while (i < clean.length) {
+    const c = clean[i];
+
+    if (c === " " || c === "\t" || c === "\n") {
+      i++;
+      continue;
+    }
+
+    if (c === "(") {
+      tokens.push({ t: "lp" });
+      i++;
+      continue;
+    }
+    if (c === ")") {
+      tokens.push({ t: "rp" });
+      i++;
+      continue;
+    }
+
+    if ((c >= "0" && c <= "9") || c === ".") {
+      let j = i;
+      while (
+        j < clean.length &&
+        ((clean[j] >= "0" && clean[j] <= "9") || clean[j] === ".")
+      ) {
+        j++;
+      }
+      const chunk = clean.slice(i, j);
+      const n = Number(chunk);
+      if (!Number.isFinite(n)) return { ok: false, error: "Bad number", mode };
+      tokens.push({ t: "num", v: n });
+      i = j;
+      continue;
+    }
+
+    if (isOp(c)) {
+      tokens.push({ t: "op", v: c as any });
+      i++;
+      continue;
+    }
+
+    return { ok: false, error: "Invalid character", mode };
+  }
+
+  // ---- Shunting-yard -> RPN (support unary minus) ----
+  const output: Tok[] = [];
+  const stack: Tok[] = [];
+
+  const prec = (tok: Tok) => {
+    if (tok.t === "u-") return 3;
+    if (tok.t === "op" && (tok.v === "*" || tok.v === "/")) return 2;
+    if (tok.t === "op" && (tok.v === "+" || tok.v === "-")) return 1;
+    return 0;
   };
+
+  const isLeftAssoc = (tok: Tok) => tok.t !== "u-"; // unary minus right-assoc
+
+  let prev: Tok | null = null;
+
+  for (const tok of tokens) {
+    if (tok.t === "num") {
+      output.push(tok);
+      prev = tok;
+      continue;
+    }
+
+    if (tok.t === "lp") {
+      stack.push(tok);
+      prev = tok;
+      continue;
+    }
+
+    if (tok.t === "rp") {
+      while (stack.length && stack[stack.length - 1].t !== "lp") {
+        output.push(stack.pop() as Tok);
+      }
+      if (!stack.length) return { ok: false, error: "Mismatched )", mode };
+      stack.pop();
+      prev = tok;
+      continue;
+    }
+
+    if (tok.t === "op") {
+      let opTok: Tok = tok;
+
+      if (
+        tok.v === "-" &&
+        (!prev || prev.t === "op" || prev.t === "lp" || prev.t === "u-")
+      ) {
+        opTok = { t: "u-" };
+      }
+
+      while (stack.length) {
+        const top = stack[stack.length - 1];
+        if (top.t === "lp") break;
+
+        const pTop = prec(top);
+        const pCur = prec(opTok);
+
+        if (pTop > pCur || (pTop === pCur && isLeftAssoc(opTok))) {
+          output.push(stack.pop() as Tok);
+        } else break;
+      }
+
+      stack.push(opTok);
+      prev = opTok;
+      continue;
+    }
+  }
+
+  while (stack.length) {
+    const top = stack.pop() as Tok;
+    if (top.t === "lp" || top.t === "rp")
+      return { ok: false, error: "Mismatched ()", mode };
+    output.push(top);
+  }
+
+  // ---- Evaluate RPN ----
+  const st: number[] = [];
+
+  for (const tok of output) {
+    if (tok.t === "num") {
+      st.push(tok.v);
+      continue;
+    }
+
+    if (tok.t === "u-") {
+      if (st.length < 1) return { ok: false, error: "Bad unary -", mode };
+      const a = st.pop() as number;
+      st.push(-a);
+      continue;
+    }
+
+    if (tok.t === "op") {
+      if (st.length < 2) return { ok: false, error: "Bad expression", mode };
+      const b = st.pop() as number;
+      const a = st.pop() as number;
+
+      let res = 0;
+      if (tok.v === "+") res = a + b;
+      if (tok.v === "-") res = a - b;
+      if (tok.v === "*") res = a * b;
+      if (tok.v === "/") res = a / b;
+
+      if (!Number.isFinite(res)) {
+        return { ok: false, error: "Math error", mode };
+      }
+      st.push(res);
+      continue;
+    }
+  }
+
+  if (st.length !== 1) return { ok: false, error: "Bad expression", mode };
+  const value = st[0];
+
+  return { ok: true, value, mode };
 };
 
 // ✅ Money formatting for totals (2 decimals)
@@ -308,6 +474,12 @@ export default function EstimateForm({
         rate: 0,
         rateInput: "",
         rateMode: "amount",
+
+        // ✅ NEW defaults
+        rateUsdInput: "",
+        rateEuroInput: "",
+        rateCurrency: "PKR",
+
         taxType: "inclusive",
         taxPercent: 0,
         taxLabel: "",
@@ -362,7 +534,7 @@ export default function EstimateForm({
   const fieldClass = (base: string, invalid: boolean) =>
     `${base} ${invalid ? "blink-red" : ""}`;
 
-  // ✅ calc line uses rateMode
+  // ✅ calc line uses rateMode (rate is PKR base)
   const calcLine = (s: ServiceItem) => {
     const units = Number(s.units) || 0;
     const rateMode = s.rateMode || "amount";
@@ -415,6 +587,12 @@ export default function EstimateForm({
         rate: 0,
         rateInput: "",
         rateMode: "amount",
+
+        // ✅ NEW defaults
+        rateUsdInput: "",
+        rateEuroInput: "",
+        rateCurrency: "PKR",
+
         taxType: "inclusive",
         taxPercent: 0,
         taxLabel: "",
@@ -567,29 +745,70 @@ export default function EstimateForm({
     setTermsConditionText(savedText);
 
     setServices(
-      (existingEstimate.services || []).map((s: any) => ({
-        rowId: s.rowId || makeRowId(),
-        detail: s.detail ?? "",
-        description: s.description ?? "",
-        units: s.units ?? 1,
-        unitsInput:
-          typeof s.units === "number"
-            ? fmtIntLoose(s.units)
-            : (s.unitsInput ?? ""),
-        rate: s.rate ?? 0,
-        rateInput:
-          typeof s.rate === "number" && s.rate !== 0
-            ? fmtDecimalLoose(s.rate)
-            : (s.rateInput ?? ""),
-        rateMode: s.rateMode ?? "amount",
-        taxType: s.taxType ?? "none",
-        taxPercent: s.taxPercent ?? 0,
-        taxLabel: s.taxLabel ?? "",
-        taxId: s.taxId ?? "",
-        whtId: s.whtId ?? "",
-        whtLabel: s.whtLabel ?? "",
-        whtPercent: typeof s.whtPercent === "number" ? s.whtPercent : 0,
-      })),
+      (existingEstimate.services || []).map((s: any) => {
+        const estUsdRate = String((existingEstimate as any)?.usdRate ?? "");
+        const estEuroRate = String((existingEstimate as any)?.euroRate ?? "");
+        const usdFx = num(estUsdRate);
+        const eurFx = num(estEuroRate);
+
+        const savedRate = Number(s.rate ?? 0);
+        const savedMode: "amount" | "percent" = s.rateMode ?? "amount";
+
+        const percentText =
+          savedMode === "percent" ? `${fmtDecimalLoose(savedRate)}%` : "";
+
+        const derivedUsd =
+          savedMode === "percent"
+            ? percentText
+            : usdFx > 0 && Number.isFinite(savedRate)
+              ? fmtDecimalLoose(savedRate / usdFx)
+              : "";
+
+        const derivedEur =
+          savedMode === "percent"
+            ? percentText
+            : eurFx > 0 && Number.isFinite(savedRate)
+              ? fmtDecimalLoose(savedRate / eurFx)
+              : "";
+
+        return {
+          rowId: s.rowId || makeRowId(),
+          detail: s.detail ?? "",
+          description: s.description ?? "",
+          units: s.units ?? 1,
+          unitsInput:
+            typeof s.units === "number"
+              ? fmtIntLoose(s.units)
+              : (s.unitsInput ?? ""),
+          rate: savedRate,
+          rateMode: savedMode,
+
+          // ✅ PKR input restore
+          rateInput:
+            savedMode === "percent"
+              ? percentText
+              : typeof s.rate === "number" && s.rate !== 0
+                ? fmtDecimalLoose(savedRate)
+                : (s.rateInput ?? ""),
+
+          // ✅ NEW inputs restore/derive
+          rateUsdInput:
+            s.rateUsdInput ??
+            (savedMode === "percent" ? percentText : derivedUsd),
+          rateEuroInput:
+            s.rateEuroInput ??
+            (savedMode === "percent" ? percentText : derivedEur),
+          rateCurrency: s.rateCurrency ?? "PKR",
+
+          taxType: s.taxType ?? "none",
+          taxPercent: s.taxPercent ?? 0,
+          taxLabel: s.taxLabel ?? "",
+          taxId: s.taxId ?? "",
+          whtId: s.whtId ?? "",
+          whtLabel: s.whtLabel ?? "",
+          whtPercent: typeof s.whtPercent === "number" ? s.whtPercent : 0,
+        };
+      }),
     );
 
     setSelectedClient({
@@ -696,6 +915,267 @@ export default function EstimateForm({
     );
   }, [taxType]);
 
+  // ✅ helpers for multi-rate
+  type RateCurrency = "PKR" | "USD" | "EUR";
+
+  const hasAnyRateInput = (s: ServiceItem) =>
+    [s.rateInput, s.rateUsdInput, s.rateEuroInput].some(
+      (v) => String(v ?? "").trim() !== "",
+    );
+
+  const getFx = () => ({
+    usd: num(usdRate),
+    eur: num(euroRate),
+  });
+
+  const handleRateChange = (
+    index: number,
+    currency: RateCurrency,
+    raw: string,
+  ) => {
+    const safeText = sanitizeRateText(raw);
+
+    setServices((prev) => {
+      const copy = [...prev];
+      const row = { ...copy[index] };
+
+      if (currency === "PKR") row.rateInput = safeText;
+      if (currency === "USD") row.rateUsdInput = safeText;
+      if (currency === "EUR") row.rateEuroInput = safeText;
+
+      const res = evalRateExpression(safeText);
+
+      if (!res.ok) {
+        row.rateMode = /%\s*$/.test(safeText) ? "percent" : "amount";
+        row.rate = 0; // keep behavior: invalid expression doesn't calc
+        row.rateCurrency = currency;
+        copy[index] = row;
+        return copy;
+      }
+
+      row.rateMode = res.mode;
+      row.rateCurrency = currency;
+
+      if (res.mode === "percent") {
+        row.rate = res.value;
+        copy[index] = row;
+        return copy;
+      }
+
+      const fx = getFx();
+      let pkrVal: number | null = null;
+
+      if (currency === "PKR") pkrVal = res.value;
+      if (currency === "USD") pkrVal = fx.usd > 0 ? res.value * fx.usd : null;
+      if (currency === "EUR") pkrVal = fx.eur > 0 ? res.value * fx.eur : null;
+
+      if (pkrVal == null) {
+        // if FX missing, don't recalc base yet
+        copy[index] = row;
+        return copy;
+      }
+
+      row.rate = pkrVal;
+
+      // keep PKR base synced
+      if (currency !== "PKR") row.rateInput = fmtDecimalLoose(pkrVal);
+
+      // update other fields as numbers (only if addCurrencies ON + FX provided)
+      if (addCurrencies) {
+        if (currency !== "USD" && fx.usd > 0)
+          row.rateUsdInput = fmtDecimalLoose(pkrVal / fx.usd);
+        if (currency !== "EUR" && fx.eur > 0)
+          row.rateEuroInput = fmtDecimalLoose(pkrVal / fx.eur);
+      }
+
+      copy[index] = row;
+      return copy;
+    });
+  };
+
+  const handleRateBlur = (index: number, currency: RateCurrency) => {
+    const current = services[index];
+    if (!current) return;
+
+    const raw =
+      currency === "PKR"
+        ? String(current.rateInput ?? "")
+        : currency === "USD"
+          ? String(current.rateUsdInput ?? "")
+          : String(current.rateEuroInput ?? "");
+
+    const trimmed = raw.trim();
+
+    // allow clearing one field; clear base only if all 3 are empty
+    if (trimmed === "") {
+      setServices((prev) => {
+        const copy = [...prev];
+        const row = { ...copy[index] };
+
+        if (currency === "PKR") row.rateInput = "";
+        if (currency === "USD") row.rateUsdInput = "";
+        if (currency === "EUR") row.rateEuroInput = "";
+
+        const anyLeft = hasAnyRateInput(row);
+
+        if (!anyLeft) {
+          row.rate = 0;
+          row.rateMode = "amount";
+          row.rateCurrency = "PKR";
+        }
+
+        copy[index] = row;
+        return copy;
+      });
+      return;
+    }
+
+    const res = evalRateExpression(trimmed);
+    if (!res.ok) {
+      showToast("Invalid rate expression (please check brackets/operators)");
+      return;
+    }
+
+    const fx = getFx();
+
+    if (res.mode === "percent") {
+      const formatted = `${fmtDecimalLoose(res.value)}%`;
+
+      setServices((prev) => {
+        const copy = [...prev];
+        const row = { ...copy[index] };
+
+        row.rateMode = "percent";
+        row.rate = res.value;
+        row.rateCurrency = currency;
+
+        // show same percent across all 3 fields
+        row.rateInput = formatted;
+        row.rateUsdInput = formatted;
+        row.rateEuroInput = formatted;
+
+        copy[index] = row;
+        return copy;
+      });
+      return;
+    }
+
+    // amount mode -> need FX for USD/EUR sources
+    if (currency === "USD" && fx.usd <= 0) {
+      showToast("Please enter USD Rate above to use the USD field");
+      return;
+    }
+    if (currency === "EUR" && fx.eur <= 0) {
+      showToast("Please enter EURO Rate above to use the EURO field");
+      return;
+    }
+
+    let pkrVal = res.value;
+    if (currency === "USD") pkrVal = res.value * fx.usd;
+    if (currency === "EUR") pkrVal = res.value * fx.eur;
+
+    setServices((prev) => {
+      const copy = [...prev];
+      const row = { ...copy[index] };
+
+      row.rateMode = "amount";
+      row.rate = pkrVal;
+      row.rateCurrency = currency;
+
+      // sync PKR always
+      row.rateInput = fmtDecimalLoose(pkrVal);
+
+      // sync converted displays if FX available
+      if (fx.usd > 0) row.rateUsdInput = fmtDecimalLoose(pkrVal / fx.usd);
+      if (fx.eur > 0) row.rateEuroInput = fmtDecimalLoose(pkrVal / fx.eur);
+
+      // ensure the edited field shows its own evaluated number (not conversion)
+      if (currency === "PKR") row.rateInput = fmtDecimalLoose(res.value);
+      if (currency === "USD") row.rateUsdInput = fmtDecimalLoose(res.value);
+      if (currency === "EUR") row.rateEuroInput = fmtDecimalLoose(res.value);
+
+      copy[index] = row;
+      return copy;
+    });
+  };
+
+  // ✅ When FX changes, keep USD/EUR displays in sync (and preserve whichever field user used last)
+  useEffect(() => {
+    if (!addCurrencies) return;
+
+    const fx = { usd: num(usdRate), eur: num(euroRate) };
+    if (fx.usd <= 0 && fx.eur <= 0) return;
+
+    setServices((prev) =>
+      prev.map((s) => {
+        if (!hasAnyRateInput(s)) return s;
+
+        const mode = s.rateMode || "amount";
+
+        if (mode === "percent") {
+          const val = Number(s.rate) || 0;
+          const formatted = `${fmtDecimalLoose(val)}%`;
+          return {
+            ...s,
+            rateInput: formatted,
+            rateUsdInput: formatted,
+            rateEuroInput: formatted,
+          };
+        }
+
+        // If last used USD/EUR, recompute base from that text using NEW FX
+        if (s.rateCurrency === "USD" && fx.usd > 0) {
+          const t = String(s.rateUsdInput ?? "").trim();
+          if (t) {
+            const r = evalRateExpression(t);
+            if (r.ok && r.mode === "amount") {
+              const pkr = r.value * fx.usd;
+              return {
+                ...s,
+                rateMode: "amount",
+                rate: pkr,
+                rateInput: fmtDecimalLoose(pkr),
+                rateUsdInput: fmtDecimalLoose(r.value),
+                rateEuroInput:
+                  fx.eur > 0 ? fmtDecimalLoose(pkr / fx.eur) : s.rateEuroInput,
+              };
+            }
+          }
+        }
+
+        if (s.rateCurrency === "EUR" && fx.eur > 0) {
+          const t = String(s.rateEuroInput ?? "").trim();
+          if (t) {
+            const r = evalRateExpression(t);
+            if (r.ok && r.mode === "amount") {
+              const pkr = r.value * fx.eur;
+              return {
+                ...s,
+                rateMode: "amount",
+                rate: pkr,
+                rateInput: fmtDecimalLoose(pkr),
+                rateEuroInput: fmtDecimalLoose(r.value),
+                rateUsdInput:
+                  fx.usd > 0 ? fmtDecimalLoose(pkr / fx.usd) : s.rateUsdInput,
+              };
+            }
+          }
+        }
+
+        // Default: PKR is base -> refresh USD/EUR displays
+        const pkr = Number(s.rate) || 0;
+        return {
+          ...s,
+          rateUsdInput:
+            fx.usd > 0 ? fmtDecimalLoose(pkr / fx.usd) : s.rateUsdInput,
+          rateEuroInput:
+            fx.eur > 0 ? fmtDecimalLoose(pkr / fx.eur) : s.rateEuroInput,
+        };
+      }),
+    );
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addCurrencies, usdRate, euroRate]);
+
   const resetForm = () => {
     setEditId(null);
     setEstimateNo("");
@@ -731,6 +1211,12 @@ export default function EstimateForm({
         rate: 0,
         rateInput: "",
         rateMode: "amount",
+
+        // ✅ NEW defaults
+        rateUsdInput: "",
+        rateEuroInput: "",
+        rateCurrency: "PKR",
+
         taxType: "inclusive",
         taxPercent: 0,
         taxLabel: "",
@@ -746,7 +1232,7 @@ export default function EstimateForm({
   };
 
   const handleSave = async () => {
-    if (savingRef.current) return; // extra guard
+    if (savingRef.current) return;
     savingRef.current = true;
 
     setSubmitAttempted(true);
@@ -763,6 +1249,12 @@ export default function EstimateForm({
       whtId: s.whtId || "",
       whtLabel: s.whtLabel || "",
       whtPercent: typeof s.whtPercent === "number" ? s.whtPercent : 0,
+
+      // ✅ NEW: persist multi-rate fields
+      rateInput: String(s.rateInput ?? ""),
+      rateUsdInput: String(s.rateUsdInput ?? ""),
+      rateEuroInput: String(s.rateEuroInput ?? ""),
+      rateCurrency: (s.rateCurrency ?? "PKR") as any,
     }));
 
     const requiredFields = [
@@ -792,14 +1284,17 @@ export default function EstimateForm({
     }
 
     // ✅ allow units=0 and rate=0 (only EMPTY is considered missing)
-    const rowMissing = sanitizedServices.find((s) => {
+    const rowMissing = sanitizedServices.find((s: any) => {
       const missingService = !String(s.detail || "").trim();
 
-      const unitsRaw = String((s as any).unitsInput ?? "").trim();
-      const missingUnits = unitsRaw === "" && (s as any).unitsInput != null; // empty input only
+      const unitsRaw = String(s.unitsInput ?? "").trim();
+      const missingUnits = unitsRaw === "" && s.unitsInput != null;
 
-      const rateRaw = String((s as any).rateInput ?? "").trim();
-      const missingRate = rateRaw === "" && (s as any).rateInput != null; // empty input only
+      // ✅ NEW: rate missing only if ALL 3 are empty
+      const missingRate =
+        !String(s.rateInput ?? "").trim() &&
+        !String(s.rateUsdInput ?? "").trim() &&
+        !String(s.rateEuroInput ?? "").trim();
 
       const missingTax =
         taxType !== "none" ? !String(s.taxId || "").trim() : false;
@@ -808,17 +1303,23 @@ export default function EstimateForm({
     });
 
     if (rowMissing) {
-      if (!String(rowMissing.detail || "").trim())
+      if (!String((rowMissing as any).detail || "").trim()) {
         showToast("Service is required");
-      else {
+      } else {
         const uRaw = String((rowMissing as any).unitsInput ?? "").trim();
-        const rRaw = String((rowMissing as any).rateInput ?? "").trim();
+        const rP = String((rowMissing as any).rateInput ?? "").trim();
+        const rU = String((rowMissing as any).rateUsdInput ?? "").trim();
+        const rE = String((rowMissing as any).rateEuroInput ?? "").trim();
+
+        const missingRate = !rP && !rU && !rE;
 
         if (uRaw === "" && (rowMissing as any).unitsInput != null)
           showToast("Units is required");
-        else if (rRaw === "" && (rowMissing as any).rateInput != null)
-          showToast("Rate is required");
-        else if (taxType !== "none" && !String(rowMissing.taxId || "").trim())
+        else if (missingRate) showToast("Rate is required");
+        else if (
+          taxType !== "none" &&
+          !String((rowMissing as any).taxId || "").trim()
+        )
           showToast("Tax is required");
       }
       savingRef.current = false;
@@ -833,7 +1334,7 @@ export default function EstimateForm({
     let total = 0;
     let whtTotal = 0;
 
-    for (const s of sanitizedServices) {
+    for (const s of sanitizedServices as any[]) {
       const line = calcLine(s);
       tax += line.taxAmount;
 
@@ -845,9 +1346,8 @@ export default function EstimateForm({
       else subtotal += line.base;
     }
 
-    // note: estimateNo will be overwritten in CREATE transaction
     const estimateBase: Estimate = {
-      estimateNo: estimateNo || "", // placeholder; create tx will set real one
+      estimateNo: estimateNo || "",
       client,
       date,
       expiryDate,
@@ -883,9 +1383,6 @@ export default function EstimateForm({
 
     try {
       if (editId) {
-        // ===============================
-        // EDIT MODE (NO NUMBER CHANGE)
-        // ===============================
         const ref = doc(db, "Panels", "IEDGE-SYSTEM", "estimates", editId);
         const estimateToUpdate: Estimate = {
           ...estimateBase,
@@ -912,9 +1409,6 @@ export default function EstimateForm({
 
         onSave?.(estimateToUpdate);
       } else {
-        // ===============================
-        // CREATE MODE (SINGLE ATOMIC INCREMENT)
-        // ===============================
         const createdEstimate = await runTransaction(db, async (tx) => {
           const counterRef = doc(
             db,
@@ -930,7 +1424,6 @@ export default function EstimateForm({
           );
           const nextNumber = current + 1;
 
-          // 🔐 single atomic increment
           tx.set(counterRef, { current: nextNumber }, { merge: true });
 
           const nextEstimateNo = `IE-${nextNumber}`;
@@ -949,7 +1442,6 @@ export default function EstimateForm({
           return estimateToSave;
         });
 
-        // ✅ sync UI + PDF with DB number
         setEstimateNo(createdEstimate.estimateNo);
 
         const blob = await buildEstimatePdfBlob({
@@ -966,7 +1458,6 @@ export default function EstimateForm({
 
         onSave?.(createdEstimate);
 
-        // ✅ reset fields after successful save (DB already done; PDF already opened)
         resetForm();
       }
     } catch (err) {
@@ -1015,7 +1506,6 @@ export default function EstimateForm({
     const whtMap = new Map<string, { label: string; amount: number }>();
 
     for (const s of services) {
-      // TAX
       if (taxType !== "none" && Number(s.taxPercent ?? 0) > 0) {
         const label =
           String(s.taxLabel || "").trim() ||
@@ -1027,7 +1517,6 @@ export default function EstimateForm({
         }
       }
 
-      // WHT
       if (Number(s.whtPercent ?? 0) > 0) {
         const label =
           String(s.whtLabel || "").trim() ||
@@ -1438,25 +1927,19 @@ export default function EstimateForm({
                     const invalidService =
                       submitAttempted && !String(s.detail || "").trim();
 
-                    // ✅ allow 0: only EMPTY input is invalid (not numeric 0)
                     const invalidUnits =
                       submitAttempted &&
                       String(s.unitsInput ?? "").trim() === "" &&
                       s.unitsInput != null;
 
-                    const invalidRate =
-                      submitAttempted &&
-                      String(s.rateInput ?? "").trim() === "" &&
-                      s.rateInput != null;
+                    // ✅ NEW: rate invalid only if ALL 3 are empty
+                    const invalidRate = submitAttempted && !hasAnyRateInput(s);
 
                     const invalidTax =
                       submitAttempted &&
                       taxType !== "none" &&
                       !String(s.taxId || "").trim();
 
-                    /* ============================
-       ✅ ADD THIS PART (CALCULATION)
-       ============================ */
                     const pkrAmount = calcLineTotalWithWht(s);
                     const usdAmount =
                       addCurrencies && usdRate
@@ -1466,7 +1949,6 @@ export default function EstimateForm({
                       addCurrencies && euroRate
                         ? pkrAmount / Number(euroRate)
                         : 0;
-                    /* ============================ */
 
                     return (
                       <SortableRow key={s.rowId} id={s.rowId}>
@@ -1596,7 +2078,6 @@ export default function EstimateForm({
                                     copy[i].unitsInput ?? "",
                                   ).trim();
 
-                                  // ✅ if user left it empty, keep it empty (don’t force 0)
                                   if (raw === "") {
                                     copy[i].unitsInput = "";
                                     setServices(copy);
@@ -1604,8 +2085,6 @@ export default function EstimateForm({
                                   }
 
                                   const n = Number(copy[i].units) || 0;
-
-                                  // ✅ keep 0 visible after blur
                                   copy[i].unitsInput = fmtIntLoose(n);
                                   setServices(copy);
                                 }}
@@ -1617,59 +2096,106 @@ export default function EstimateForm({
                               />
                             </td>
 
-                            {/* Rate */}
-                            <td className="p-0 text-center">
-                              <input
-                                type="text"
-                                inputMode="decimal"
-                                value={
-                                  s.rateInput ??
-                                  fmtDecimalLoose(Number(s.rate) || 0)
-                                }
-                                onChange={(e) => {
-                                  const raw = e.target.value;
-                                  const copy = [...services];
-                                  const parsed = parseRateInput(raw);
-                                  copy[i].rateInput = parsed.text;
-                                  copy[i].rateMode = parsed.mode;
-                                  copy[i].rate = parsed.number;
-                                  setServices(copy);
-                                }}
-                                onBlur={() => {
-                                  const copy = [...services];
-
-                                  // if user left it empty, keep it empty (don’t force 0)
-                                  const raw = String(
-                                    copy[i].rateInput ?? "",
-                                  ).trim();
-                                  if (raw === "") {
-                                    copy[i].rateInput = "";
-                                    setServices(copy);
-                                    return;
-                                  }
-
-                                  const mode = copy[i].rateMode || "amount";
-                                  const n = Number(copy[i].rate) || 0;
-
-                                  // ✅ keep 0 visible after blur
-                                  copy[i].rateInput =
-                                    mode === "percent"
-                                      ? `${fmtDecimalLoose(n)}%`
-                                      : fmtDecimalLoose(n);
-
-                                  setServices(copy);
-                                }}
-                                placeholder="Rate (e.g. -1,000 or 15%)"
-                                className={fieldClass(
-                                  "w-28 border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 text-center",
-                                  invalidRate,
-                                )}
-                              />
-                              {s.rateMode === "percent" ? (
-                                <div className="text-[11px] text-gray-500 mt-1">
-                                  Rate mode: %
+                            {/* ✅ NEW: Rate (PKR + USD + EURO) */}
+                            <td className="p-2 text-center align-top">
+                              <div className="flex flex-col gap-1 items-center">
+                                {/* PKR */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] text-gray-500 w-9 text-right">
+                                    PKR
+                                  </span>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={s.rateInput ?? ""}
+                                    onChange={(e) =>
+                                      handleRateChange(i, "PKR", e.target.value)
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter")
+                                        (
+                                          e.currentTarget as HTMLInputElement
+                                        ).blur();
+                                    }}
+                                    onBlur={() => handleRateBlur(i, "PKR")}
+                                    placeholder="e.g. 500*3 or 15%"
+                                    className={fieldClass(
+                                      "w-28 border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 text-center",
+                                      invalidRate,
+                                    )}
+                                  />
                                 </div>
-                              ) : null}
+
+                                {/* USD */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] text-gray-500 w-9 text-right">
+                                    USD
+                                  </span>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    disabled={!addCurrencies}
+                                    value={s.rateUsdInput ?? ""}
+                                    onChange={(e) =>
+                                      handleRateChange(i, "USD", e.target.value)
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter")
+                                        (
+                                          e.currentTarget as HTMLInputElement
+                                        ).blur();
+                                    }}
+                                    onBlur={() => handleRateBlur(i, "USD")}
+                                    placeholder={
+                                      addCurrencies
+                                        ? "e.g. 100*2"
+                                        : "Enable Add Currencies"
+                                    }
+                                    className={fieldClass(
+                                      "w-28 border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 text-center disabled:bg-gray-100 disabled:text-gray-400",
+                                      invalidRate,
+                                    )}
+                                  />
+                                </div>
+
+                                {/* EURO */}
+                                <div className="flex items-center gap-1">
+                                  <span className="text-[10px] text-gray-500 w-9 text-right">
+                                    EUR
+                                  </span>
+                                  <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    disabled={!addCurrencies}
+                                    value={s.rateEuroInput ?? ""}
+                                    onChange={(e) =>
+                                      handleRateChange(i, "EUR", e.target.value)
+                                    }
+                                    onKeyDown={(e) => {
+                                      if (e.key === "Enter")
+                                        (
+                                          e.currentTarget as HTMLInputElement
+                                        ).blur();
+                                    }}
+                                    onBlur={() => handleRateBlur(i, "EUR")}
+                                    placeholder={
+                                      addCurrencies
+                                        ? "e.g. 90+10"
+                                        : "Enable Add Currencies"
+                                    }
+                                    className={fieldClass(
+                                      "w-28 border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500 text-center disabled:bg-gray-100 disabled:text-gray-400",
+                                      invalidRate,
+                                    )}
+                                  />
+                                </div>
+
+                                {s.rateMode === "percent" ? (
+                                  <div className="text-[11px] text-gray-500 mt-1">
+                                    Rate mode: %
+                                  </div>
+                                ) : null}
+                              </div>
                             </td>
 
                             {/* Tax */}
@@ -1803,10 +2329,19 @@ export default function EstimateForm({
                             {addCurrencies && (
                               <>
                                 <td className="p-2 text-right tabular-nums text-gray-600 whitespace-nowrap">
-                                  ${usdAmount.toFixed(2)}
+                                  $
+                                  {usdAmount.toLocaleString("en-US", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
                                 </td>
+
                                 <td className="p-2 text-right tabular-nums text-gray-600 whitespace-nowrap">
-                                  €{euroAmount.toFixed(2)}
+                                  €
+                                  {euroAmount.toLocaleString("en-US", {
+                                    minimumFractionDigits: 2,
+                                    maximumFractionDigits: 2,
+                                  })}
                                 </td>
                               </>
                             )}
@@ -1866,6 +2401,7 @@ export default function EstimateForm({
                   {formatMoney(liveTotals.liveTotal)}
                 </span>
               </div>
+
               {addCurrencies && (
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
                   {/* USD */}
