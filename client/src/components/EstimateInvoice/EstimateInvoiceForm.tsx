@@ -138,7 +138,7 @@ export default function EstimateInvoiceForm({
       "iEDGE - Digital & Creative": { prefix: "IDC", key: "iedge_digital" },
       "iEDGE - Events & Activations": {
         prefix: "S",
-        key: "iedge_events",
+        key: "iedge",
       },
       "iEDGE - Health Sciences": { prefix: "IHS", key: "iedge_health" },
       "iEDGE - International Education": {
