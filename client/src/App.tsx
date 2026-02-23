@@ -4,8 +4,9 @@ import { queryClient } from "./lib/queryClient";
 import { QueryClientProvider } from "@tanstack/react-query";
 import { Toaster } from "@/components/ui/toaster";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import BookingPage from "./pages/Booking";
+
 import Estimates from "./pages/Estimate";
+import InternationalEstimates from "@/pages/InternationalEstimates";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
 import InvoiceRequests from "@/pages/InvoiceRequests";
@@ -22,6 +23,7 @@ import Layout from "@/components/Layout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Clients } from "@/pages/Clients";
 import Settings from "@/pages/Settings";
+
 import SalesDashboard from "./components/SalesDashboard";
 import InvoiceEstimate from "./pages/EstimateInvoice";
 import {
@@ -34,6 +36,7 @@ import {
 } from "@/pages/Travel";
 import UserTravel from "./pages/UserTravel";
 import HotelSettings from "./pages/Travel/HotelSettings";
+import BookingPage from "@/pages/Booking";
 
 function AuthenticatedApp() {
   const { currentUser } = useAuth();
@@ -117,12 +120,6 @@ function AuthenticatedApp() {
           </ProtectedRoute>
         </Route>
 
-        <Route path="/invoice-estimate">
-          <ProtectedRoute>
-            <InvoiceEstimate />
-          </ProtectedRoute>
-        </Route>
-
         <Route path="/sales-management">
           <ProtectedRoute>
             <SalesManagement />
@@ -153,8 +150,26 @@ function AuthenticatedApp() {
           </ProtectedRoute>
         </Route>
 
+        <Route path="/booking">
+          <ProtectedRoute>
+            <BookingPage />
+          </ProtectedRoute>
+        </Route>
+
         <Route path="/">
           <Redirect to="/dashboard" />
+        </Route>
+
+        <Route path="/invoice-estimate">
+          <ProtectedRoute>
+            <InvoiceEstimate />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/estimateInternational">
+          <ProtectedRoute>
+            <InternationalEstimates />
+          </ProtectedRoute>
         </Route>
 
         <Route path="/travel">
@@ -176,12 +191,6 @@ function AuthenticatedApp() {
 
         <Route path="/usertravel">
           <UserTravel />
-        </Route>
-
-        <Route path="/booking">
-          <ProtectedRoute>
-            <BookingPage />
-          </ProtectedRoute>
         </Route>
 
         <Route path="/travel/transport">

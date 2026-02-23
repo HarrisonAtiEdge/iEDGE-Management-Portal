@@ -30,18 +30,44 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { secondaryAuth } from "@/lib/firebase";
 
+import {
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  LogOut,
+  User,
+  LayoutDashboard,
+  LineChart,
+  BarChart3,
+  UserRound,
+  Archive,
+  Globe,
+  Receipt,
+  Users,
+  PieChart,
+  Settings,
+  Hotel,
+  FileText,
+  Scroll,
+  ScrollText,
+  BedDouble,
+  PlaneTakeoff,
+  CreditCard,
+  HandCoins,
+} from "lucide-react";
+
 // --------------------
 // Sidebar / Static Tabs
 // --------------------
 const AVAILABLE_TABS = [
-  { path: "/dashboard", label: "Dashboard" },
-  { path: "/sales-dashboard", label: "Sales Dashboard" },
+  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
+  { path: "/sales-dashboard", label: "Sales Dashboard", icon: LineChart },
   { path: "/sales", label: "Sales" },
   { path: "/clients", label: "Clients" },
   { path: "/records", label: "Records" },
   { path: "/online-accounts", label: "Online Accounts" },
   { path: "/expenses", label: "Expense Sheets" },
-  { path: "/invoices", label: "Invoice Requests" },
+  { path: "/invoices", label: "Budget Request " },
   { path: "/finance", label: "Finance" },
   { path: "/operation", label: "Operation" },
   { path: "/estimate", label: "Estimates" },
@@ -647,38 +673,42 @@ export default function UserManagement() {
 
           <CardContent className="p-0">
             <table className="w-full">
-              <thead className="bg-muted border-b">
+              <thead className="bg-muted border-b text-sm">
                 <tr>
-                  <th className="px-6 py-3 text-left">Name</th>
-                  <th className="px-6 py-3 text-left">Email</th>
-                  <th className="px-6 py-3 text-left">Role</th>
-                  <th className="px-6 py-3 text-left">Date</th>
-                  <th className="px-6 py-3 text-left">Status</th>
-                  <th className="px-6 py-3 text-left">Action</th>
+                  <th className="px-2 py-3 text-left">Name</th>
+                  <th className="px-2 py-3 text-left">Email</th>
+                  <th className="px-2 py-3 text-left">Role</th>
+                  <th className="px-2 py-3 text-left">Date</th>
+                  <th className="px-2 py-3 text-left">Status</th>
+                  <th className="px-2 py-3 text-left">Action</th>
                 </tr>
               </thead>
 
               <tbody>
                 {activeUsers.map((user) => (
-                  <tr key={user.id} className="hover:bg-muted/50">
-                    <td className="px-6 py-3">{user.displayName}</td>
-                    <td className="px-6 py-3">{user.email}</td>
-                    <td className="px-6 py-3">
+                  <tr key={user.id} className="hover:bg-muted/50 text-xs">
+                    <td className="px-2 py-1">{user.displayName}</td>
+                    <td className="px-2 py-1">{user.email}</td>
+                    <td className="px-2 py-1">
                       <Badge>{user.role}</Badge>
                     </td>
-                    <td className="px-6 py-3">
+                    <td className="px-2 py-1">
                       {user.createdAt?.toDate
                         ? user.createdAt.toDate().toLocaleDateString()
                         : ""}
                     </td>
-                    <td className="px-6 py-3">
+                    <td className="px-2 py-1">
                       {user.isActive ? (
-                        <Badge className="bg-green-600">Active</Badge>
+                        <Badge className="bg-green-100 text-green-800">
+                          Active
+                        </Badge>
                       ) : (
-                        <Badge className="bg-red-600">Inactive</Badge>
+                        <Badge className="bg-red-100 text-red-800">
+                          Inactive
+                        </Badge>
                       )}
                     </td>
-                    <td className="px-6 py-3 flex items-center gap-2">
+                    <td className="px-2 py-1 flex items-center gap-2">
                       <Button
                         variant="outline"
                         size="sm"

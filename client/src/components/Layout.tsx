@@ -5,48 +5,109 @@ import { onAuthStateChanged, signOut } from "firebase/auth";
 import { doc, getDoc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebase";
 import { Button } from "@/components/ui/button";
-import { Loader2, LogOut, User } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
+import {
+  ChevronLeft,
+  ChevronRight,
+  Loader2,
+  LogOut,
+  User,
+  LayoutDashboard,
+  LineChart,
+  BarChart3,
+  UserRound,
+  Archive,
+  Globe,
+  Receipt,
+  Users,
+  PieChart,
+  Settings,
+  Hotel,
+  FileText,
+  Scroll,
+  ScrollText,
+  BedDouble,
+  PlaneTakeoff,
+  CreditCard,
+  HandCoins,
+} from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { NotificationBell } from "@/components/NotificationBell";
+import { useNotifications } from "@/hooks/useNotifications";
 
 const PANEL_ID = "IEDGE-SYSTEM";
 
+// ✅ Lucide icon registry (use these keys in Firestore: icon: "LayoutDashboard", etc.)
+const LUCIDE_ICONS: Record<string, LucideIcon> = {
+  LayoutDashboard,
+  LineChart,
+  BarChart3,
+  UserRound,
+  Archive,
+  Globe,
+  Receipt,
+  Users,
+  PieChart,
+  Settings,
+  Hotel,
+  FileText,
+  Scroll,
+  ScrollText,
+  BedDouble,
+  PlaneTakeoff,
+  CreditCard,
+  HandCoins,
+};
+
+// ✅ Backward-compat: if Firestore still has old FontAwesome strings, map them to Lucide
+const FA_TO_LUCIDE: Record<string, LucideIcon> = {
+  "fas fa-tachometer-alt": LayoutDashboard,
+  "fas fa-chart-line": LineChart,
+  "fas fa-chart-bar": BarChart3,
+  "fas fa-user": UserRound,
+  "fas fa-archive": Archive,
+  "fas fa-globe": Globe,
+  "fas fa-receipt": Receipt,
+  "fas fa-users": Users,
+  "fas fa-chart-pie": PieChart,
+  "fas fa-hotel": Hotel,
+};
+
+const getSidebarIcon = (icon?: string): LucideIcon | null => {
+  if (!icon) return null;
+  return LUCIDE_ICONS[icon] ?? FA_TO_LUCIDE[icon] ?? null;
+};
+
 // 🔹 All available tabs (for main_admin full access)
 const AVAILABLE_TABS = [
-  { path: "/dashboard", label: "Dashboard", icon: "fas fa-tachometer-alt" },
+  { path: "/dashboard", label: "Dashboard", icon: "LayoutDashboard" },
+  { path: "/sales-dashboard", label: "Sales Dashboard", icon: "LineChart" },
+  { path: "/sales", label: "Sales", icon: "BarChart3" },
+  { path: "/clients", label: "Clients", icon: "Users" },
+  { path: "/records", label: "Records", icon: "Archive" },
+  { path: "/online-accounts", label: "Online Accounts", icon: "CreditCard" },
+  { path: "/finance", label: "Finance", icon: "Receipt" },
+  { path: "/invoices", label: "Budget Request", icon: "HandCoins" },
+  { path: "/expenses", label: "Expenses", icon: "Receipt" },
+  { path: "/estimate", label: "Estimate", icon: "Scroll" },
   {
-    path: "/sales-dashboard",
-    label: "Sales Dashboard",
-    icon: "fas fa-chart-line",
+    path: "/estimateInternational",
+    label: "International Estimate",
+    icon: "Globe",
   },
-  { path: "/sales", label: "Sales", icon: "fas fa-chart-bar" },
-  { path: "/clients", label: "Clients", icon: "fas fa-user" },
-  { path: "/records", label: "Records", icon: "fas fa-archive" },
-  { path: "/online-accounts", label: "Online Accounts", icon: "fas fa-globe" },
-  { path: "/finance", label: "Finance", icon: "fas fa-receipt" },
-  { path: "/invoices", label: "Invoices", icon: "fas fa-receipt" },
-  { path: "/expenses", label: "Expenses", icon: "fas fa-receipt" },
-  { path: "/estimate", label: "Estimate", icon: "fas fa-receipt" },
-  { path: "/users", label: "User Management", icon: "fas fa-users" },
-  {
-    path: "/sales-management",
-    label: "Sales Management",
-    icon: "fas fa-chart-pie",
-  },
-  { path: "/settings", label: "Settings", icon: "fas fa-receipt" },
-  { path: "/travel/hotel", label: "Travel", icon: "fas fa-hotel" },
-  { path: "/usertravel", label: "Book Hotel", icon: "fas fa-hotel" },
-  { path: "/booking", label: "Bookings", icon: "fas fa-hotel" },
-  {
-    path: "/invoice-estimate",
-    label: "Invoice Estimiate",
-    icon: "fas fa-hotel",
-  },
+  { path: "/users", label: "User Management", icon: "UserRound" },
+  { path: "/sales-management", label: "Sales Management", icon: "PieChart" },
+  { path: "/settings", label: "Settings", icon: "Settings" },
+  { path: "/travel/hotel", label: "Travel", icon: "PlaneTakeoff" },
+  { path: "/usertravel", label: "Book Hotel", icon: "BedDouble" },
+  { path: "/booking", label: "Bookings", icon: "Hotel" },
+  { path: "/invoice-estimate", label: "Invoice Estimate", icon: "ScrollText" },
 ];
+
 interface SidebarItem {
   path: string;
   label: string;
-  icon?: string;
+  icon?: string; // ✅ store lucide key (recommended) OR old FA string (supported)
 }
 
 export default function Layout({ children }: { children: React.ReactNode }) {
@@ -57,11 +118,43 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const [location, setLocation] = useLocation();
 
+  // ✅ Sidebar collapse (icons-only) + hover-to-open
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(false);
+  const [sidebarHoverOpen, setSidebarHoverOpen] = useState(false);
+
+  const effectiveCollapsed = sidebarCollapsed && !sidebarHoverOpen;
+
+  // ✅ Hook must be inside the component
+  const { unreadCount, notifications } = useNotifications();
+  console.log("Layout unreadCount:", unreadCount);
+  console.log("notif debug:", {
+    unreadCount,
+    notificationsLen: notifications?.length,
+  });
+
   const handleLogout = async () => {
     await signOut(auth);
     localStorage.clear();
     setLocation("/login");
   };
+
+  useEffect(() => {
+    // restore sidebar state
+    try {
+      const saved = localStorage.getItem("iedge_sidebar_collapsed");
+      if (saved === "1") setSidebarCollapsed(true);
+    } catch {}
+  }, []);
+
+  useEffect(() => {
+    // persist sidebar state
+    try {
+      localStorage.setItem(
+        "iedge_sidebar_collapsed",
+        sidebarCollapsed ? "1" : "0",
+      );
+    } catch {}
+  }, [sidebarCollapsed]);
 
   useEffect(() => {
     let unsubRole: (() => void) | null = null;
@@ -82,8 +175,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       }
 
       // ✅ USER PROFILE (Panel scoped)
-      const userRef = doc(db, "Panels", "IEDGE-SYSTEM", "users", user.uid);
-
+      const userRef = doc(db, "Panels", PANEL_ID, "users", user.uid);
       const userSnap = await getDoc(userRef);
 
       if (!userSnap.exists()) {
@@ -108,13 +200,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
       // ✅ ROLE-BASED SIDEBAR (Panel scoped)
       if (userRole) {
-        const roleRef = doc(
-          db,
-          "Panels",
-          "IEDGE-SYSTEM",
-          "sidebarConfig",
-          userRole,
-        );
+        const roleRef = doc(db, "Panels", PANEL_ID, "sidebarConfig", userRole);
 
         unsubRole = onSnapshot(roleRef, (snap) => {
           if (snap.exists()) {
@@ -150,20 +236,104 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-screen bg-gray-50">
       {/* Sidebar */}
-      <aside className="w-64 bg-white shadow-md p-4">
-        <h2 className="text-xl font-bold mb-6">App</h2>
+      <aside
+        className={`bg-white shadow-md flex flex-col transition-all duration-200 ${
+          effectiveCollapsed ? "w-16 px-2 py-4" : "w-64 p-4"
+        }`}
+        onMouseEnter={() => {
+          if (sidebarCollapsed) setSidebarHoverOpen(true);
+        }}
+        onMouseLeave={() => {
+          if (sidebarCollapsed) setSidebarHoverOpen(false);
+        }}
+      >
+        <div
+          className={`flex items-center mb-6 ${
+            effectiveCollapsed ? "justify-center gap-0" : "justify-between"
+          }`}
+        >
+          {effectiveCollapsed ? (
+            <div className="h-9 w-9 rounded-md pl-3 flex items-center    font-bold"></div>
+          ) : (
+            <h2 className="text-sm font-bold pl-2">iEDGE Management</h2>
+          )}
+
+          <Button
+            variant="ghost"
+            className={`${effectiveCollapsed ? "ml-0" : ""} h-9 w-9 p-0`}
+            aria-label={
+              sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"
+            }
+            title={sidebarCollapsed ? "Expand sidebar" : "Collapse sidebar"}
+            onClick={() => {
+              setSidebarCollapsed((v) => !v);
+              setSidebarHoverOpen(false);
+            }}
+          >
+            {sidebarCollapsed ? (
+              <ChevronRight className="h-4 w-4" />
+            ) : (
+              <ChevronLeft className="h-4 w-4" />
+            )}
+          </Button>
+        </div>
+
         <nav className="space-y-2">
-          {sidebarItems.map((item) => (
-            <Link key={item.path} href={item.path}>
-              <Button
-                variant={location === item.path ? "default" : "ghost"}
-                className="w-full justify-start"
-              >
-                {item.icon && <i className={`${item.icon} mr-2`} />}
-                {item.label}
-              </Button>
-            </Link>
-          ))}
+          {sidebarItems.map((item) => {
+            const showDot = unreadCount > 0 && item.path === "/booking";
+            const Icon = getSidebarIcon(item.icon);
+
+            return (
+              <Link key={item.path} href={item.path}>
+                <Button
+                  variant={location === item.path ? "default" : "ghost"}
+                  className={`w-full ${effectiveCollapsed ? "justify-center px-2" : "justify-start"}`}
+                  title={effectiveCollapsed ? item.label : undefined}
+                  aria-label={item.label}
+                >
+                  <div
+                    className={`flex w-full items-center ${
+                      effectiveCollapsed ? "justify-center" : "justify-between"
+                    }`}
+                  >
+                    <div className="flex items-center">
+                      <span className="relative inline-flex items-center justify-center">
+                        {Icon ? (
+                          <Icon
+                            className={`h-4 w-4 ${effectiveCollapsed ? "" : "mr-2"}`}
+                          />
+                        ) : (
+                          <span
+                            className={`font-semibold ${effectiveCollapsed ? "" : "mr-2"}`}
+                          >
+                            {item.label?.[0] || "•"}
+                          </span>
+                        )}
+
+                        {/* Dot when collapsed */}
+                        {showDot && effectiveCollapsed && (
+                          <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
+                            <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+                            <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-600" />
+                          </span>
+                        )}
+                      </span>
+
+                      {!effectiveCollapsed && <span>{item.label}</span>}
+                    </div>
+
+                    {/* Dot when expanded */}
+                    {showDot && !effectiveCollapsed && (
+                      <span className="relative flex h-2.5 w-2.5">
+                        <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
+                        <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-red-600" />
+                      </span>
+                    )}
+                  </div>
+                </Button>
+              </Link>
+            );
+          })}
         </nav>
       </aside>
 
@@ -174,10 +344,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <h1 className="text-lg font-semibold">{pageTitle}</h1>
           <div className="flex items-center gap-4">
             <NotificationBell />
-
             <div className="flex items-center gap-2">
               <div className="flex items-center space-x-2 bg-secondary px-3 py-3 rounded-full">
-                <i className="fas fa-user-circle text-muted-foreground"></i>
                 <User className="h-4 w-4 text-slate-600" />
                 <span className="text-sm font-medium text-secondary-foreground">
                   {userName}
