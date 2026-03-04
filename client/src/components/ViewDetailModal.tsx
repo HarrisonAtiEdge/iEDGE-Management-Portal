@@ -1,6 +1,5 @@
 import React, { useState } from "react";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -9,10 +8,14 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { Badge } from "@/components/ui/badge";
 import { CalendarDays, MessageSquare, CheckCircle, Circle } from "lucide-react";
-import { serverTimestamp, updateDoc, doc } from "firebase/firestore";
+import {
+  serverTimestamp,
+  updateDoc,
+  doc,
+  Timestamp, // ✅ add this
+} from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { formatDistanceToNow } from "date-fns";
 import { useMeetingUpdates } from "@/hooks/useMeetingUpdates";
@@ -23,6 +26,42 @@ interface ViewDetailModalProps {
   isOpen: boolean;
   onClose: () => void;
   record: SalesRecord;
+}
+
+// ✅ Safe converter for Firestore Timestamp / string / number / Date
+function toJsDate(value: any): Date | null {
+  if (!value) return null;
+
+  // Already a JS Date
+  if (value instanceof Date) {
+    return isNaN(value.getTime()) ? null : value;
+  }
+
+  // Firestore Timestamp instance
+  if (value instanceof Timestamp) {
+    const d = value.toDate();
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // Firestore Timestamp-like (has toDate)
+  if (typeof value?.toDate === "function") {
+    const d = value.toDate();
+    return d instanceof Date && !isNaN(d.getTime()) ? d : null;
+  }
+
+  // Timestamp-like plain object { seconds, nanoseconds }
+  if (typeof value?.seconds === "number") {
+    const d = new Date(value.seconds * 1000);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  // ISO string or millis
+  if (typeof value === "string" || typeof value === "number") {
+    const d = new Date(value);
+    return isNaN(d.getTime()) ? null : d;
+  }
+
+  return null;
 }
 
 export function ViewDetailModal({
@@ -36,19 +75,19 @@ export function ViewDetailModal({
     null,
   );
 
-  // Get meeting updates and comments for this record
   const { meetingUpdates, loading: meetingUpdatesLoading } = useMeetingUpdates(
     record.id,
   );
+
   const selectedMeeting = meetingUpdates.find(
     (meeting) => meeting.id === selectedMeetingId,
   );
+
   const { comments, loading: commentsLoading } = useMeetingUpdateComments(
     record.id,
     selectedMeetingId || undefined,
   );
 
-  // Auto-select first meeting when meetings load
   React.useEffect(() => {
     if (meetingUpdates.length > 0 && !selectedMeetingId) {
       setSelectedMeetingId(meetingUpdates[0].id);
@@ -58,50 +97,34 @@ export function ViewDetailModal({
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    const timestamp = new Date(); // Current timestamp
-    const userName = userProfile?.displayName || "Unknown User"; // Assuming the salesperson's name is available in the record
+    const timestamp = new Date();
+    const userName = userProfile?.displayName || "Unknown User";
 
-    const newComment = {
-      text: comment,
-      timestamp,
-      userName, // Add user's name to the comment
-    };
-
-    // try {
-    //   const recordDoc = doc(db, "salesRecords", record.id);
-
-    //   await updateDoc(recordDoc, {
-    //     comments: [...(record.comments || []), newComment],
-    //     updatedAt: serverTimestamp(),
-    //   });
-
-    //   setComment("");
-    //   onClose();
-    // } catch (error) {
-    //   console.error("Error adding comment:", error);
-    // }
+    const newComment = { text: comment, timestamp, userName };
 
     try {
-  const recordDoc = doc(
-    db,
-    "Panels",
-    "IEDGE-SYSTEM",
-    "salesRecords",
-    record.id
-  );
+      const recordDoc = doc(
+        db,
+        "Panels",
+        "IEDGE-SYSTEM",
+        "salesRecords",
+        record.id,
+      );
 
-  await updateDoc(recordDoc, {
-    comments: [...(record.comments || []), newComment],
-    updatedAt: serverTimestamp(),
-  });
+      await updateDoc(recordDoc, {
+        comments: [...(record.comments || []), newComment],
+        updatedAt: serverTimestamp(),
+      });
 
-  setComment("");
-  onClose();
-} catch (error) {
-  console.error("Error adding comment:", error);
-}
-
+      setComment("");
+      onClose();
+    } catch (error) {
+      console.error("Error adding comment:", error);
+    }
   };
+
+  // ✅ Safe record updatedAt formatting
+  const recordUpdatedAt = toJsDate((record as any).updatedAt);
 
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -141,15 +164,16 @@ export function ViewDetailModal({
               </p>
               <p>
                 <span className="font-medium">Last Updated:</span>{" "}
-                {record.updatedAt?.toLocaleDateString("en-GB", {
-                  day: "numeric",
-                  month: "short",
-                  year: "numeric",
-                })}{" "}
-                {record.updatedAt?.toLocaleString([], {
-                  hour: "2-digit",
-                  minute: "2-digit",
-                })}
+                {recordUpdatedAt
+                  ? `${recordUpdatedAt.toLocaleDateString("en-GB", {
+                      day: "numeric",
+                      month: "short",
+                      year: "numeric",
+                    })} ${recordUpdatedAt.toLocaleTimeString([], {
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    })}`
+                  : "N/A"}
               </p>
             </div>
           </div>
@@ -169,119 +193,91 @@ export function ViewDetailModal({
               <div className="space-y-4">
                 {/* Meeting List */}
                 <div className="space-y-2">
-                  {meetingUpdates.map((meeting) => (
-                    <div
-                      key={meeting.id}
-                      className={`p-3 rounded-lg border cursor-pointer transition-colors ${
-                        selectedMeetingId === meeting.id
-                          ? "bg-blue-50 border-blue-200"
-                          : "bg-white hover:bg-gray-50"
-                      }`}
-                      onClick={() => setSelectedMeetingId(meeting.id)}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          {meeting.visit ? (
-                            <CheckCircle className="h-4 w-4 text-green-600" />
-                          ) : (
-                            <Circle className="h-4 w-4 text-gray-400" />
-                          )}
-                          <span className="text-sm font-medium">
-                            Meeting on{" "}
-                            {new Date(meeting.meetingDate).toLocaleDateString(
-                              "en-GB",
-                              {
-                                day: "numeric",
-                                month: "short",
-                                year: "numeric",
-                              },
+                  {meetingUpdates.map((meeting) => {
+                    const meetingDate = toJsDate((meeting as any).meetingDate);
+
+                    return (
+                      <div
+                        key={meeting.id}
+                        className={`p-3 rounded-lg border cursor-pointer transition-colors ${
+                          selectedMeetingId === meeting.id
+                            ? "bg-blue-50 border-blue-200"
+                            : "bg-white hover:bg-gray-50"
+                        }`}
+                        onClick={() => setSelectedMeetingId(meeting.id)}
+                      >
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center gap-2">
+                            {meeting.visit ? (
+                              <CheckCircle className="h-4 w-4 text-green-600" />
+                            ) : (
+                              <Circle className="h-4 w-4 text-gray-400" />
                             )}
-                          </span>
+                            <span className="text-sm font-medium">
+                              Meeting on{" "}
+                              {meetingDate
+                                ? meetingDate.toLocaleDateString("en-GB", {
+                                    day: "numeric",
+                                    month: "short",
+                                    year: "numeric",
+                                  })
+                                : "Unknown date"}
+                            </span>
+                          </div>
+                          <Badge variant="outline" className="text-xs">
+                            {meeting.actionItems?.length ?? 0} actions
+                          </Badge>
                         </div>
-                        <Badge variant="outline" className="text-xs">
-                          {meeting.actionItems.length} actions
-                        </Badge>
+
+                        {meeting.discussionNotes && (
+                          <p className="text-xs text-gray-600 mt-1 line-clamp-2">
+                            {meeting.discussionNotes}
+                          </p>
+                        )}
                       </div>
-                      {meeting.discussionNotes && (
-                        <p className="text-xs text-gray-600 mt-1 line-clamp-2">
-                          {meeting.discussionNotes}
-                        </p>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
 
                 {/* Selected Meeting Details */}
                 {selectedMeeting && (
                   <div className="border-t pt-4 space-y-4">
-                    <div>
-                      <Label className="text-sm font-medium text-gray-700">
-                        Discussion Notes:
-                      </Label>
-                      <div className="mt-2 bg-white p-3 rounded border text-sm">
-                        {selectedMeeting.discussionNotes || (
-                          <span className="text-gray-400 italic">
-                            No discussion notes
-                          </span>
-                        )}
-                      </div>
-                    </div>
-
-                    <div>
-                      <Label className="text-sm font-medium text-gray-700">
-                        Action Items:
-                      </Label>
-                      <div className="mt-2 space-y-2">
-                        {selectedMeeting.actionItems.length > 0 ? (
-                          selectedMeeting.actionItems.map((item, index) => (
-                            <div
-                              key={index}
-                              className="bg-white p-2 rounded border text-sm"
-                            >
-                              {item || (
-                                <span className="text-gray-400 italic">
-                                  Empty action item
-                                </span>
-                              )}
-                            </div>
-                          ))
-                        ) : (
-                          <p className="text-sm text-gray-500 italic">
-                            No action items for this meeting
-                          </p>
-                        )}
-                      </div>
-                    </div>
-
                     {/* Meeting Comments */}
                     <div>
                       <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                         <MessageSquare className="h-4 w-4" />
                         Comments for this meeting
                       </Label>
+
                       <div className="mt-2 space-y-2 max-h-32 overflow-y-auto">
                         {commentsLoading ? (
                           <p className="text-sm text-gray-500">
                             Loading comments...
                           </p>
                         ) : comments.length > 0 ? (
-                          comments.map((comment) => (
-                            <div
-                              key={comment.id}
-                              className="bg-white p-3 rounded border text-sm"
-                            >
-                              <p className="text-gray-900">{comment.text}</p>
-                              <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                                <span>{comment.authorName}</span>
-                                <span>•</span>
-                                <span>
-                                  {formatDistanceToNow(comment.createdAt, {
-                                    addSuffix: true,
-                                  })}
-                                </span>
+                          comments.map((c) => {
+                            const createdAt = toJsDate((c as any).createdAt);
+
+                            return (
+                              <div
+                                key={c.id}
+                                className="bg-white p-3 rounded border text-sm"
+                              >
+                                <p className="text-gray-900">{c.text}</p>
+                                <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
+                                  <span>{c.authorName}</span>
+                                  <span>•</span>
+                                  <span>
+                                    {createdAt
+                                      ? formatDistanceToNow(createdAt, {
+                                          addSuffix: true,
+                                        })
+                                      : "Unknown time"}
+                                  </span>
+                                </div>
                               </div>
-                            </div>
-                          ))
+                            );
+                          })
                         ) : (
                           <p className="text-sm text-gray-500 italic">
                             No comments for this meeting yet.
@@ -293,12 +289,32 @@ export function ViewDetailModal({
                     {/* Meeting Metadata */}
                     <div className="text-xs text-gray-500 border-t pt-2">
                       <p>Created by: {selectedMeeting.createdByName}</p>
-                      <p>Date: {selectedMeeting.date}</p>
+
+                      {/* If selectedMeeting.date is also timestamp-like, format it safely */}
+                      <p>
+                        Date:{" "}
+                        {(() => {
+                          const d = toJsDate((selectedMeeting as any).date);
+                          return d
+                            ? d.toLocaleDateString("en-GB", {
+                                day: "numeric",
+                                month: "short",
+                                year: "numeric",
+                              })
+                            : String((selectedMeeting as any).date ?? "N/A");
+                        })()}
+                      </p>
+
                       <p>
                         Last updated:{" "}
-                        {formatDistanceToNow(selectedMeeting.updatedAt, {
-                          addSuffix: true,
-                        })}
+                        {(() => {
+                          const d = toJsDate(
+                            (selectedMeeting as any).updatedAt,
+                          );
+                          return d
+                            ? formatDistanceToNow(d, { addSuffix: true })
+                            : "N/A";
+                        })()}
                       </p>
                     </div>
                   </div>
@@ -314,7 +330,7 @@ export function ViewDetailModal({
             )}
           </div>
 
-          {/* Comments Section (Code 2 logic + fallback from Code 1) */}
+          {/* Comments Section */}
           <div>
             <h3 className="text-lg font-semibold mb-3 text-gray-800">
               Comments
@@ -342,22 +358,23 @@ export function ViewDetailModal({
 
             <div className="space-y-3 mt-4">
               {record.comments?.length ? (
-                record.comments.map((c, index) => (
-                  <div
-                    key={index}
-                    className="border rounded-lg p-3 bg-white shadow-sm"
-                  >
-                    <p className="text-sm">
-                      <strong>{c.userName}</strong>: {c.text}
-                    </p>
-                    <p className="text-xs text-gray-500 mt-1">
-                      {(c.timestamp instanceof Date
-                        ? c.timestamp
-                        : new Date(c.timestamp)
-                      )?.toLocaleString() || "Pending..."}
-                    </p>
-                  </div>
-                ))
+                record.comments.map((c: any, index: number) => {
+                  const ts = toJsDate(c.timestamp);
+
+                  return (
+                    <div
+                      key={index}
+                      className="border rounded-lg p-3 bg-white shadow-sm"
+                    >
+                      <p className="text-sm">
+                        <strong>{c.userName}</strong>: {c.text}
+                      </p>
+                      <p className="text-xs text-gray-500 mt-1">
+                        {ts ? ts.toLocaleString("en-GB") : "Pending..."}
+                      </p>
+                    </div>
+                  );
+                })
               ) : (
                 <p className="text-sm text-gray-500 italic">No comments yet.</p>
               )}

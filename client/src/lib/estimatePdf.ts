@@ -24,6 +24,9 @@
 //   taxPercent?: number;
 //   whtLabel?: string;
 //   whtPercent?: number;
+
+//   // ✅ NEW: per-row toggle (default true)
+//   showFinancialsInPdf?: boolean;
 // };
 
 // type BuildPdfArgs = {
@@ -119,11 +122,7 @@
 //   return String(phoneRaw || "—").trim() || "—";
 // };
 
-// const resolveFooterContact = (
-//   estimate: Estimate,
-//   footerUser?: FooterUser | null,
-//   usersMap?: Record<string, FooterUser>,
-// ) => {
+// const resolveFooterContact = () => {
 //   return `For any queries, please feel free to call Ahsan Idrees | ahsan.idrees@iedge.co | +92 345 8508254 | Terms & Conditions enclosed.`;
 // };
 
@@ -220,7 +219,6 @@
 // };
 
 // // ✅ helper for multi-currency lines (PKR/EURO/USD) based on PKR value
-// // ✅ helper for multi-currency lines (PKR/EURO/USD) based on PKR value
 // const buildMultiCurrencyLines = (
 //   pkrValue: number,
 //   usdRate: number,
@@ -229,11 +227,7 @@
 //   const lines: string[] = [];
 
 //   lines.push(`PKR ${formatMoney(pkrValue)}`);
-
-//   // EURO heading stays EURO elsewhere, but value line shows €
 //   lines.push(`€ ${euroRate > 0 ? formatMoney(pkrValue / euroRate) : "—"}`);
-
-//   // USD heading stays USD elsewhere, but value line shows $
 //   lines.push(`$ ${usdRate > 0 ? formatMoney(pkrValue / usdRate) : "—"}`);
 
 //   return lines.join("\n");
@@ -389,18 +383,55 @@
 //     const usdRate = toNum((estimate as any)?.usdRate);
 //     const euroRate = toNum((estimate as any)?.euroRate);
 
-//     const serviceRows = ((estimate.services || []) as any[]).map(
-//       (s: ServiceItem) => {
-//         const units = Number((s as any).units || 0);
+//     // ✅ tax type (for line totals)
+//     const taxType = String((estimate as any)?.taxType || "").trim();
 
+//     // ✅ per-row toggle support + WHT column + correct amount logic (incl/excl + WHT)
+//     const COLS = 6;
+
+//     const serviceRows: any[] = ((estimate.services || []) as any[]).map(
+//       (s: ServiceItem) => {
+//         const detailText = `${(s as any).detail}\n${(s as any).description || ""}`;
+
+//         const showFinancials = (s as any).showFinancialsInPdf !== false; // default true
+
+//         if (!showFinancials) {
+//           // ✅ only service/description, span full width
+//           return [
+//             {
+//               content: detailText,
+//               colSpan: COLS,
+//               styles: { halign: "left" as const, valign: "top" as const },
+//             },
+//           ];
+//         }
+
+//         const units = Number((s as any).units || 0);
 //         const rateMode = (s as any).rateMode as
 //           | "amount"
 //           | "percent"
 //           | undefined;
 //         const rateNum = toNum((s as any).rate);
 
-//         const amount =
+//         const base =
 //           rateMode === "percent" ? units * (rateNum / 100) : units * rateNum;
+
+//         const pct = Number((s as any).taxPercent ?? 0);
+
+//         let lineTotal = base;
+//         if (taxType !== "none" && pct > 0) {
+//           if (taxType === "exclusive") {
+//             lineTotal = base + (base * pct) / 100;
+//           } else {
+//             // inclusive => line total stays base
+//             lineTotal = base;
+//           }
+//         }
+
+//         const whtPct = Number((s as any).whtPercent ?? 0);
+//         const whtAmount = whtPct > 0 ? (lineTotal * whtPct) / 100 : 0;
+
+//         const amount = lineTotal + whtAmount;
 
 //         const rateDisplay =
 //           rateMode === "percent"
@@ -412,9 +443,12 @@
 //               : formatMoney(rateNum);
 
 //         const taxText =
-//           Number((s as any).taxPercent ?? 0) > 0 && estimate.taxType !== "none"
-//             ? `${(s as any).taxLabel ?? "Tax"} ${Number((s as any).taxPercent ?? 0)}%`
+//           pct > 0 && taxType !== "none"
+//             ? `${(s as any).taxLabel ?? "Tax"} ${pct}%`
 //             : "No Tax";
+
+//         const whtText =
+//           whtPct > 0 ? `${(s as any).whtLabel ?? "WHT"} ${whtPct}%` : "No WHT";
 
 //         // ✅ AMOUNT cell: PKR only OR PKR+EURO+USD multiline
 //         const amountCell = addCurrencies
@@ -424,19 +458,19 @@
 //             : formatMoney(amount);
 
 //         return [
-//           `${(s as any).detail}\n${(s as any).description || ""}`,
+//           detailText,
 //           units === 0 ? "" : units.toLocaleString(),
 //           rateDisplay,
 //           taxText,
+//           whtText,
 //           amountCell,
 //         ];
 //       },
 //     );
 
-//     // ✅ FIX #1: AMOUNT heading always appears (no blank head cell)
 //     autoTable(pdf, {
 //       startY: 235,
-//       head: [["SERVICE DETAILS", "UNITS", "RATE", "TAX", "AMOUNT"]],
+//       head: [["SERVICE DETAILS", "UNITS", "RATE", "TAX", "WHT", "AMOUNT"]],
 //       body: serviceRows,
 //       styles: {
 //         fontSize: 9,
@@ -449,26 +483,28 @@
 //       // ✅ keep table inside page margins + footer gap
 //       margin: { left: margin, right: margin, bottom: FOOTER_GAP },
 
-//       // ✅ tighter widths so AMOUNT is fully visible
+//       // ✅ widths must sum to (pageWidth - 2*margin) = 515
 //       columnStyles: addCurrencies
 //         ? ({
-//             0: { halign: "left" as const, cellWidth: 240 }, // service details
+//             0: { halign: "left" as const, cellWidth: 200 }, // service details
 //             1: { halign: "center" as const, cellWidth: 45 }, // units
 //             2: { halign: "center" as const, cellWidth: 55 }, // rate
-//             3: { halign: "left" as const, cellWidth: 80 }, // tax
-//             4: { halign: "right" as const, cellWidth: 95 }, // amount (3-line)
+//             3: { halign: "left" as const, cellWidth: 70 }, // tax
+//             4: { halign: "left" as const, cellWidth: 65 }, // wht
+//             5: { halign: "right" as const, cellWidth: 80 }, // amount (3-line)
 //           } as any)
 //         : ({
-//             0: { halign: "left" as const, cellWidth: 250 },
+//             0: { halign: "left" as const, cellWidth: 220 },
 //             1: { halign: "center" as const, cellWidth: 55 },
-//             2: { halign: "center" as const, cellWidth: 70 },
-//             3: { halign: "left" as const, cellWidth: 90 },
-//             4: { halign: "right" as const, cellWidth: 50 }, // single amount, still readable
+//             2: { halign: "center" as const, cellWidth: 65 },
+//             3: { halign: "left" as const, cellWidth: 70 },
+//             4: { halign: "left" as const, cellWidth: 55 },
+//             5: { halign: "right" as const, cellWidth: 50 },
 //           } as any),
 
-//       // ✅ force AMOUNT header left too
+//       // ✅ make AMOUNT header left aligned
 //       didParseCell: (data: any) => {
-//         if (data.section === "head" && data.column?.index === 4) {
+//         if (data.section === "head" && data.column?.index === 5) {
 //           data.cell.styles.halign = "left";
 //         }
 //       },
@@ -494,7 +530,6 @@
 //     const subtotalPKR = toNum(estimate.subtotal ?? 0);
 //     const totalPKR = toNum(estimate.total ?? 0);
 
-//     // ✅ FIX #3: show PKR + EURO + USD totals blocks when addCurrencies
 //     const drawTotalsBlock = (
 //       x: number,
 //       currency: "PKR" | "EURO" | "USD",
@@ -506,7 +541,6 @@
 //       const labelX = x;
 //       const valueX = x + (blockW - 10);
 
-//       // ✅ background "card"
 //       const pad = 8;
 //       const boxX = labelX - pad;
 //       const boxY = finalY - 26;
@@ -550,19 +584,13 @@
 //     };
 
 //     if (!addCurrencies) {
-//       // original single (PKR) block on right
 //       const blockW = 170;
 //       const x = pageWidth - margin - blockW;
 //       drawTotalsBlock(x, "PKR", subtotalPKR, displayTaxPKR, totalPKR, blockW);
 //     } else {
-//       // PKR (left) | EURO (middle) | USD (right)
 //       const blockW = 160;
 //       const gap = 10;
-
-//       // total width of 3 blocks + 2 gaps
 //       const totalW = blockW * 3 + gap * 2;
-
-//       // align the whole group to the right, inside margin
 //       const startX = pageWidth - margin - totalW;
 
 //       const euroSub = euroRate > 0 ? subtotalPKR / euroRate : -1;
@@ -600,7 +628,7 @@
 //     }
 
 //     // ==========================
-//     // ✅ SUMMARY CALCS
+//     // ✅ SUMMARY CALCS (unchanged)
 //     // ==========================
 //     const calcBase = (s: any) => {
 //       const units = Number(s.units || 0);
@@ -609,22 +637,20 @@
 //       return rateMode === "percent" ? units * (rateNum / 100) : units * rateNum;
 //     };
 
-//     const taxType = String((estimate as any)?.taxType || "").trim();
+//     const taxType2 = String((estimate as any)?.taxType || "").trim();
 
 //     const calcLineTotal = (s: any) => {
 //       const base = calcBase(s);
 //       const pct = Number(s.taxPercent ?? 0);
 
-//       if (!pct || taxType === "none") return base;
-//       if (taxType === "inclusive") return base;
+//       if (!pct || taxType2 === "none") return base;
+//       if (taxType2 === "inclusive") return base;
 //       return base + (base * pct) / 100;
 //     };
 
 //     const services = (estimate.services || []) as any[];
 
-//     // ==========================
-//     // ✅ TAX SUMMARY (rows)
-//     // ==========================
+//     // TAX SUMMARY
 //     const map = new Map<
 //       string,
 //       { label: string; pct: number; tax: number; net: number }
@@ -633,14 +659,14 @@
 //     for (const s of services) {
 //       const pct = Number(s.taxPercent ?? 0);
 //       const label = String(s.taxLabel || "").trim();
-//       if (!pct || taxType === "none") continue;
+//       if (!pct || taxType2 === "none") continue;
 
 //       const base = calcBase(s);
 
 //       let taxAmount = 0;
 //       let netAmount = 0;
 
-//       if (taxType === "exclusive") {
+//       if (taxType2 === "exclusive") {
 //         taxAmount = (base * pct) / 100;
 //         netAmount = base;
 //       } else {
@@ -666,9 +692,7 @@
 //     const totalTax = Array.from(map.values()).reduce((a, b) => a + b.tax, 0);
 //     const totalNet = Array.from(map.values()).reduce((a, b) => a + b.net, 0);
 
-//     // ==========================
-//     // ✅ WHT SUMMARY
-//     // ==========================
+//     // WHT SUMMARY
 //     const whtMap = new Map<
 //       string,
 //       { label: string; pct: number; wht: number; base: number }
@@ -698,10 +722,7 @@
 //       0,
 //     );
 
-//     // ==========================
-//     // ✅ TAX SUMMARY TABLE
-//     // FIX #4: show PKR + EURO + USD when addCurrencies
-//     // ==========================
+//     // TAX SUMMARY TABLE (unchanged)
 //     let afterTotalsY = finalY + 55;
 
 //     const addCur = Boolean((estimate as any)?.addCurrencies);
@@ -715,7 +736,6 @@
 //       const netCell = addCur
 //         ? buildMultiCurrencyLines(r.net, usdR, eurR)
 //         : formatMoney(r.net);
-
 //       return [`${r.label} @ ${r.pct}%`, `${r.pct}%`, taxCell, netCell];
 //     });
 
@@ -760,6 +780,8 @@
 //         ]);
 //       }
 
+//       const FOOTER_GAP = 110;
+
 //       autoTable(pdf, {
 //         startY: afterTotalsY,
 //         head: [["TAX SUMMARY", "RATE", "TAX", "NET"]],
@@ -775,7 +797,6 @@
 //         margin: { bottom: FOOTER_GAP },
 //       });
 
-//       //
 //       afterTotalsY = (pdf as any).lastAutoTable.finalY + 30;
 //     }
 
@@ -817,14 +838,9 @@
 //     pdf.setFontSize(8);
 //     pdf.setTextColor(100);
 
-//     pdf.text(
-//       resolveFooterContact(estimate, args.footerUser, args.usersMap),
-//       margin,
-//       footerY - 15,
-//       {
-//         maxWidth: pageWidth - margin * 2,
-//       },
-//     );
+//     pdf.text(resolveFooterContact(), margin, footerY - 15, {
+//       maxWidth: pageWidth - margin * 2,
+//     });
 
 //     pdf.text(
 //       "C-150, Block 2, Clifton, Karachi - 75600, Pakistan | Tel: +92 213 537 1818 | Email: sales@iedge.co | URL: www.iedge.co",
@@ -879,7 +895,7 @@ type ServiceItem = {
   whtLabel?: string;
   whtPercent?: number;
 
-  // ✅ NEW: per-row toggle (default true)
+  // ✅ per-row toggle (default true)
   showFinancialsInPdf?: boolean;
 };
 
@@ -890,6 +906,36 @@ type BuildPdfArgs = {
   footerUser?: FooterUser | null;
   usersMap?: Record<string, FooterUser>;
   companyName?: string;
+};
+
+// ✅ Keep this list aligned with your UI list (extend anytime)
+const POPULAR_CURRENCIES = [
+  { code: "USD", name: "US Dollar", symbol: "US$" },
+  { code: "EUR", name: "Euro", symbol: "€" },
+  { code: "GBP", name: "British Pound", symbol: "£" },
+  { code: "SAR", name: "Saudi Riyal", symbol: "SAR" },
+  { code: "AED", name: "UAE Dirham", symbol: "AED" },
+  { code: "CNY", name: "Chinese Yuan", symbol: "CN¥" },
+  { code: "JPY", name: "Japanese Yen", symbol: "JP¥" },
+  { code: "CAD", name: "Canadian Dollar", symbol: "CA$" },
+  { code: "AUD", name: "Australian Dollar", symbol: "A$" },
+  { code: "TRY", name: "Turkish Lira", symbol: "₺" },
+  { code: "LKR", name: "Sri Lankan Rupee", symbol: "රු" },
+  { code: "IDR", name: "Indonesian Rupiah", symbol: "Rp" },
+  { code: "AZN", name: "Azerbaijani Manat", symbol: "₼" },
+] as const;
+
+const currencyMeta = (code: string) => {
+  const found = (POPULAR_CURRENCIES as readonly any[]).find(
+    (c) => c.code === code,
+  );
+  return (
+    found ?? {
+      code,
+      name: code,
+      symbol: String(code || "—"),
+    }
+  );
 };
 
 const wrapTextByWords = (text: string, wordsPerLine = 5) => {
@@ -976,8 +1022,25 @@ const resolvePhone = (u?: FooterUser) => {
   return String(phoneRaw || "—").trim() || "—";
 };
 
-const resolveFooterContact = () => {
-  return `For any queries, please feel free to call Ahsan Idrees | ahsan.idrees@iedge.co | +92 345 8508254 | Terms & Conditions enclosed.`;
+// ✅ currency string formatting with spacing for alpha symbols (SAR 1,000 vs €1,000)
+const formatWithSymbol = (symbol: string, amount: number) => {
+  const sym = String(symbol || "").trim() || "—";
+  const isAlpha = /^[A-Za-z]{2,4}$/.test(sym); // SAR, AED, Rp, etc.
+  const sep = isAlpha ? " " : "";
+  return `${sym}${sep}${formatMoney(amount)}`;
+};
+
+// ✅ footer contact (remove hard-coded person/email/phone)
+const resolveFooterContact = (
+  estimate: Estimate,
+  footerUser?: FooterUser | null,
+  usersMap?: Record<string, FooterUser>,
+) => {
+  const u = resolveUser(estimate, footerUser, usersMap);
+  const name = String(u?.displayName || "—").trim() || "—";
+  const email = String(u?.email || "—").trim() || "—";
+  const phone = resolvePhone(u);
+  return `For any queries, please feel free to call ${name} | ${email} | ${phone} | Terms & Conditions enclosed.`;
 };
 
 const addTermsAndConditionsPages = (
@@ -1072,17 +1135,32 @@ const addPageNumbers = (pdf: jsPDF) => {
   }
 };
 
-// ✅ helper for multi-currency lines (PKR/EURO/USD) based on PKR value
-const buildMultiCurrencyLines = (
-  pkrValue: number,
-  usdRate: number,
-  euroRate: number,
-) => {
-  const lines: string[] = [];
+// ✅ helper for multi-currency lines based on PKR value and selected currencies
+const buildMultiCurrencyLines = (args: {
+  pkrValue: number;
+  c1Code: string;
+  c2Code: string;
+  c1Rate: number; // PKR per 1 unit of c1
+  c2Rate: number; // PKR per 1 unit of c2
+}) => {
+  const { pkrValue, c1Code, c2Code, c1Rate, c2Rate } = args;
 
+  const c1 = currencyMeta(c1Code);
+  const c2 = currencyMeta(c2Code);
+
+  const lines: string[] = [];
   lines.push(`PKR ${formatMoney(pkrValue)}`);
-  lines.push(`€ ${euroRate > 0 ? formatMoney(pkrValue / euroRate) : "—"}`);
-  lines.push(`$ ${usdRate > 0 ? formatMoney(pkrValue / usdRate) : "—"}`);
+
+  lines.push(
+    c1Rate > 0
+      ? formatWithSymbol(c1.symbol, pkrValue / c1Rate)
+      : `${c1.symbol} —`,
+  );
+  lines.push(
+    c2Rate > 0
+      ? formatWithSymbol(c2.symbol, pkrValue / c2Rate)
+      : `${c2.symbol} —`,
+  );
 
   return lines.join("\n");
 };
@@ -1234,13 +1312,23 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
 
     // ✅ currency option
     const addCurrencies = Boolean((estimate as any)?.addCurrencies);
-    const usdRate = toNum((estimate as any)?.usdRate);
-    const euroRate = toNum((estimate as any)?.euroRate);
+
+    const c1Code =
+      String((estimate as any)?.currency1Code || "USD").trim() || "USD";
+    const c2Code =
+      String((estimate as any)?.currency2Code || "EUR").trim() || "EUR";
+
+    // NOTE: kept DB field names
+    const c1Rate = toNum((estimate as any)?.usdRate);
+    const c2Rate = toNum((estimate as any)?.euroRate);
+
+    const c1 = currencyMeta(c1Code);
+    const c2 = currencyMeta(c2Code);
 
     // ✅ tax type (for line totals)
     const taxType = String((estimate as any)?.taxType || "").trim();
 
-    // ✅ per-row toggle support + WHT column + correct amount logic (incl/excl + WHT)
+    // ✅ per-row toggle support + WHT column + correct amount logic
     const COLS = 6;
 
     const serviceRows: any[] = ((estimate.services || []) as any[]).map(
@@ -1250,7 +1338,6 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
         const showFinancials = (s as any).showFinancialsInPdf !== false; // default true
 
         if (!showFinancials) {
-          // ✅ only service/description, span full width
           return [
             {
               content: detailText,
@@ -1304,9 +1391,15 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
         const whtText =
           whtPct > 0 ? `${(s as any).whtLabel ?? "WHT"} ${whtPct}%` : "No WHT";
 
-        // ✅ AMOUNT cell: PKR only OR PKR+EURO+USD multiline
+        // ✅ AMOUNT cell: PKR only OR PKR + C1 + C2 multiline
         const amountCell = addCurrencies
-          ? buildMultiCurrencyLines(amount, usdRate, euroRate)
+          ? buildMultiCurrencyLines({
+              pkrValue: amount,
+              c1Code,
+              c2Code,
+              c1Rate,
+              c2Rate,
+            })
           : amount === 0
             ? ""
             : formatMoney(amount);
@@ -1334,18 +1427,17 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
       },
       headStyles: { fillColor: [230, 230, 230], textColor: [0, 0, 0] },
 
-      // ✅ keep table inside page margins + footer gap
       margin: { left: margin, right: margin, bottom: FOOTER_GAP },
 
       // ✅ widths must sum to (pageWidth - 2*margin) = 515
       columnStyles: addCurrencies
         ? ({
-            0: { halign: "left" as const, cellWidth: 200 }, // service details
-            1: { halign: "center" as const, cellWidth: 45 }, // units
-            2: { halign: "center" as const, cellWidth: 55 }, // rate
-            3: { halign: "left" as const, cellWidth: 70 }, // tax
-            4: { halign: "left" as const, cellWidth: 65 }, // wht
-            5: { halign: "right" as const, cellWidth: 80 }, // amount (3-line)
+            0: { halign: "left" as const, cellWidth: 200 },
+            1: { halign: "center" as const, cellWidth: 45 },
+            2: { halign: "center" as const, cellWidth: 55 },
+            3: { halign: "left" as const, cellWidth: 70 },
+            4: { halign: "left" as const, cellWidth: 65 },
+            5: { halign: "right" as const, cellWidth: 80 }, // 3-line amount
           } as any)
         : ({
             0: { halign: "left" as const, cellWidth: 220 },
@@ -1356,7 +1448,6 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
             5: { halign: "right" as const, cellWidth: 50 },
           } as any),
 
-      // ✅ make AMOUNT header left aligned
       didParseCell: (data: any) => {
         if (data.section === "head" && data.column?.index === 5) {
           data.cell.styles.halign = "left";
@@ -1376,6 +1467,8 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
     // ✅ TOTALS
     // ==========================
     const whtTotal = Number((estimate as any)?.whtTotal ?? 0);
+
+    // (keeping your existing behavior: tax shown includes WHT)
     const displayTaxPKR =
       toNum(
         (estimate as any)?.tax ?? (estimate as any)?.taxTotal ?? estimate.tax,
@@ -1386,7 +1479,7 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
 
     const drawTotalsBlock = (
       x: number,
-      currency: "PKR" | "EURO" | "USD",
+      meta: { code: string; symbol: string },
       sub: number,
       tax: number,
       tot: number,
@@ -1409,7 +1502,9 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
 
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(10);
-      pdf.text(currency, labelX, finalY - 12);
+
+      // top label (use code, not hard-coded strings)
+      pdf.text(meta.code, labelX, finalY - 12);
 
       pdf.text("SUBTOTAL", labelX, finalY);
       pdf.text("TAX", labelX, finalY + 15);
@@ -1427,12 +1522,11 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
 
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(10);
-      pdf.text(
-        tot >= 0 ? `${currency} ${formatMoney(tot)}` : `${currency} —`,
-        valueX,
-        finalY + 32,
-        { align: "right" },
-      );
+
+      const totalText =
+        tot >= 0 ? formatWithSymbol(meta.symbol, tot) : `${meta.symbol} —`;
+
+      pdf.text(totalText, valueX, finalY + 32, { align: "right" });
 
       pdf.setFontSize(10);
     };
@@ -1440,49 +1534,58 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
     if (!addCurrencies) {
       const blockW = 170;
       const x = pageWidth - margin - blockW;
-      drawTotalsBlock(x, "PKR", subtotalPKR, displayTaxPKR, totalPKR, blockW);
+      drawTotalsBlock(
+        x,
+        { code: "PKR", symbol: "PKR" },
+        subtotalPKR,
+        displayTaxPKR,
+        totalPKR,
+        blockW,
+      );
     } else {
       const blockW = 160;
       const gap = 10;
       const totalW = blockW * 3 + gap * 2;
       const startX = pageWidth - margin - totalW;
 
-      const euroSub = euroRate > 0 ? subtotalPKR / euroRate : -1;
-      const euroTax = euroRate > 0 ? displayTaxPKR / euroRate : -1;
-      const euroTot = euroRate > 0 ? totalPKR / euroRate : -1;
+      const c1Sub = c1Rate > 0 ? subtotalPKR / c1Rate : -1;
+      const c1Tax = c1Rate > 0 ? displayTaxPKR / c1Rate : -1;
+      const c1Tot = c1Rate > 0 ? totalPKR / c1Rate : -1;
 
-      const usdSub = usdRate > 0 ? subtotalPKR / usdRate : -1;
-      const usdTax = usdRate > 0 ? displayTaxPKR / usdRate : -1;
-      const usdTot = usdRate > 0 ? totalPKR / usdRate : -1;
+      const c2Sub = c2Rate > 0 ? subtotalPKR / c2Rate : -1;
+      const c2Tax = c2Rate > 0 ? displayTaxPKR / c2Rate : -1;
+      const c2Tot = c2Rate > 0 ? totalPKR / c2Rate : -1;
 
       drawTotalsBlock(
         startX + (blockW + gap) * 0,
-        "PKR",
+        { code: "PKR", symbol: "PKR" },
         subtotalPKR,
         displayTaxPKR,
         totalPKR,
         blockW,
       );
+
       drawTotalsBlock(
         startX + (blockW + gap) * 1,
-        "EURO",
-        euroSub,
-        euroTax,
-        euroTot,
+        { code: c1.code, symbol: c1.symbol },
+        c1Sub,
+        c1Tax,
+        c1Tot,
         blockW,
       );
+
       drawTotalsBlock(
         startX + (blockW + gap) * 2,
-        "USD",
-        usdSub,
-        usdTax,
-        usdTot,
+        { code: c2.code, symbol: c2.symbol },
+        c2Sub,
+        c2Tax,
+        c2Tot,
         blockW,
       );
     }
 
     // ==========================
-    // ✅ SUMMARY CALCS (unchanged)
+    // ✅ SUMMARY CALCS (unchanged logic)
     // ==========================
     const calcBase = (s: any) => {
       const units = Number(s.units || 0);
@@ -1576,31 +1679,57 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
       0,
     );
 
-    // TAX SUMMARY TABLE (unchanged)
+    // TAX SUMMARY TABLE
     let afterTotalsY = finalY + 55;
 
     const addCur = Boolean((estimate as any)?.addCurrencies);
-    const usdR = toNum((estimate as any)?.usdRate);
-    const eurR = toNum((estimate as any)?.euroRate);
 
     const taxRows: any[] = Array.from(map.values()).map((r) => {
       const taxCell = addCur
-        ? buildMultiCurrencyLines(r.tax, usdR, eurR)
+        ? buildMultiCurrencyLines({
+            pkrValue: r.tax,
+            c1Code,
+            c2Code,
+            c1Rate,
+            c2Rate,
+          })
         : formatMoney(r.tax);
+
       const netCell = addCur
-        ? buildMultiCurrencyLines(r.net, usdR, eurR)
+        ? buildMultiCurrencyLines({
+            pkrValue: r.net,
+            c1Code,
+            c2Code,
+            c1Rate,
+            c2Rate,
+          })
         : formatMoney(r.net);
+
       return [`${r.label} @ ${r.pct}%`, `${r.pct}%`, taxCell, netCell];
     });
 
     const whtRows: any[] = Array.from(whtMap.values()).map((r) => {
-      const taxCell = addCur
-        ? buildMultiCurrencyLines(r.wht, usdR, eurR)
+      const whtCell = addCur
+        ? buildMultiCurrencyLines({
+            pkrValue: r.wht,
+            c1Code,
+            c2Code,
+            c1Rate,
+            c2Rate,
+          })
         : formatMoney(r.wht);
-      const netCell = addCur
-        ? buildMultiCurrencyLines(r.base, usdR, eurR)
+
+      const baseCell = addCur
+        ? buildMultiCurrencyLines({
+            pkrValue: r.base,
+            c1Code,
+            c2Code,
+            c1Rate,
+            c2Rate,
+          })
         : formatMoney(r.base);
-      return [`${r.label} @ ${r.pct}%`, `${r.pct}%`, taxCell, netCell];
+
+      return [`${r.label} @ ${r.pct}%`, `${r.pct}%`, whtCell, baseCell];
     });
 
     if (taxRows.length > 0 || whtRows.length > 0) {
@@ -1612,10 +1741,22 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
           "",
           "TOTAL (TAX)",
           addCur
-            ? buildMultiCurrencyLines(totalTax, usdR, eurR)
+            ? buildMultiCurrencyLines({
+                pkrValue: totalTax,
+                c1Code,
+                c2Code,
+                c1Rate,
+                c2Rate,
+              })
             : formatMoney(totalTax),
           addCur
-            ? buildMultiCurrencyLines(totalNet, usdR, eurR)
+            ? buildMultiCurrencyLines({
+                pkrValue: totalNet,
+                c1Code,
+                c2Code,
+                c1Rate,
+                c2Rate,
+              })
             : formatMoney(totalNet),
         ]);
       }
@@ -1626,10 +1767,22 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
           "",
           "TOTAL (WHT)",
           addCur
-            ? buildMultiCurrencyLines(totalWht, usdR, eurR)
+            ? buildMultiCurrencyLines({
+                pkrValue: totalWht,
+                c1Code,
+                c2Code,
+                c1Rate,
+                c2Rate,
+              })
             : formatMoney(totalWht),
           addCur
-            ? buildMultiCurrencyLines(totalWhtBase, usdR, eurR)
+            ? buildMultiCurrencyLines({
+                pkrValue: totalWhtBase,
+                c1Code,
+                c2Code,
+                c1Rate,
+                c2Rate,
+              })
             : formatMoney(totalWhtBase),
         ]);
       }
@@ -1692,9 +1845,12 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
     pdf.setFontSize(8);
     pdf.setTextColor(100);
 
-    pdf.text(resolveFooterContact(), margin, footerY - 15, {
-      maxWidth: pageWidth - margin * 2,
-    });
+    pdf.text(
+      resolveFooterContact(estimate, args.footerUser, args.usersMap),
+      margin,
+      footerY - 15,
+      { maxWidth: pageWidth - margin * 2 },
+    );
 
     pdf.text(
       "C-150, Block 2, Clifton, Karachi - 75600, Pakistan | Tel: +92 213 537 1818 | Email: sales@iedge.co | URL: www.iedge.co",

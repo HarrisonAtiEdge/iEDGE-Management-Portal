@@ -45,6 +45,85 @@ import {
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
 
+// ✅ popular currencies (extend anytime)
+const POPULAR_CURRENCIES = [
+  { code: "USD", name: "US Dollar", symbol: "US$" },
+  { code: "EUR", name: "Euro", symbol: "€" },
+  { code: "GBP", name: "British Pound", symbol: "£" },
+  { code: "SAR", name: "Saudi Riyal", symbol: "SAR" },
+  { code: "AED", name: "UAE Dirham", symbol: "AED" },
+  { code: "CNY", name: "Chinese Yuan", symbol: "CN¥" },
+  { code: "JPY", name: "Japanese Yen", symbol: "JP¥" },
+  { code: "CAD", name: "Canadian Dollar", symbol: "CA$" },
+  { code: "AUD", name: "Australian Dollar", symbol: "A$" },
+  { code: "TRY", name: "Turkish Lira", symbol: "TRY" },
+  { code: "LKR", name: "Sri Lankan Rupee", symbol: "LKR" },
+  { code: "IDR", name: "Indonesian Rupiah", symbol: "Rp" },
+  { code: "AZN", name: "Azerbaijani Manat", symbol: "₼" },
+] as const;
+
+const currencyMeta = (code: string) => {
+  const found = (POPULAR_CURRENCIES as readonly any[]).find(
+    (c) => c.code === code,
+  );
+  return (
+    found ?? {
+      code,
+      name: code,
+      symbol: `${code}`,
+    }
+  );
+};
+
+// ✅ FX rate input sanitizer (no commas; max 2 decimals)
+const sanitizeFxRateInput = (raw: string) => {
+  let s = String(raw ?? "").replace(/,/g, "");
+  s = s.replace(/[^0-9.]/g, "");
+  const firstDot = s.indexOf(".");
+  if (firstDot === -1) return s;
+
+  const intPart = s.slice(0, firstDot) || "0";
+  const decPart = s
+    .slice(firstDot + 1)
+    .replace(/\./g, "")
+    .slice(0, 2);
+
+  return decPart.length ? `${intPart}.${decPart}` : `${intPart}.`;
+};
+
+const fxBlurFix = (raw: string) => {
+  const s = sanitizeFxRateInput(raw);
+  return s.endsWith(".") ? s.slice(0, -1) : s;
+};
+
+// ✅ 2-decimal formatter for rate displays
+const fmtDecimal2Loose = (n: number) => {
+  if (!Number.isFinite(n)) return "";
+  return n.toLocaleString(undefined, { maximumFractionDigits: 2 });
+};
+
+// ✅ Clamp simple numeric typing like 12.345 -> 12.34 (keeps expressions like 500*3 untouched)
+const clampRateDecimals2 = (txt: string) => {
+  const t = String(txt ?? "");
+  const hasOps = /[+\-*/()]/.test(t);
+  if (hasOps) return t;
+
+  const hasPct = /%\s*$/.test(t);
+  const core = hasPct ? t.replace(/%\s*$/, "") : t;
+
+  // only simple numeric-ish text (allow commas/spaces)
+  if (!/^[0-9.,\s]*\.?[0-9\s]*$/.test(core)) return t;
+
+  const parts = core.split(".");
+  if (parts.length < 2) return t;
+
+  const a = parts[0];
+  const b = (parts[1] ?? "").replace(/\s/g, "").slice(0, 2);
+
+  const out = `${a}.${b}`;
+  return hasPct ? `${out}%` : out;
+};
+
 export interface ServiceItem {
   rowId: string;
 
@@ -52,33 +131,29 @@ export interface ServiceItem {
   description?: string;
 
   units: number;
-  unitsInput?: string; // raw typing
+  unitsInput?: string;
 
-  rate: number; // numeric PKR base for calc
-  rateInput?: string; // PKR raw typing
-  rateMode?: "amount" | "percent"; // if percent, base = units * (rate/100)
+  rate: number; // PKR base
+  rateInput?: string;
+  rateMode?: "amount" | "percent";
 
-  // ✅ NEW: multi-currency rate inputs
+  // currency1 / currency2 inputs (kept for backward compatibility)
   rateUsdInput?: string;
   rateEuroInput?: string;
 
-  // ✅ NEW: which field user last used (helps when FX changes)
-  rateCurrency?: "PKR" | "USD" | "EUR";
+  // track last used field (backward compatible)
+  rateCurrency?: "PKR" | "FX1" | "FX2" | "USD" | "EUR";
 
   taxType?: string;
   taxPercent?: number;
   taxLabel?: string;
-
-  // ✅ tax
   taxId?: string;
 
-  // ✅ WHT (new)
   whtId?: string;
   whtLabel?: string;
   whtPercent?: number;
 
-  // ✅ NEW: per-row PDF control (default true)
-  showFinancialsInPdf?: boolean; // if false -> PDF should show only Service+Description for that row
+  showFinancialsInPdf?: boolean;
 }
 
 interface Tax {
@@ -101,8 +176,12 @@ type Props = {
   onSave?: (estimate: Estimate) => void;
 };
 
+// ✅ tolerate commas too (safe)
 const num = (v: any) => {
-  const n = Number(v);
+  const cleaned = String(v ?? "")
+    .replace(/,/g, "")
+    .trim();
+  const n = Number(cleaned);
   return isNaN(n) || n <= 0 ? 0 : n;
 };
 
@@ -141,7 +220,6 @@ const fmtDecimalLoose = (n: number) => {
 // ✅ allow calculator operators in Rate field
 const sanitizeRateText = (raw: string) => {
   let s = String(raw ?? "");
-  // allow digits, dot, percent, spaces, commas, and calculator ops
   s = s.replace(/[^0-9.%+\-*/() ,]/g, "");
   return s;
 };
@@ -155,19 +233,14 @@ const evalRateExpression = (rawInput: string): EvalResult => {
   const raw = sanitizeRateText(rawInput).trim();
   if (!raw) return { ok: false, error: "Empty", mode: "amount" };
 
-  // detect trailing % (ignoring spaces)
   const trimmed = raw.replace(/\s+/g, " ");
   const endsWithPercent = /%\s*$/.test(trimmed);
   const mode: "amount" | "percent" = endsWithPercent ? "percent" : "amount";
 
-  // remove trailing %
   const expr = endsWithPercent ? trimmed.replace(/%\s*$/, "").trim() : trimmed;
-
-  // remove commas for evaluation
   const clean = expr.replace(/,/g, "").trim();
   if (!clean) return { ok: false, error: "Empty", mode };
 
-  // allow only these chars now
   if (/[^0-9+\-*/().\s]/.test(clean)) {
     return { ok: false, error: "Invalid characters", mode };
   }
@@ -177,7 +250,7 @@ const evalRateExpression = (rawInput: string): EvalResult => {
     | { t: "op"; v: "+" | "-" | "*" | "/" }
     | { t: "lp" }
     | { t: "rp" }
-    | { t: "u-" }; // unary minus
+    | { t: "u-" };
 
   const tokens: Tok[] = [];
   let i = 0;
@@ -228,7 +301,6 @@ const evalRateExpression = (rawInput: string): EvalResult => {
     return { ok: false, error: "Invalid character", mode };
   }
 
-  // ---- Shunting-yard -> RPN (support unary minus) ----
   const output: Tok[] = [];
   const stack: Tok[] = [];
 
@@ -239,7 +311,7 @@ const evalRateExpression = (rawInput: string): EvalResult => {
     return 0;
   };
 
-  const isLeftAssoc = (tok: Tok) => tok.t !== "u-"; // unary minus right-assoc
+  const isLeftAssoc = (tok: Tok) => tok.t !== "u-";
 
   let prev: Tok | null = null;
 
@@ -301,7 +373,6 @@ const evalRateExpression = (rawInput: string): EvalResult => {
     output.push(top);
   }
 
-  // ---- Evaluate RPN ----
   const st: number[] = [];
 
   for (const tok of output) {
@@ -337,12 +408,10 @@ const evalRateExpression = (rawInput: string): EvalResult => {
   }
 
   if (st.length !== 1) return { ok: false, error: "Bad expression", mode };
-  const value = st[0];
-
-  return { ok: true, value, mode };
+  return { ok: true, value: st[0], mode };
 };
 
-// ✅ Money formatting for totals (2 decimals)
+// ✅ Money formatting for PKR totals (2 decimals)
 const formatMoney = (n: number) =>
   Number(n || 0).toLocaleString(undefined, {
     minimumFractionDigits: 2,
@@ -456,8 +525,14 @@ export default function EstimateForm({
 
   // ✅ Add currencies
   const [addCurrencies, setAddCurrencies] = useState(false);
-  const [usdRate, setUsdRate] = useState("");
-  const [euroRate, setEuroRate] = useState("");
+
+  // ✅ 2 dropdowns
+  const [currency1Code, setCurrency1Code] = useState<string>("USD");
+  const [currency2Code, setCurrency2Code] = useState<string>("EUR");
+
+  // ✅ keep existing field names for backward compatibility
+  const [usdRate, setUsdRate] = useState(""); // Currency 1 rate (PKR per 1 unit)
+  const [euroRate, setEuroRate] = useState(""); // Currency 2 rate (PKR per 1 unit)
 
   // ✅ validation attempt flag (for blinking red)
   const [submitAttempted, setSubmitAttempted] = useState(false);
@@ -477,12 +552,9 @@ export default function EstimateForm({
         rate: 0,
         rateInput: "",
         rateMode: "amount",
-
-        // ✅ NEW defaults
         rateUsdInput: "",
         rateEuroInput: "",
         rateCurrency: "PKR",
-
         taxType: "inclusive",
         taxPercent: 0,
         taxLabel: "",
@@ -490,8 +562,6 @@ export default function EstimateForm({
         whtId: "",
         whtLabel: "",
         whtPercent: 0,
-
-        // ✅ NEW default: show financial columns in PDF
         showFinancialsInPdf: true,
       },
     ],
@@ -539,6 +609,26 @@ export default function EstimateForm({
 
   const fieldClass = (base: string, invalid: boolean) =>
     `${base} ${invalid ? "blink-red" : ""}`;
+
+  // ✅ currency display helpers (safe + spacing + no crashes)
+  const formatWithSymbol = (
+    symbol: string,
+    amount: number | null | undefined,
+  ) => {
+    const n = Number(amount ?? 0);
+    const isAlphaSymbol = /^[A-Za-z]{2,4}$/.test(String(symbol)); // SAR, AED, Rp, etc.
+    const sep = isAlphaSymbol ? " " : "";
+    return `${symbol}${sep}${n.toLocaleString(undefined, {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    })}`;
+  };
+
+  const c1 = currencyMeta(currency1Code);
+  const c2 = currencyMeta(currency2Code);
+
+  const c1Head = `${c1.symbol}`;
+  const c2Head = `${c2.symbol}`;
 
   // ✅ calc line uses rateMode (rate is PKR base)
   const calcLine = (s: ServiceItem) => {
@@ -593,12 +683,9 @@ export default function EstimateForm({
         rate: 0,
         rateInput: "",
         rateMode: "amount",
-
-        // ✅ NEW defaults
         rateUsdInput: "",
         rateEuroInput: "",
         rateCurrency: "PKR",
-
         taxType: "inclusive",
         taxPercent: 0,
         taxLabel: "",
@@ -606,8 +693,6 @@ export default function EstimateForm({
         whtId: "",
         whtLabel: "",
         whtPercent: 0,
-
-        // ✅ NEW default: show financial columns in PDF
         showFinancialsInPdf: true,
       },
     ]);
@@ -710,6 +795,17 @@ export default function EstimateForm({
     return () => document.removeEventListener("mousedown", onDown);
   }, [openServiceRowId]);
 
+  // ✅ prevent same currency selection
+  useEffect(() => {
+    if (!addCurrencies) return;
+    if (currency1Code !== currency2Code) return;
+
+    const alt =
+      POPULAR_CURRENCIES.find((c) => c.code !== currency1Code)?.code || "EUR";
+    setCurrency2Code(alt);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [addCurrencies, currency1Code, currency2Code]);
+
   useEffect(() => {
     if (!existingEstimate) return;
 
@@ -729,10 +825,13 @@ export default function EstimateForm({
     setPaymentTerm(existingEstimate.paymentTerm ?? "");
     setCompany(existingEstimate.company ?? "");
 
-    // ✅ currencies restore
     setAddCurrencies(
       Boolean((existingEstimate as any)?.addCurrencies ?? false),
     );
+
+    setCurrency1Code(String((existingEstimate as any)?.currency1Code ?? "USD"));
+    setCurrency2Code(String((existingEstimate as any)?.currency2Code ?? "EUR"));
+
     setUsdRate(String((existingEstimate as any)?.usdRate ?? ""));
     setEuroRate(String((existingEstimate as any)?.euroRate ?? ""));
 
@@ -755,29 +854,29 @@ export default function EstimateForm({
 
     setServices(
       (existingEstimate.services || []).map((s: any) => {
-        const estUsdRate = String((existingEstimate as any)?.usdRate ?? "");
-        const estEuroRate = String((existingEstimate as any)?.euroRate ?? "");
-        const usdFx = num(estUsdRate);
-        const eurFx = num(estEuroRate);
+        const estFx1Rate = String((existingEstimate as any)?.usdRate ?? "");
+        const estFx2Rate = String((existingEstimate as any)?.euroRate ?? "");
+        const fx1 = num(estFx1Rate);
+        const fx2 = num(estFx2Rate);
 
         const savedRate = Number(s.rate ?? 0);
         const savedMode: "amount" | "percent" = s.rateMode ?? "amount";
 
         const percentText =
-          savedMode === "percent" ? `${fmtDecimalLoose(savedRate)}%` : "";
+          savedMode === "percent" ? `${fmtDecimal2Loose(savedRate)}%` : "";
 
-        const derivedUsd =
+        const derivedFx1 =
           savedMode === "percent"
             ? percentText
-            : usdFx > 0 && Number.isFinite(savedRate)
-              ? fmtDecimalLoose(savedRate / usdFx)
+            : fx1 > 0 && Number.isFinite(savedRate)
+              ? fmtDecimal2Loose(savedRate / fx1)
               : "";
 
-        const derivedEur =
+        const derivedFx2 =
           savedMode === "percent"
             ? percentText
-            : eurFx > 0 && Number.isFinite(savedRate)
-              ? fmtDecimalLoose(savedRate / eurFx)
+            : fx2 > 0 && Number.isFinite(savedRate)
+              ? fmtDecimal2Loose(savedRate / fx2)
               : "";
 
         return {
@@ -792,21 +891,20 @@ export default function EstimateForm({
           rate: savedRate,
           rateMode: savedMode,
 
-          // ✅ PKR input restore
           rateInput:
             savedMode === "percent"
               ? percentText
               : typeof s.rate === "number" && s.rate !== 0
-                ? fmtDecimalLoose(savedRate)
+                ? fmtDecimal2Loose(savedRate)
                 : (s.rateInput ?? ""),
 
-          // ✅ NEW inputs restore/derive
           rateUsdInput:
             s.rateUsdInput ??
-            (savedMode === "percent" ? percentText : derivedUsd),
+            (savedMode === "percent" ? percentText : derivedFx1),
           rateEuroInput:
             s.rateEuroInput ??
-            (savedMode === "percent" ? percentText : derivedEur),
+            (savedMode === "percent" ? percentText : derivedFx2),
+
           rateCurrency: s.rateCurrency ?? "PKR",
 
           taxType: s.taxType ?? "none",
@@ -817,12 +915,11 @@ export default function EstimateForm({
           whtLabel: s.whtLabel ?? "",
           whtPercent: typeof s.whtPercent === "number" ? s.whtPercent : 0,
 
-          // ✅ NEW: restore per-row PDF toggle (default true if missing)
           showFinancialsInPdf:
             typeof s.showFinancialsInPdf === "boolean"
               ? s.showFinancialsInPdf
               : true,
-        };
+        } as ServiceItem;
       }),
     );
 
@@ -931,7 +1028,15 @@ export default function EstimateForm({
   }, [taxType]);
 
   // ✅ helpers for multi-rate
-  type RateCurrency = "PKR" | "USD" | "EUR";
+  type RateCurrency = "PKR" | "FX1" | "FX2";
+
+  const normalizeRateCurrency = (rc: any): RateCurrency | "USD" | "EUR" => {
+    if (rc === "USD") return "USD";
+    if (rc === "EUR") return "EUR";
+    if (rc === "FX1") return "FX1";
+    if (rc === "FX2") return "FX2";
+    return "PKR";
+  };
 
   const hasAnyRateInput = (s: ServiceItem) =>
     [s.rateInput, s.rateUsdInput, s.rateEuroInput].some(
@@ -939,8 +1044,8 @@ export default function EstimateForm({
     );
 
   const getFx = () => ({
-    usd: num(usdRate),
-    eur: num(euroRate),
+    fx1: num(usdRate),
+    fx2: num(euroRate),
   });
 
   const handleRateChange = (
@@ -948,21 +1053,21 @@ export default function EstimateForm({
     currency: RateCurrency,
     raw: string,
   ) => {
-    const safeText = sanitizeRateText(raw);
+    const safeText = clampRateDecimals2(sanitizeRateText(raw));
 
     setServices((prev) => {
       const copy = [...prev];
       const row = { ...copy[index] };
 
       if (currency === "PKR") row.rateInput = safeText;
-      if (currency === "USD") row.rateUsdInput = safeText;
-      if (currency === "EUR") row.rateEuroInput = safeText;
+      if (currency === "FX1") row.rateUsdInput = safeText;
+      if (currency === "FX2") row.rateEuroInput = safeText;
 
       const res = evalRateExpression(safeText);
 
       if (!res.ok) {
         row.rateMode = /%\s*$/.test(safeText) ? "percent" : "amount";
-        row.rate = 0; // keep behavior: invalid expression doesn't calc
+        row.rate = 0;
         row.rateCurrency = currency;
         copy[index] = row;
         return copy;
@@ -981,26 +1086,23 @@ export default function EstimateForm({
       let pkrVal: number | null = null;
 
       if (currency === "PKR") pkrVal = res.value;
-      if (currency === "USD") pkrVal = fx.usd > 0 ? res.value * fx.usd : null;
-      if (currency === "EUR") pkrVal = fx.eur > 0 ? res.value * fx.eur : null;
+      if (currency === "FX1") pkrVal = fx.fx1 > 0 ? res.value * fx.fx1 : null;
+      if (currency === "FX2") pkrVal = fx.fx2 > 0 ? res.value * fx.fx2 : null;
 
       if (pkrVal == null) {
-        // if FX missing, don't recalc base yet
         copy[index] = row;
         return copy;
       }
 
       row.rate = pkrVal;
 
-      // keep PKR base synced
-      if (currency !== "PKR") row.rateInput = fmtDecimalLoose(pkrVal);
+      if (currency !== "PKR") row.rateInput = fmtDecimal2Loose(pkrVal);
 
-      // update other fields as numbers (only if addCurrencies ON + FX provided)
       if (addCurrencies) {
-        if (currency !== "USD" && fx.usd > 0)
-          row.rateUsdInput = fmtDecimalLoose(pkrVal / fx.usd);
-        if (currency !== "EUR" && fx.eur > 0)
-          row.rateEuroInput = fmtDecimalLoose(pkrVal / fx.eur);
+        if (currency !== "FX1" && fx.fx1 > 0)
+          row.rateUsdInput = fmtDecimal2Loose(pkrVal / fx.fx1);
+        if (currency !== "FX2" && fx.fx2 > 0)
+          row.rateEuroInput = fmtDecimal2Loose(pkrVal / fx.fx2);
       }
 
       copy[index] = row;
@@ -1015,21 +1117,20 @@ export default function EstimateForm({
     const raw =
       currency === "PKR"
         ? String(current.rateInput ?? "")
-        : currency === "USD"
+        : currency === "FX1"
           ? String(current.rateUsdInput ?? "")
           : String(current.rateEuroInput ?? "");
 
     const trimmed = raw.trim();
 
-    // allow clearing one field; clear base only if all 3 are empty
     if (trimmed === "") {
       setServices((prev) => {
         const copy = [...prev];
         const row = { ...copy[index] };
 
         if (currency === "PKR") row.rateInput = "";
-        if (currency === "USD") row.rateUsdInput = "";
-        if (currency === "EUR") row.rateEuroInput = "";
+        if (currency === "FX1") row.rateUsdInput = "";
+        if (currency === "FX2") row.rateEuroInput = "";
 
         const anyLeft = hasAnyRateInput(row);
 
@@ -1052,9 +1153,11 @@ export default function EstimateForm({
     }
 
     const fx = getFx();
+    const cc1 = currencyMeta(currency1Code);
+    const cc2 = currencyMeta(currency2Code);
 
     if (res.mode === "percent") {
-      const formatted = `${fmtDecimalLoose(res.value)}%`;
+      const formatted = `${fmtDecimal2Loose(res.value)}%`;
 
       setServices((prev) => {
         const copy = [...prev];
@@ -1064,7 +1167,6 @@ export default function EstimateForm({
         row.rate = res.value;
         row.rateCurrency = currency;
 
-        // show same percent across all 3 fields
         row.rateInput = formatted;
         row.rateUsdInput = formatted;
         row.rateEuroInput = formatted;
@@ -1075,19 +1177,22 @@ export default function EstimateForm({
       return;
     }
 
-    // amount mode -> need FX for USD/EUR sources
-    if (currency === "USD" && fx.usd <= 0) {
-      showToast("Please enter USD Rate above to use the USD field");
+    if (currency === "FX1" && fx.fx1 <= 0) {
+      showToast(
+        `Please enter ${cc1.code} Rate above to use the ${cc1.code} field`,
+      );
       return;
     }
-    if (currency === "EUR" && fx.eur <= 0) {
-      showToast("Please enter EURO Rate above to use the EURO field");
+    if (currency === "FX2" && fx.fx2 <= 0) {
+      showToast(
+        `Please enter ${cc2.code} Rate above to use the ${cc2.code} field`,
+      );
       return;
     }
 
     let pkrVal = res.value;
-    if (currency === "USD") pkrVal = res.value * fx.usd;
-    if (currency === "EUR") pkrVal = res.value * fx.eur;
+    if (currency === "FX1") pkrVal = res.value * fx.fx1;
+    if (currency === "FX2") pkrVal = res.value * fx.fx2;
 
     setServices((prev) => {
       const copy = [...prev];
@@ -1097,29 +1202,26 @@ export default function EstimateForm({
       row.rate = pkrVal;
       row.rateCurrency = currency;
 
-      // sync PKR always
-      row.rateInput = fmtDecimalLoose(pkrVal);
+      row.rateInput = fmtDecimal2Loose(pkrVal);
 
-      // sync converted displays if FX available
-      if (fx.usd > 0) row.rateUsdInput = fmtDecimalLoose(pkrVal / fx.usd);
-      if (fx.eur > 0) row.rateEuroInput = fmtDecimalLoose(pkrVal / fx.eur);
+      if (fx.fx1 > 0) row.rateUsdInput = fmtDecimal2Loose(pkrVal / fx.fx1);
+      if (fx.fx2 > 0) row.rateEuroInput = fmtDecimal2Loose(pkrVal / fx.fx2);
 
-      // ensure the edited field shows its own evaluated number (not conversion)
-      if (currency === "PKR") row.rateInput = fmtDecimalLoose(res.value);
-      if (currency === "USD") row.rateUsdInput = fmtDecimalLoose(res.value);
-      if (currency === "EUR") row.rateEuroInput = fmtDecimalLoose(res.value);
+      if (currency === "PKR") row.rateInput = fmtDecimal2Loose(res.value);
+      if (currency === "FX1") row.rateUsdInput = fmtDecimal2Loose(res.value);
+      if (currency === "FX2") row.rateEuroInput = fmtDecimal2Loose(res.value);
 
       copy[index] = row;
       return copy;
     });
   };
 
-  // ✅ When FX changes, keep USD/EUR displays in sync (and preserve whichever field user used last)
+  // ✅ When FX changes, keep FX1/FX2 displays in sync (and preserve whichever field user used last)
   useEffect(() => {
     if (!addCurrencies) return;
 
-    const fx = { usd: num(usdRate), eur: num(euroRate) };
-    if (fx.usd <= 0 && fx.eur <= 0) return;
+    const fx = { fx1: num(usdRate), fx2: num(euroRate) };
+    if (fx.fx1 <= 0 && fx.fx2 <= 0) return;
 
     setServices((prev) =>
       prev.map((s) => {
@@ -1129,7 +1231,7 @@ export default function EstimateForm({
 
         if (mode === "percent") {
           const val = Number(s.rate) || 0;
-          const formatted = `${fmtDecimalLoose(val)}%`;
+          const formatted = `${fmtDecimal2Loose(val)}%`;
           return {
             ...s,
             rateInput: formatted,
@@ -1138,53 +1240,58 @@ export default function EstimateForm({
           };
         }
 
-        // If last used USD/EUR, recompute base from that text using NEW FX
-        if (s.rateCurrency === "USD" && fx.usd > 0) {
+        const lastRaw = normalizeRateCurrency(s.rateCurrency);
+
+        const last: RateCurrency =
+          lastRaw === "USD" ? "FX1" : lastRaw === "EUR" ? "FX2" : lastRaw;
+
+        if (last === "FX1" && fx.fx1 > 0) {
           const t = String(s.rateUsdInput ?? "").trim();
           if (t) {
             const r = evalRateExpression(t);
             if (r.ok && r.mode === "amount") {
-              const pkr = r.value * fx.usd;
+              const pkr = r.value * fx.fx1;
               return {
                 ...s,
                 rateMode: "amount",
                 rate: pkr,
-                rateInput: fmtDecimalLoose(pkr),
-                rateUsdInput: fmtDecimalLoose(r.value),
+                rateCurrency: "FX1",
+                rateInput: fmtDecimal2Loose(pkr),
+                rateUsdInput: fmtDecimal2Loose(r.value),
                 rateEuroInput:
-                  fx.eur > 0 ? fmtDecimalLoose(pkr / fx.eur) : s.rateEuroInput,
+                  fx.fx2 > 0 ? fmtDecimal2Loose(pkr / fx.fx2) : s.rateEuroInput,
               };
             }
           }
         }
 
-        if (s.rateCurrency === "EUR" && fx.eur > 0) {
+        if (last === "FX2" && fx.fx2 > 0) {
           const t = String(s.rateEuroInput ?? "").trim();
           if (t) {
             const r = evalRateExpression(t);
             if (r.ok && r.mode === "amount") {
-              const pkr = r.value * fx.eur;
+              const pkr = r.value * fx.fx2;
               return {
                 ...s,
                 rateMode: "amount",
                 rate: pkr,
-                rateInput: fmtDecimalLoose(pkr),
-                rateEuroInput: fmtDecimalLoose(r.value),
+                rateCurrency: "FX2",
+                rateInput: fmtDecimal2Loose(pkr),
+                rateEuroInput: fmtDecimal2Loose(r.value),
                 rateUsdInput:
-                  fx.usd > 0 ? fmtDecimalLoose(pkr / fx.usd) : s.rateUsdInput,
+                  fx.fx1 > 0 ? fmtDecimal2Loose(pkr / fx.fx1) : s.rateUsdInput,
               };
             }
           }
         }
 
-        // Default: PKR is base -> refresh USD/EUR displays
         const pkr = Number(s.rate) || 0;
         return {
           ...s,
           rateUsdInput:
-            fx.usd > 0 ? fmtDecimalLoose(pkr / fx.usd) : s.rateUsdInput,
+            fx.fx1 > 0 ? fmtDecimal2Loose(pkr / fx.fx1) : s.rateUsdInput,
           rateEuroInput:
-            fx.eur > 0 ? fmtDecimalLoose(pkr / fx.eur) : s.rateEuroInput,
+            fx.fx2 > 0 ? fmtDecimal2Loose(pkr / fx.fx2) : s.rateEuroInput,
         };
       }),
     );
@@ -1213,6 +1320,10 @@ export default function EstimateForm({
     setWithLogo(true);
 
     setAddCurrencies(false);
+
+    setCurrency1Code("USD");
+    setCurrency2Code("EUR");
+
     setUsdRate("");
     setEuroRate("");
 
@@ -1226,12 +1337,9 @@ export default function EstimateForm({
         rate: 0,
         rateInput: "",
         rateMode: "amount",
-
-        // ✅ NEW defaults
         rateUsdInput: "",
         rateEuroInput: "",
         rateCurrency: "PKR",
-
         taxType: "inclusive",
         taxPercent: 0,
         taxLabel: "",
@@ -1239,8 +1347,6 @@ export default function EstimateForm({
         whtId: "",
         whtLabel: "",
         whtPercent: 0,
-
-        // ✅ NEW default: show financial columns in PDF
         showFinancialsInPdf: true,
       },
     ]);
@@ -1268,13 +1374,11 @@ export default function EstimateForm({
       whtLabel: s.whtLabel || "",
       whtPercent: typeof s.whtPercent === "number" ? s.whtPercent : 0,
 
-      // ✅ NEW: persist multi-rate fields
       rateInput: String(s.rateInput ?? ""),
       rateUsdInput: String(s.rateUsdInput ?? ""),
       rateEuroInput: String(s.rateEuroInput ?? ""),
       rateCurrency: (s.rateCurrency ?? "PKR") as any,
 
-      // ✅ NEW: persist per-row PDF toggle (default true)
       showFinancialsInPdf: s.showFinancialsInPdf !== false,
     }));
 
@@ -1293,8 +1397,10 @@ export default function EstimateForm({
     ];
 
     if (addCurrencies) {
-      requiredFields.push({ value: usdRate, name: "USD Rate" });
-      requiredFields.push({ value: euroRate, name: "EURO Rate" });
+      requiredFields.push({ value: currency1Code, name: "Currency 1" });
+      requiredFields.push({ value: usdRate, name: `${currency1Code} Rate` });
+      requiredFields.push({ value: currency2Code, name: "Currency 2" });
+      requiredFields.push({ value: euroRate, name: `${currency2Code} Rate` });
     }
 
     const missing = requiredFields.filter((f) => !String(f.value ?? "").trim());
@@ -1304,14 +1410,12 @@ export default function EstimateForm({
       return;
     }
 
-    // ✅ allow units=0 and rate=0 (only EMPTY is considered missing)
     const rowMissing = sanitizedServices.find((s: any) => {
       const missingService = !String(s.detail || "").trim();
 
       const unitsRaw = String(s.unitsInput ?? "").trim();
       const missingUnits = unitsRaw === "" && s.unitsInput != null;
 
-      // ✅ NEW: rate missing only if ALL 3 are empty
       const missingRate =
         !String(s.rateInput ?? "").trim() &&
         !String(s.rateUsdInput ?? "").trim() &&
@@ -1349,7 +1453,6 @@ export default function EstimateForm({
 
     setLoading(true);
 
-    // totals
     let subtotal = 0;
     let tax = 0;
     let total = 0;
@@ -1396,6 +1499,10 @@ export default function EstimateForm({
         withLogo,
         approvalReceivedOn,
         addCurrencies,
+
+        currency1Code: addCurrencies ? currency1Code : "",
+        currency2Code: addCurrencies ? currency2Code : "",
+
         usdRate: addCurrencies ? String(usdRate || "").trim() : "",
         euroRate: addCurrencies ? String(euroRate || "").trim() : "",
         whtTotal,
@@ -1577,7 +1684,7 @@ export default function EstimateForm({
   const invalidEuro =
     submitAttempted && addCurrencies && !String(euroRate || "").trim();
 
-  const usdTotals = addCurrencies
+  const c1Totals = addCurrencies
     ? {
         subtotal: convert(liveTotals.liveSubtotal, usdRate),
         tax: convert(liveTotals.liveTax, usdRate),
@@ -1586,7 +1693,7 @@ export default function EstimateForm({
       }
     : null;
 
-  const euroTotals = addCurrencies
+  const c2Totals = addCurrencies
     ? {
         subtotal: convert(liveTotals.liveSubtotal, euroRate),
         tax: convert(liveTotals.liveTax, euroRate),
@@ -1597,18 +1704,17 @@ export default function EstimateForm({
 
   return (
     <div className="px-6 space-y-2 bg-gray-50 min-h-screen pb-28">
-      {/* ✅ blink style */}
       <style>{`
-  @keyframes blinkRedBorder {
-    0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); border-color: rgb(209, 213, 219); }
-    50% { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35); border-color: rgb(239, 68, 68); }
-    100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); border-color: rgb(209, 213, 219); }
-  }
-  .blink-red {
-    animation: blinkRedBorder 0.9s ease-in-out infinite;
-    border-color: rgb(239, 68, 68) !important;
-  }
-`}</style>
+        @keyframes blinkRedBorder {
+          0% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); border-color: rgb(209, 213, 219); }
+          50% { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.35); border-color: rgb(239, 68, 68); }
+          100% { box-shadow: 0 0 0 0 rgba(239, 68, 68, 0); border-color: rgb(209, 213, 219); }
+        }
+        .blink-red {
+          animation: blinkRedBorder 0.9s ease-in-out infinite;
+          border-color: rgb(239, 68, 68) !important;
+        }
+      `}</style>
 
       <div className="bg-white p-5 rounded-xl shadow border border-gray-100">
         <h3 className="text-sm font-semibold mb-3 text-gray-700">
@@ -1842,6 +1948,7 @@ export default function EstimateForm({
             />
           </div>
 
+          {/* ✅ Add Currencies (2 dropdowns + 2 rates) */}
           <div className="mt-2">
             <label className="flex items-center gap-2 text-sm font-medium text-gray-600">
               <input
@@ -1854,37 +1961,106 @@ export default function EstimateForm({
             </label>
 
             {addCurrencies ? (
-              <div className="mt-2 grid grid-cols-1 sm:grid-cols-2 gap-2">
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    USD Rate
-                  </label>
-                  <input
-                    inputMode="decimal"
-                    value={usdRate}
-                    onChange={(e) => setUsdRate(e.target.value)}
-                    className={fieldClass(
-                      "w-full rounded-lg border border-gray-300 p-2 text-sm",
-                      invalidUsd,
-                    )}
-                    placeholder="e.g. 280"
-                  />
+              <div className="mt-2 space-y-2">
+                {/* Currency 1 */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Currency 1
+                    </label>
+                    <select
+                      value={currency1Code}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setCurrency1Code(next);
+                        if (next === currency2Code) {
+                          const alt =
+                            POPULAR_CURRENCIES.find((c) => c.code !== next)
+                              ?.code || "EUR";
+                          setCurrency2Code(alt);
+                        }
+                      }}
+                      className="w-full rounded-lg border border-gray-300 p-2 text-sm"
+                    >
+                      {POPULAR_CURRENCIES.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.code} - {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      {currency1Code} Rate (PKR per 1 {currency1Code})
+                    </label>
+                    <input
+                      inputMode="decimal"
+                      value={usdRate}
+                      onChange={(e) =>
+                        setUsdRate(sanitizeFxRateInput(e.target.value))
+                      }
+                      onBlur={(e) => setUsdRate(fxBlurFix(e.target.value))}
+                      className={fieldClass(
+                        "w-full rounded-lg border border-gray-300 p-2 text-sm",
+                        invalidUsd,
+                      )}
+                      placeholder="e.g. 280"
+                    />
+                  </div>
                 </div>
-                <div>
-                  <label className="block text-xs font-medium text-gray-600 mb-1">
-                    EURO Rate
-                  </label>
-                  <input
-                    inputMode="decimal"
-                    value={euroRate}
-                    onChange={(e) => setEuroRate(e.target.value)}
-                    className={fieldClass(
-                      "w-full rounded-lg border border-gray-300 p-2 text-sm",
-                      invalidEuro,
-                    )}
-                    placeholder="e.g. 305"
-                  />
+
+                {/* Currency 2 */}
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-2 items-end">
+                  <div>
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      Currency 2
+                    </label>
+                    <select
+                      value={currency2Code}
+                      onChange={(e) => {
+                        const next = e.target.value;
+                        setCurrency2Code(next);
+                        if (next === currency1Code) {
+                          const alt =
+                            POPULAR_CURRENCIES.find((c) => c.code !== next)
+                              ?.code || "USD";
+                          setCurrency1Code(alt);
+                        }
+                      }}
+                      className="w-full rounded-lg border border-gray-300 p-2 text-sm"
+                    >
+                      {POPULAR_CURRENCIES.map((c) => (
+                        <option key={c.code} value={c.code}>
+                          {c.code} - {c.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="sm:col-span-2">
+                    <label className="block text-xs font-medium text-gray-600 mb-1">
+                      {currency2Code} Rate (PKR per 1 {currency2Code})
+                    </label>
+                    <input
+                      inputMode="decimal"
+                      value={euroRate}
+                      onChange={(e) =>
+                        setEuroRate(sanitizeFxRateInput(e.target.value))
+                      }
+                      onBlur={(e) => setEuroRate(fxBlurFix(e.target.value))}
+                      className={fieldClass(
+                        "w-full rounded-lg border border-gray-300 p-2 text-sm",
+                        invalidEuro,
+                      )}
+                      placeholder="e.g. 305"
+                    />
+                  </div>
                 </div>
+
+                <p className="text-xs text-gray-500">
+                  Rates are PKR per 1 unit of the selected currency.
+                </p>
               </div>
             ) : null}
           </div>
@@ -1923,18 +2099,21 @@ export default function EstimateForm({
                   <th className="p-3 font-semibold border-b text-right">
                     Amount
                   </th>
+
                   {addCurrencies && (
                     <>
-                      <th>Amount (USD)</th>
-                      <th>Amount (EURO)</th>
+                      <th className="p-3 font-semibold border-b text-right whitespace-nowrap">
+                        Amount ({c1Head})
+                      </th>
+                      <th className="p-3 font-semibold border-b text-right whitespace-nowrap">
+                        Amount ({c2Head})
+                      </th>
                     </>
                   )}
 
-                  {/* ✅ NEW: per-row PDF toggle column */}
                   <th className="p-3 font-semibold border-b text-center">
                     PDF
                   </th>
-
                   <th className="p-3 font-semibold border-b text-center w-12"></th>
                 </tr>
               </thead>
@@ -1959,7 +2138,6 @@ export default function EstimateForm({
                       String(s.unitsInput ?? "").trim() === "" &&
                       s.unitsInput != null;
 
-                    // ✅ NEW: rate invalid only if ALL 3 are empty
                     const invalidRate = submitAttempted && !hasAnyRateInput(s);
 
                     const invalidTax =
@@ -1968,13 +2146,15 @@ export default function EstimateForm({
                       !String(s.taxId || "").trim();
 
                     const pkrAmount = calcLineTotalWithWht(s);
-                    const usdAmount =
+
+                    const c1Amount =
                       addCurrencies && usdRate
-                        ? pkrAmount / Number(usdRate)
+                        ? pkrAmount / Number(String(usdRate).replace(/,/g, ""))
                         : 0;
-                    const euroAmount =
+
+                    const c2Amount =
                       addCurrencies && euroRate
-                        ? pkrAmount / Number(euroRate)
+                        ? pkrAmount / Number(String(euroRate).replace(/,/g, ""))
                         : 0;
 
                     return (
@@ -1994,7 +2174,7 @@ export default function EstimateForm({
                               </button>
                             </td>
 
-                            {/* ✅ Service */}
+                            {/* Service */}
                             <td className="p-2">
                               <div
                                 className="relative"
@@ -2123,12 +2303,12 @@ export default function EstimateForm({
                               />
                             </td>
 
-                            {/* ✅ NEW: Rate (PKR + USD + EURO) */}
+                            {/* Rate */}
                             <td className="p-2 text-center align-top">
                               <div className="flex flex-col gap-1 items-center">
                                 {/* PKR */}
                                 <div className="flex items-center gap-1">
-                                  <span className="text-[10px] text-gray-500 w-9 text-right">
+                                  <span className="text-[10px] text-gray-500 w-12 text-right">
                                     PKR
                                   </span>
                                   <input
@@ -2153,10 +2333,10 @@ export default function EstimateForm({
                                   />
                                 </div>
 
-                                {/* USD */}
+                                {/* Currency 1 */}
                                 <div className="flex items-center gap-1">
-                                  <span className="text-[10px] text-gray-500 w-9 text-right">
-                                    USD
+                                  <span className="text-[10px] text-gray-500 w-12 text-right">
+                                    {currency1Code}
                                   </span>
                                   <input
                                     type="text"
@@ -2164,7 +2344,7 @@ export default function EstimateForm({
                                     disabled={!addCurrencies}
                                     value={s.rateUsdInput ?? ""}
                                     onChange={(e) =>
-                                      handleRateChange(i, "USD", e.target.value)
+                                      handleRateChange(i, "FX1", e.target.value)
                                     }
                                     onKeyDown={(e) => {
                                       if (e.key === "Enter")
@@ -2172,7 +2352,7 @@ export default function EstimateForm({
                                           e.currentTarget as HTMLInputElement
                                         ).blur();
                                     }}
-                                    onBlur={() => handleRateBlur(i, "USD")}
+                                    onBlur={() => handleRateBlur(i, "FX1")}
                                     placeholder={
                                       addCurrencies
                                         ? "e.g. 100*2"
@@ -2185,10 +2365,10 @@ export default function EstimateForm({
                                   />
                                 </div>
 
-                                {/* EURO */}
+                                {/* Currency 2 */}
                                 <div className="flex items-center gap-1">
-                                  <span className="text-[10px] text-gray-500 w-9 text-right">
-                                    EUR
+                                  <span className="text-[10px] text-gray-500 w-12 text-right">
+                                    {currency2Code}
                                   </span>
                                   <input
                                     type="text"
@@ -2196,7 +2376,7 @@ export default function EstimateForm({
                                     disabled={!addCurrencies}
                                     value={s.rateEuroInput ?? ""}
                                     onChange={(e) =>
-                                      handleRateChange(i, "EUR", e.target.value)
+                                      handleRateChange(i, "FX2", e.target.value)
                                     }
                                     onKeyDown={(e) => {
                                       if (e.key === "Enter")
@@ -2204,7 +2384,7 @@ export default function EstimateForm({
                                           e.currentTarget as HTMLInputElement
                                         ).blur();
                                     }}
-                                    onBlur={() => handleRateBlur(i, "EUR")}
+                                    onBlur={() => handleRateBlur(i, "FX2")}
                                     placeholder={
                                       addCurrencies
                                         ? "e.g. 90+10"
@@ -2349,6 +2529,7 @@ export default function EstimateForm({
                               ) : null}
                             </td>
 
+                            {/* Amount */}
                             <td className="p-2 text-right tabular-nums">
                               {formatMoney(calcLineTotalWithWht(s))}
                             </td>
@@ -2356,24 +2537,16 @@ export default function EstimateForm({
                             {addCurrencies && (
                               <>
                                 <td className="p-2 text-right tabular-nums text-gray-600 whitespace-nowrap">
-                                  $
-                                  {usdAmount.toLocaleString("en-US", {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
+                                  {formatWithSymbol(c1.symbol, c1Amount)}
                                 </td>
 
                                 <td className="p-2 text-right tabular-nums text-gray-600 whitespace-nowrap">
-                                  €
-                                  {euroAmount.toLocaleString("en-US", {
-                                    minimumFractionDigits: 2,
-                                    maximumFractionDigits: 2,
-                                  })}
+                                  {formatWithSymbol(c2.symbol, c2Amount)}
                                 </td>
                               </>
                             )}
 
-                            {/* ✅ NEW: per-row checkbox (every row) */}
+                            {/* per-row checkbox */}
                             <td className="p-2 align-top">
                               <label className="flex items-start gap-2 text-[11px] text-gray-700 leading-snug max-w-[220px]">
                                 <input
@@ -2449,72 +2622,72 @@ export default function EstimateForm({
 
               {addCurrencies && (
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
-                  {/* USD */}
+                  {/* Currency 1 */}
                   <div className="border rounded-lg bg-gray-50 p-4">
                     <div className="font-semibold text-gray-700 mb-2">
-                      USD (Converted)
+                      {c1Head} (Converted)
                     </div>
 
                     <div className="flex justify-between">
                       <span>Subtotal</span>
                       <span className="tabular-nums">
-                        ${usdTotals?.subtotal.toFixed(2)}
+                        {formatWithSymbol(c1.symbol, c1Totals?.subtotal)}
                       </span>
                     </div>
 
                     <div className="flex justify-between mt-1">
                       <span>Tax</span>
                       <span className="tabular-nums">
-                        ${usdTotals?.tax.toFixed(2)}
+                        {formatWithSymbol(c1.symbol, c1Totals?.tax)}
                       </span>
                     </div>
 
                     <div className="flex justify-between mt-1">
                       <span>WHT</span>
                       <span className="tabular-nums">
-                        ${usdTotals?.wht.toFixed(2)}
+                        {formatWithSymbol(c1.symbol, c1Totals?.wht)}
                       </span>
                     </div>
 
                     <div className="flex justify-between mt-2 pt-2 border-t font-bold">
                       <span>Total</span>
                       <span className="tabular-nums">
-                        ${usdTotals?.total.toFixed(2)}
+                        {formatWithSymbol(c1.symbol, c1Totals?.total)}
                       </span>
                     </div>
                   </div>
 
-                  {/* EURO */}
+                  {/* Currency 2 */}
                   <div className="border rounded-lg bg-gray-50 p-4">
                     <div className="font-semibold text-gray-700 mb-2">
-                      EURO (Converted)
+                      {c2Head} (Converted)
                     </div>
 
                     <div className="flex justify-between">
                       <span>Subtotal</span>
                       <span className="tabular-nums">
-                        €{euroTotals?.subtotal.toFixed(2)}
+                        {formatWithSymbol(c2.symbol, c2Totals?.subtotal)}
                       </span>
                     </div>
 
                     <div className="flex justify-between mt-1">
                       <span>Tax</span>
                       <span className="tabular-nums">
-                        €{euroTotals?.tax.toFixed(2)}
+                        {formatWithSymbol(c2.symbol, c2Totals?.tax)}
                       </span>
                     </div>
 
                     <div className="flex justify-between mt-1">
                       <span>WHT</span>
                       <span className="tabular-nums">
-                        €{euroTotals?.wht.toFixed(2)}
+                        {formatWithSymbol(c2.symbol, c2Totals?.wht)}
                       </span>
                     </div>
 
                     <div className="flex justify-between mt-2 pt-2 border-t font-bold">
                       <span>Total</span>
                       <span className="tabular-nums">
-                        €{euroTotals?.total.toFixed(2)}
+                        {formatWithSymbol(c2.symbol, c2Totals?.total)}
                       </span>
                     </div>
                   </div>
