@@ -1,4 +1,3 @@
-// EstimateInvoiceForm.tsx
 "use client";
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
@@ -19,15 +18,6 @@ import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { buildEstimateInvoicePdfBlob } from "@/lib/estimateInvoicePdf";
 
-const PANEL_ID = "IEDGE-SYSTEM";
-
-export type EstimateInvoice = any;
-
-type Props = {
-  existingInvoice?: EstimateInvoice;
-  duplicateMode?: boolean;
-};
-
 type ServiceItem = {
   detail: string;
   description?: string;
@@ -38,6 +28,26 @@ type ServiceItem = {
   taxPercent?: number;
   whtLabel?: string;
   whtPercent?: number;
+};
+
+const defaultRow: ServiceItem = {
+  detail: "",
+  description: "",
+  units: 0,
+  rate: "",
+  rateMode: "amount",
+  taxLabel: "SST",
+  taxPercent: 0,
+  whtLabel: "WHT",
+  whtPercent: 0,
+};
+const PANEL_ID = "IEDGE-SYSTEM";
+
+export type EstimateInvoice = any;
+
+type Props = {
+  existingInvoice?: EstimateInvoice;
+  duplicateMode?: boolean;
 };
 
 export default function EstimateInvoiceForm({
@@ -82,19 +92,7 @@ export default function EstimateInvoiceForm({
     "exclusive",
   );
 
-  const [services, setServices] = useState<ServiceItem[]>([
-    {
-      detail: "",
-      description: "",
-      units: 0,
-      rate: "",
-      rateMode: "amount",
-      taxLabel: "SST",
-      taxPercent: 0,
-      whtLabel: "WHT",
-      whtPercent: 0,
-    },
-  ]);
+  const [services, setServices] = useState<ServiceItem[]>([{ ...defaultRow }]);
 
   const INVOICE_HEADINGS = ["Sales Tax Invoice", "Performa Invoice", "Invoice"];
 
@@ -110,7 +108,7 @@ export default function EstimateInvoiceForm({
   const [status, setStatus] = useState<string>("Unpaid");
   const [loading, setLoading] = useState(false);
   const savingRef = useRef(false);
-
+  const [preferDbTotals, setPreferDbTotals] = useState(false);
   // ✅ Companies list
   const companyList = [
     { name: "iEDGE", logo: "/Iedge-TM-Logos-01.png" },
@@ -138,7 +136,7 @@ export default function EstimateInvoiceForm({
       "iEDGE - Digital & Creative": { prefix: "IDC", key: "iedge_digital" },
       "iEDGE - Events & Activations": {
         prefix: "S",
-        key: "iedge",
+        key: "iedge_events",
       },
       "iEDGE - Health Sciences": { prefix: "IHS", key: "iedge_health" },
       "iEDGE - International Education": {
@@ -174,6 +172,70 @@ export default function EstimateInvoiceForm({
 
     return () => unsub();
   }, []);
+
+  type Totals = {
+    subtotal: number;
+    tax: number;
+    whtTotal: number;
+    total: number;
+  };
+
+  const computeTotals = (
+    nextServices: ServiceItem[],
+    nextTaxType: "none" | "exclusive" | "inclusive",
+  ): Totals => {
+    const calcBase = (s: ServiceItem) => {
+      const units = Number(s.units || 0);
+      const rateNum = Number(String(s.rate ?? 0).replace(/,/g, "")) || 0;
+      const mode = (s.rateMode || "amount") as "amount" | "percent";
+      return mode === "percent" ? units * (rateNum / 100) : units * rateNum;
+    };
+
+    const baseSum = nextServices.reduce((sum, s) => sum + calcBase(s), 0);
+
+    // Tax
+    let taxSum = 0;
+    if (nextTaxType !== "none") {
+      for (const s of nextServices) {
+        const pct = Number(s.taxPercent ?? 0);
+        if (!pct) continue;
+
+        const base = calcBase(s);
+        if (nextTaxType === "exclusive") taxSum += (base * pct) / 100;
+        else taxSum += (base * pct) / (100 + pct); // inclusive extraction
+      }
+    }
+
+    // WHT (keeping your existing behavior: added to total)
+    const lineTotalForWht = (s: ServiceItem) => {
+      const base = calcBase(s);
+      const pct = Number(s.taxPercent ?? 0);
+
+      if (!pct || nextTaxType === "none") return base;
+      if (nextTaxType === "inclusive") return base;
+      return base + (base * pct) / 100;
+    };
+
+    let whtSum = 0;
+    for (const s of nextServices) {
+      const pct = Number(s.whtPercent ?? 0);
+      if (!pct) continue;
+      const baseForWht = lineTotalForWht(s);
+      whtSum += (baseForWht * pct) / 100;
+    }
+    const computedSubtotal =
+      nextTaxType === "inclusive" ? baseSum - taxSum : baseSum;
+
+    const computedTotal =
+      computedSubtotal + (nextTaxType === "none" ? 0 : taxSum) + whtSum;
+
+    const subtotal = Number(computedSubtotal.toFixed(2));
+    const tax = Number(taxSum.toFixed(2));
+    const whtTotal = Number(whtSum.toFixed(2));
+    const total = Number(computedTotal.toFixed(2));
+
+    return { subtotal, tax, whtTotal, total };
+  };
 
   // ====== Totals calculator ======
   const calcBase = (s: ServiceItem) => {
@@ -220,8 +282,9 @@ export default function EstimateInvoiceForm({
       const baseForWht = lineTotalForWht(s);
       whtSum += (baseForWht * pct) / 100;
     }
+    const computedSubtotal =
+      nextTaxType === "inclusive" ? baseSum - taxSum : baseSum;
 
-    const computedSubtotal = baseSum;
     const computedTotal =
       computedSubtotal + (nextTaxType === "none" ? 0 : taxSum) + whtSum;
 
@@ -232,12 +295,19 @@ export default function EstimateInvoiceForm({
   };
 
   useEffect(() => {
-    recalcTotals(services, taxType);
+    if (preferDbTotals) return;
 
+    const t = computeTotals(services, taxType);
+    setSubtotal(t.subtotal);
+    setTax(t.tax);
+    setWhtTotal(t.whtTotal);
+    setTotal(t.total);
+
+    // Use computed total for warnings (your current code checks stale `total`)
     if (previousEstimateTotal !== null) {
-      if (total > previousEstimateTotal) {
+      if (t.total > previousEstimateTotal) {
         const ok = window.confirm(
-          `⚠ Warning:\n\nInvoice amount (${money(total)}) is GREATER than Estimate amount (${money(previousEstimateTotal)}).\n\nDo you want to continue?`,
+          `⚠ Warning:\n\nInvoice amount (${money(t.total)}) is GREATER than Estimate amount (${money(previousEstimateTotal)}).\n\nDo you want to continue?`,
         );
         if (!ok) {
           savingRef.current = false;
@@ -246,9 +316,9 @@ export default function EstimateInvoiceForm({
         }
       }
 
-      if (total < previousEstimateTotal) {
+      if (t.total < previousEstimateTotal) {
         const ok = window.confirm(
-          `⚠ Warning:\n\nInvoice amount (${money(total)}) is LESS than Estimate amount (${money(previousEstimateTotal)}).\n\nDo you want to continue?`,
+          `⚠ Warning:\n\nInvoice amount (${money(t.total)}) is LESS than Estimate amount (${money(previousEstimateTotal)}).\n\nDo you want to continue?`,
         );
         if (!ok) {
           savingRef.current = false;
@@ -257,7 +327,7 @@ export default function EstimateInvoiceForm({
         }
       }
     }
-  }, [services, taxType]);
+  }, [services, taxType, preferDbTotals, previousEstimateTotal]);
 
   // ✅ Money formatting
   const money = (n: number) => {
@@ -340,6 +410,7 @@ export default function EstimateInvoiceForm({
 
   // ====== Edit / Duplicate fill ======
   useEffect(() => {
+    // ---------- CREATE MODE (no existing invoice) ----------
     if (!existingInvoice) {
       setEditId(null);
       setInvoiceNo("");
@@ -356,23 +427,18 @@ export default function EstimateInvoiceForm({
       setAddress("");
       setProjectOwner("");
       setSubject("");
-      setPoNumber(""); // ✅ reset PO
+      setPoNumber("");
 
       setPaymentTerm("");
       setTaxType("exclusive");
-      setServices([
-        {
-          detail: "",
-          description: "",
-          units: 0,
-          rate: "",
-          rateMode: "amount",
-          taxLabel: "SST",
-          taxPercent: 0,
-          whtLabel: "WHT",
-          whtPercent: 0,
-        },
-      ]);
+
+      setPreferDbTotals(false); // create mode: always compute live totals
+      setSubtotal(0);
+      setTax(0);
+      setWhtTotal(0);
+      setTotal(0);
+
+      setServices([{ ...defaultRow }]);
 
       setMessage("");
       setTermsConditionTitle("");
@@ -382,6 +448,7 @@ export default function EstimateInvoiceForm({
       return;
     }
 
+    // ---------- EDIT / DUPLICATE MODE (existing invoice present) ----------
     setEditId(duplicateMode ? null : (existingInvoice.id ?? null));
 
     setInvoiceNo(duplicateMode ? "" : (existingInvoice.invoiceNo ?? ""));
@@ -404,27 +471,18 @@ export default function EstimateInvoiceForm({
     setAddress(existingInvoice.address ?? "");
     setProjectOwner(existingInvoice.projectOwner ?? "");
     setSubject(existingInvoice.subject ?? "");
-    setPoNumber(existingInvoice.poNumber ?? ""); // ✅ prefill PO
+    setPoNumber(existingInvoice.poNumber ?? "");
 
     setPaymentTerm(existingInvoice.paymentTerm ?? "");
     setTaxType((existingInvoice.taxType ?? "exclusive") as any);
 
-    setServices((existingInvoice.services ?? []) as any);
-    if (!existingInvoice.services || existingInvoice.services.length === 0) {
-      setServices([
-        {
-          detail: "",
-          description: "",
-          units: 0,
-          rate: "",
-          rateMode: "amount",
-          taxLabel: "SST",
-          taxPercent: 0,
-          whtLabel: "WHT",
-          whtPercent: 0,
-        },
-      ]);
-    }
+    const nextServices =
+      Array.isArray(existingInvoice.services) &&
+      existingInvoice.services.length > 0
+        ? (existingInvoice.services as any)
+        : [{ ...defaultRow }];
+
+    setServices(nextServices);
 
     setMessage(existingInvoice.message ?? "");
     setTermsConditionTitle(existingInvoice.termsConditionTitle ?? "");
@@ -435,10 +493,24 @@ export default function EstimateInvoiceForm({
     );
 
     setStatus(existingInvoice.status ?? "Unpaid");
+
+    // If we are editing an existing record (not duplicating),
+    // show totals exactly as stored in DB until user changes anything.
+    if (!duplicateMode) {
+      setPreferDbTotals(true);
+      setSubtotal(Number(existingInvoice.subtotal ?? 0));
+      setTax(Number(existingInvoice.tax ?? 0));
+      setWhtTotal(Number(existingInvoice.whtTotal ?? 0));
+      setTotal(Number(existingInvoice.total ?? 0));
+    } else {
+      // Duplicating: treat like a new invoice, compute live totals.
+      setPreferDbTotals(false);
+    }
   }, [existingInvoice, duplicateMode]);
 
   // ====== Load estimate and copy ALL fields to invoice form ======
   const loadEstimateAndPrefill = async () => {
+    setPreferDbTotals(false);
     const estNo = estimateNoInput.trim();
     if (!estNo) return alert("Please enter an Estimate No.");
 
@@ -564,7 +636,13 @@ export default function EstimateInvoiceForm({
       const estData = estDoc.data() as any;
 
       // Always recalc before save
-      recalcTotals(services, taxType);
+      const t = computeTotals(services, taxType);
+
+      // keep UI in sync too
+      setSubtotal(t.subtotal);
+      setTax(t.tax);
+      setWhtTotal(t.whtTotal);
+      setTotal(t.total);
 
       if (editId) {
         const updatedInvoice: any = {
@@ -591,10 +669,10 @@ export default function EstimateInvoiceForm({
           termsConditionTitle,
           termsConditionText,
 
-          subtotal: Number(subtotal || 0),
-          tax: Number(tax || 0),
-          whtTotal: Number(whtTotal || 0),
-          total: Number(total || 0),
+          subtotal: t.subtotal,
+          tax: t.tax,
+          whtTotal: t.whtTotal,
+          total: t.total,
 
           invoiceNo: existingInvoice?.invoiceNo || invoiceNo,
           invoiceDate: invoiceDate || new Date().toISOString().slice(0, 10),
@@ -673,10 +751,10 @@ export default function EstimateInvoiceForm({
           termsConditionTitle,
           termsConditionText,
 
-          subtotal: Number(subtotal || 0),
-          tax: Number(tax || 0),
-          whtTotal: Number(whtTotal || 0),
-          total: Number(total || 0),
+          subtotal: t.subtotal,
+          tax: t.tax,
+          whtTotal: t.whtTotal,
+          total: t.total,
 
           invoiceNo: nextInvoiceNo,
           invoiceDate: invoiceDate || new Date().toISOString().slice(0, 10),
@@ -722,6 +800,7 @@ export default function EstimateInvoiceForm({
 
   // ====== Services UI handlers ======
   const updateService = (idx: number, patch: Partial<ServiceItem>) => {
+    setPreferDbTotals(false);
     setServices((prev) => {
       const next = [...prev];
       next[idx] = { ...next[idx], ...patch };
@@ -730,23 +809,12 @@ export default function EstimateInvoiceForm({
   };
 
   const addService = () => {
-    setServices((prev) => [
-      ...prev,
-      {
-        detail: "",
-        description: "",
-        units: 0,
-        rate: "",
-        rateMode: "amount",
-        taxLabel: "SST",
-        taxPercent: 0,
-        whtLabel: "WHT",
-        whtPercent: 0,
-      },
-    ]);
+    setPreferDbTotals(false);
+    setServices((prev) => [...prev, { ...defaultRow }]);
   };
 
   const removeService = (idx: number) => {
+    setPreferDbTotals(false);
     setServices((prev) => {
       const next = prev.filter((_, i) => i !== idx);
       return next.length ? next : prev;
@@ -903,7 +971,10 @@ export default function EstimateInvoiceForm({
               <select
                 className="ml-2 border rounded px-2 py-1"
                 value={taxType}
-                onChange={(e) => setTaxType(e.target.value as any)}
+                onChange={(e) => {
+                  setPreferDbTotals(false);
+                  setTaxType(e.target.value as any);
+                }}
               >
                 <option value="exclusive">Exclusive</option>
                 <option value="inclusive">Inclusive</option>

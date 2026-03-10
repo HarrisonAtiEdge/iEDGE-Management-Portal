@@ -2,14 +2,17 @@
 
 // import React, { useEffect, useMemo, useState } from "react";
 // import { auth, db } from "@/lib/firebase";
+// // import { collection, doc, getDoc, onSnapshot, query, where,} from "firebase/firestore";
 // import {
 //   collection,
 //   doc,
 //   getDoc,
+//   getDocs, // ✅ ADD
 //   onSnapshot,
 //   query,
 //   where,
 // } from "firebase/firestore";
+
 // import { onAuthStateChanged } from "firebase/auth";
 // import { Button } from "@/components/ui/button";
 // import { Eye, Pencil, Copy } from "lucide-react";
@@ -44,6 +47,9 @@
 //   const [statusFilter, setStatusFilter] = useState("");
 //   const [minAmount, setMinAmount] = useState("");
 //   const [maxAmount, setMaxAmount] = useState("");
+//   const [isOperationAdmin, setIsOperationAdmin] = useState(false);
+//   const [createdByFilter, setCreatedByFilter] = useState("");
+//   const [usersMap, setUsersMap] = useState<Record<string, any>>({});
 
 //   // 📅 Date preset filter
 //   const [datePreset, setDatePreset] = useState<
@@ -56,7 +62,7 @@
 
 //   const invoicesRef = useMemo(
 //     () => collection(db, "Panels", PANEL_ID, "estimateInvoices"),
-//     []
+//     [],
 //   );
 
 //   // ✅ same company list used in estimate form
@@ -103,17 +109,60 @@
 
 //       try {
 //         // ✅ load footer user + admin check
-//         const userSnap = await getDoc(doc(db, "Panels", PANEL_ID, "users", uid));
+//         const userSnap = await getDoc(
+//           doc(db, "Panels", PANEL_ID, "users", uid),
+//         );
 //         const userData = userSnap.data() as any;
 
 //         setLoggedInUser(userData || null);
+//         // ✅ load all users (UID → data)
+//         const usersSnap = await getDocs(
+//           collection(db, "Panels", PANEL_ID, "users"),
+//         );
 
-//         const adminCheck = userData?.isAdmin === true;
-//         setIsAdmin(adminCheck);
+//         const map: Record<string, any> = {};
+//         usersSnap.forEach((u) => {
+//           map[u.id] = u.data();
+//         });
+//         setUsersMap(map);
 
-//         const q = adminCheck
-//           ? query(invoicesRef)
-//           : query(invoicesRef, where("createdBy", "==", uid));
+//         // const adminCheck = userData?.isAdmin === true;
+//         // setIsAdmin(adminCheck);
+
+//         // const operationAdminCheck = userData?.isOperationAdmin === true;
+//         // setIsOperationAdmin(operationAdminCheck);
+
+//         // const adminCheck =
+//         //   userData?.isAdmin === true || userData?.isAdmin === "true";
+
+//         // const operationAdminCheck =
+//         //   userData?.isOperationAdmin === true ||
+//         //   userData?.isOperationAdmin === "true";
+
+//         const adminCheck =
+//           userData?.isAdmin === true || userData?.isAdmin === "true";
+
+//         const operationAdminCheck =
+//           userData?.isOperationAdmin === true ||
+//           userData?.isOperationAdmin === "true";
+
+//         const financialAdminCheck =
+//           userData?.isFinancialAdmin === true ||
+//           userData?.isFinancialAdmin === "true";
+
+//         // const q = adminCheck
+//         //   ? query(invoicesRef)
+//         //   : query(invoicesRef, where("createdBy", "==", uid));
+
+//         // const q =
+//         //   adminCheck || operationAdminCheck
+//         //     ? query(invoicesRef) // Admin & Operation Admin see ALL
+//         //     : query(invoicesRef, where("createdBy", "==", uid)); // Normal user
+
+//         const q =
+//           adminCheck || operationAdminCheck || financialAdminCheck
+//             ? query(invoicesRef) // ✅ Admin, Operation Admin, Financial Admin
+//             : query(invoicesRef, where("createdBy", "==", uid)); // Normal user
 
 //         unsubSnapshot = onSnapshot(q, (snap) => {
 //           const list = snap.docs.map((d) => ({
@@ -195,6 +244,14 @@
 //     const minOk = minAmount ? amount >= Number(minAmount) : true;
 //     const maxOk = maxAmount ? amount <= Number(maxAmount) : true;
 
+//     const createdByText = String(usersMap[inv.createdBy]?.displayName || "")
+//       .toLowerCase()
+//       .trim();
+
+//     const createdByMatch = createdByFilter
+//       ? createdByText.includes(createdByFilter.toLowerCase())
+//       : true;
+
 //     return (
 //       invoiceNoMatch &&
 //       estimateNoMatch &&
@@ -202,7 +259,8 @@
 //       dateMatch &&
 //       statusMatch &&
 //       minOk &&
-//       maxOk
+//       maxOk &&
+//       createdByMatch
 //     );
 //   });
 
@@ -213,6 +271,7 @@
 //     invoiceNoFilter,
 //     estimateNoFilter,
 //     clientFilter,
+//     createdByFilter,
 //     dateFilter,
 //     datePreset,
 //     statusFilter,
@@ -227,7 +286,7 @@
 
 //   const paginatedInvoices = filteredInvoices.slice(
 //     (safePage - 1) * pageSize,
-//     safePage * pageSize
+//     safePage * pageSize,
 //   );
 
 //   const handleViewPdf = async (inv: any) => {
@@ -346,6 +405,7 @@
 //             <th className="text-left p-2">Invoice No</th>
 //             <th className="text-left p-2">Estimate No</th>
 //             <th className="text-left p-2">Client</th>
+//             <th className="text-left p-2">Created By</th>
 //             <th className="text-left p-2">Invoice Date</th>
 //             <th className="text-right p-2">Amount</th>
 //             <th className="text-left p-2">Status</th>
@@ -378,6 +438,24 @@
 //                 placeholder="Search"
 //                 value={clientFilter}
 //                 onChange={(e) => setClientFilter(e.target.value)}
+//               />
+//             </th>
+
+//             {/* <th className="p-1">
+//               <input
+//                 type="date"
+//                 className="border px-1 py-0.5 w-full"
+//                 value={dateFilter}
+//                 onChange={(e) => setDateFilter(e.target.value)}
+//               />
+//             </th> */}
+
+//             <th className="p-1">
+//               <input
+//                 className="border px-1 py-0.5 w-full"
+//                 placeholder="Search name"
+//                 value={createdByFilter}
+//                 onChange={(e) => setCreatedByFilter(e.target.value)}
 //               />
 //             </th>
 
@@ -435,6 +513,10 @@
 //                 {inv.sourceEstimateNo || inv.estimateNo || "-"}
 //               </td>
 //               <td className="p-2">{inv.client}</td>
+//               <td className="p-2">
+//                 {usersMap[inv.createdBy]?.displayName || "Unknown"}
+//               </td>
+
 //               <td className="p-2">{inv.invoiceDate}</td>
 
 //               <td className="p-2 text-right">
@@ -484,7 +566,7 @@
 
 //           {filteredInvoices.length === 0 && (
 //             <tr>
-//               <td colSpan={7} className="p-4 text-center">
+//               <td colSpan={8} className="p-4 text-center">
 //                 No invoices found.
 //               </td>
 //             </tr>
@@ -549,8 +631,9 @@ import {
 
 import { onAuthStateChanged } from "firebase/auth";
 import { Button } from "@/components/ui/button";
-import { Eye, Pencil, Copy } from "lucide-react";
+import { Eye, Pencil, Copy, Wallet } from "lucide-react";
 import { buildEstimateInvoicePdfBlob } from "@/lib/estimateInvoicePdf";
+import ReceivePaymentModal from "@/components/EstimateInvoice/ReceivePaymentModal";
 
 export type EstimateInvoice = any;
 
@@ -584,6 +667,9 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
   const [isOperationAdmin, setIsOperationAdmin] = useState(false);
   const [createdByFilter, setCreatedByFilter] = useState("");
   const [usersMap, setUsersMap] = useState<Record<string, any>>({});
+  const [isReceiveOpen, setIsReceiveOpen] = useState(false);
+  const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
 
   // 📅 Date preset filter
   const [datePreset, setDatePreset] = useState<
@@ -1067,6 +1153,18 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
                   <Button
                     variant="ghost"
                     size="icon"
+                    title="Receive Payment"
+                    onClick={() => {
+                      setSelectedInvoice(inv);
+                      setShowPaymentModal(true);
+                    }}
+                  >
+                    <Wallet className="h-4 w-4" />
+                  </Button>
+
+                  <Button
+                    variant="ghost"
+                    size="icon"
                     title="View PDF"
                     onClick={() => handleViewPdf(inv)}
                   >
@@ -1143,6 +1241,14 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ✅ RECEIVE PAYMENT MODAL */}
+      {showPaymentModal && selectedInvoice && (
+        <ReceivePaymentModal
+          invoice={selectedInvoice}
+          onClose={() => setShowPaymentModal(false)}
+        />
       )}
     </div>
   );
