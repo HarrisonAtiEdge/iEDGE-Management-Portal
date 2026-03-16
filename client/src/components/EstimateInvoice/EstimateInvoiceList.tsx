@@ -15,8 +15,9 @@
 
 // import { onAuthStateChanged } from "firebase/auth";
 // import { Button } from "@/components/ui/button";
-// import { Eye, Pencil, Copy } from "lucide-react";
+// import { Eye, Pencil, Copy, Wallet } from "lucide-react";
 // import { buildEstimateInvoicePdfBlob } from "@/lib/estimateInvoicePdf";
+// import ReceivePaymentModal from "@/components/EstimateInvoice/ReceivePaymentModal";
 
 // export type EstimateInvoice = any;
 
@@ -50,6 +51,9 @@
 //   const [isOperationAdmin, setIsOperationAdmin] = useState(false);
 //   const [createdByFilter, setCreatedByFilter] = useState("");
 //   const [usersMap, setUsersMap] = useState<Record<string, any>>({});
+//   const [isReceiveOpen, setIsReceiveOpen] = useState(false);
+//   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
+//   const [showPaymentModal, setShowPaymentModal] = useState(false);
 
 //   // 📅 Date preset filter
 //   const [datePreset, setDatePreset] = useState<
@@ -533,6 +537,18 @@
 //                   <Button
 //                     variant="ghost"
 //                     size="icon"
+//                     title="Receive Payment"
+//                     onClick={() => {
+//                       setSelectedInvoice(inv);
+//                       setShowPaymentModal(true);
+//                     }}
+//                   >
+//                     <Wallet className="h-4 w-4" />
+//                   </Button>
+
+//                   <Button
+//                     variant="ghost"
+//                     size="icon"
 //                     title="View PDF"
 //                     onClick={() => handleViewPdf(inv)}
 //                   >
@@ -610,6 +626,14 @@
 //           </div>
 //         </div>
 //       )}
+
+//       {/* ✅ RECEIVE PAYMENT MODAL */}
+//       {showPaymentModal && selectedInvoice && (
+//         <ReceivePaymentModal
+//           invoice={selectedInvoice}
+//           onClose={() => setShowPaymentModal(false)}
+//         />
+//       )}
 //     </div>
 //   );
 // }
@@ -618,12 +642,11 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import { auth, db } from "@/lib/firebase";
-// import { collection, doc, getDoc, onSnapshot, query, where,} from "firebase/firestore";
 import {
   collection,
   doc,
   getDoc,
-  getDocs, // ✅ ADD
+  getDocs,
   onSnapshot,
   query,
   where,
@@ -659,6 +682,7 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
   // 🔍 Filters
   const [invoiceNoFilter, setInvoiceNoFilter] = useState("");
   const [estimateNoFilter, setEstimateNoFilter] = useState("");
+  const [subjectFilter, setSubjectFilter] = useState("");
   const [clientFilter, setClientFilter] = useState("");
   const [dateFilter, setDateFilter] = useState("");
   const [statusFilter, setStatusFilter] = useState("");
@@ -706,6 +730,9 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
     { name: "Emaan Biz", logo: "/Emaan-Biz-TM-Logos-06.png" },
   ];
 
+  const getSubjectValue = (inv: any) =>
+    String(inv?.subject || inv?.invoiceSubject || inv?.title || "");
+
   // ✅ cleanup blob url on unmount
   useEffect(() => {
     return () => {
@@ -735,6 +762,7 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
         const userData = userSnap.data() as any;
 
         setLoggedInUser(userData || null);
+
         // ✅ load all users (UID → data)
         const usersSnap = await getDocs(
           collection(db, "Panels", PANEL_ID, "users"),
@@ -745,19 +773,6 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
           map[u.id] = u.data();
         });
         setUsersMap(map);
-
-        // const adminCheck = userData?.isAdmin === true;
-        // setIsAdmin(adminCheck);
-
-        // const operationAdminCheck = userData?.isOperationAdmin === true;
-        // setIsOperationAdmin(operationAdminCheck);
-
-        // const adminCheck =
-        //   userData?.isAdmin === true || userData?.isAdmin === "true";
-
-        // const operationAdminCheck =
-        //   userData?.isOperationAdmin === true ||
-        //   userData?.isOperationAdmin === "true";
 
         const adminCheck =
           userData?.isAdmin === true || userData?.isAdmin === "true";
@@ -770,19 +785,10 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
           userData?.isFinancialAdmin === true ||
           userData?.isFinancialAdmin === "true";
 
-        // const q = adminCheck
-        //   ? query(invoicesRef)
-        //   : query(invoicesRef, where("createdBy", "==", uid));
-
-        // const q =
-        //   adminCheck || operationAdminCheck
-        //     ? query(invoicesRef) // Admin & Operation Admin see ALL
-        //     : query(invoicesRef, where("createdBy", "==", uid)); // Normal user
-
         const q =
           adminCheck || operationAdminCheck || financialAdminCheck
-            ? query(invoicesRef) // ✅ Admin, Operation Admin, Financial Admin
-            : query(invoicesRef, where("createdBy", "==", uid)); // Normal user
+            ? query(invoicesRef)
+            : query(invoicesRef, where("createdBy", "==", uid));
 
         unsubSnapshot = onSnapshot(q, (snap) => {
           const list = snap.docs.map((d) => ({
@@ -844,15 +850,17 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
       .toLowerCase()
       .includes(estimateNoFilter.toLowerCase());
 
+    const subjectMatch = getSubjectValue(inv)
+      .toLowerCase()
+      .includes(subjectFilter.toLowerCase());
+
     const clientMatch = String(inv.client || "")
       .toLowerCase()
       .includes(clientFilter.toLowerCase());
 
     const invDate = String(inv.invoiceDate || "");
 
-    // exact date
     const exactDateMatch = dateFilter ? invDate === dateFilter : true;
-    // preset date range
     const presetMatch = datePreset ? isDateInPresetRange(invDate) : true;
     const dateMatch = exactDateMatch && presetMatch;
 
@@ -875,6 +883,7 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
     return (
       invoiceNoMatch &&
       estimateNoMatch &&
+      subjectMatch &&
       clientMatch &&
       dateMatch &&
       statusMatch &&
@@ -890,6 +899,7 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
   }, [
     invoiceNoFilter,
     estimateNoFilter,
+    subjectFilter,
     clientFilter,
     createdByFilter,
     dateFilter,
@@ -928,6 +938,70 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
     } catch (e) {
       console.error(e);
       alert("Failed to generate PDF.");
+    }
+  };
+
+  const formatCsvCell = (value: any) => {
+    if (value === null || value === undefined) return '""';
+
+    const str = String(value);
+
+    // Preserve very long numeric values better when opened in Excel
+    const onlyDigits = /^\d+$/.test(str);
+    if (onlyDigits && str.length >= 11) {
+      const safe = str.replace(/"/g, '""');
+      return `"=""${safe}"""`;
+    }
+
+    return `"${str.replace(/"/g, '""')}"`;
+  };
+
+  const handleExport = () => {
+    try {
+      const headers = [
+        "Invoice No",
+        "Estimate No",
+        "Subject",
+        "Client",
+        "Created By",
+        "Invoice Date",
+        "Amount",
+        "Status",
+      ];
+
+      const rows = filteredInvoices.map((inv) => [
+        inv.invoiceNo || "",
+        inv.sourceEstimateNo || inv.estimateNo || "",
+        getSubjectValue(inv) || "",
+        inv.client || "",
+        usersMap[inv.createdBy]?.displayName || "Unknown",
+        inv.invoiceDate || "",
+        Number(inv.total ?? 0).toFixed(2),
+        inv.status || "Unpaid",
+      ]);
+
+      const csvContent = [
+        headers.map(formatCsvCell).join(","),
+        ...rows.map((row) => row.map(formatCsvCell).join(",")),
+      ].join("\n");
+
+      const blob = new Blob(["\uFEFF" + csvContent], {
+        type: "text/csv;charset=utf-8;",
+      });
+
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+
+      link.href = url;
+      link.download = `estimate-invoices-${stamp}.csv`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      console.error("Export failed:", error);
+      alert("Failed to export invoices.");
     }
   };
 
@@ -984,6 +1058,16 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
         </div>
 
         <div className="flex items-center gap-2 justify-end">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-8 text-xs"
+            onClick={handleExport}
+            disabled={filteredInvoices.length === 0}
+          >
+            Export
+          </Button>
+
           <div className="text-xs text-gray-600">Rows:</div>
           <select
             className="border rounded px-2 py-1 text-xs"
@@ -1024,6 +1108,7 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
           <tr className="border-b">
             <th className="text-left p-2">Invoice No</th>
             <th className="text-left p-2">Estimate No</th>
+            <th className="text-left p-2">Subject</th>
             <th className="text-left p-2">Client</th>
             <th className="text-left p-2">Created By</th>
             <th className="text-left p-2">Invoice Date</th>
@@ -1056,19 +1141,19 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
               <input
                 className="border px-1 py-0.5 w-full"
                 placeholder="Search"
+                value={subjectFilter}
+                onChange={(e) => setSubjectFilter(e.target.value)}
+              />
+            </th>
+
+            <th className="p-1">
+              <input
+                className="border px-1 py-0.5 w-full"
+                placeholder="Search"
                 value={clientFilter}
                 onChange={(e) => setClientFilter(e.target.value)}
               />
             </th>
-
-            {/* <th className="p-1">
-              <input
-                type="date"
-                className="border px-1 py-0.5 w-full"
-                value={dateFilter}
-                onChange={(e) => setDateFilter(e.target.value)}
-              />
-            </th> */}
 
             <th className="p-1">
               <input
@@ -1132,6 +1217,7 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
               <td className="p-2">
                 {inv.sourceEstimateNo || inv.estimateNo || "-"}
               </td>
+              <td className="p-2">{getSubjectValue(inv) || "-"}</td>
               <td className="p-2">{inv.client}</td>
               <td className="p-2">
                 {usersMap[inv.createdBy]?.displayName || "Unknown"}
@@ -1198,7 +1284,7 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
 
           {filteredInvoices.length === 0 && (
             <tr>
-              <td colSpan={8} className="p-4 text-center">
+              <td colSpan={9} className="p-4 text-center">
                 No invoices found.
               </td>
             </tr>
