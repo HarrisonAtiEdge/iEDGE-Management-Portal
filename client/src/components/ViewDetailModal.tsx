@@ -1,4 +1,4 @@
-// import React, { useState } from "react";
+// import React, { useState, useEffect } from "react";
 // import { Button } from "@/components/ui/button";
 // import { Label } from "@/components/ui/label";
 // import { useAuth } from "@/contexts/AuthContext";
@@ -14,7 +14,8 @@
 //   serverTimestamp,
 //   updateDoc,
 //   doc,
-//   Timestamp, // ✅ add this
+//   Timestamp,
+//   getDoc,
 // } from "firebase/firestore";
 // import { db } from "@/lib/firebase";
 // import { formatDistanceToNow } from "date-fns";
@@ -32,30 +33,25 @@
 // function toJsDate(value: any): Date | null {
 //   if (!value) return null;
 
-//   // Already a JS Date
 //   if (value instanceof Date) {
 //     return isNaN(value.getTime()) ? null : value;
 //   }
 
-//   // Firestore Timestamp instance
 //   if (value instanceof Timestamp) {
 //     const d = value.toDate();
 //     return isNaN(d.getTime()) ? null : d;
 //   }
 
-//   // Firestore Timestamp-like (has toDate)
 //   if (typeof value?.toDate === "function") {
 //     const d = value.toDate();
 //     return d instanceof Date && !isNaN(d.getTime()) ? d : null;
 //   }
 
-//   // Timestamp-like plain object { seconds, nanoseconds }
 //   if (typeof value?.seconds === "number") {
 //     const d = new Date(value.seconds * 1000);
 //     return isNaN(d.getTime()) ? null : d;
 //   }
 
-//   // ISO string or millis
 //   if (typeof value === "string" || typeof value === "number") {
 //     const d = new Date(value);
 //     return isNaN(d.getTime()) ? null : d;
@@ -75,6 +71,12 @@
 //     null,
 //   );
 
+//   // ✅ NEW: extra fields fetched directly from Firestore
+//   const [extraRecordData, setExtraRecordData] = useState<{
+//     goal?: string;
+//     createdAt?: any;
+//   }>({});
+
 //   const { meetingUpdates, loading: meetingUpdatesLoading } = useMeetingUpdates(
 //     record.id,
 //   );
@@ -93,6 +95,36 @@
 //       setSelectedMeetingId(meetingUpdates[0].id);
 //     }
 //   }, [meetingUpdates, selectedMeetingId]);
+
+//   // ✅ NEW: fetch goal + createdAt from DB when modal opens
+//   useEffect(() => {
+//     const fetchExtraRecordData = async () => {
+//       if (!isOpen || !record?.id) return;
+
+//       try {
+//         const recordRef = doc(
+//           db,
+//           "Panels",
+//           "IEDGE-SYSTEM",
+//           "salesRecords",
+//           record.id,
+//         );
+//         const snap = await getDoc(recordRef);
+
+//         if (snap.exists()) {
+//           const data = snap.data();
+//           setExtraRecordData({
+//             goal: data.goal,
+//             createdAt: data.createdAt,
+//           });
+//         }
+//       } catch (error) {
+//         console.error("Error fetching extra record data:", error);
+//       }
+//     };
+
+//     fetchExtraRecordData();
+//   }, [isOpen, record?.id]);
 
 //   const handleCommentSubmit = async (e: React.FormEvent) => {
 //     e.preventDefault();
@@ -125,6 +157,12 @@
 
 //   // ✅ Safe record updatedAt formatting
 //   const recordUpdatedAt = toJsDate((record as any).updatedAt);
+
+//   // ✅ NEW: use fetched goal + createdAt, fallback to record if already present
+//   const recordGoal = extraRecordData.goal ?? (record as any).goal ?? "N/A";
+//   const recordCreatedAt = toJsDate(
+//     extraRecordData.createdAt ?? (record as any).createdAt,
+//   );
 
 //   return (
 //     <Dialog open={isOpen} onOpenChange={onClose}>
@@ -161,6 +199,15 @@
 //               <p>
 //                 <span className="font-medium">Status:</span>{" "}
 //                 {record.projectStatus}
+//               </p>
+//               <p>
+//                 <span className="font-medium">Description:</span> {recordGoal}
+//               </p>
+//               <p>
+//                 <span className="font-medium">Started:</span>{" "}
+//                 {recordCreatedAt
+//                   ? formatDistanceToNow(recordCreatedAt, { addSuffix: true })
+//                   : "N/A"}
 //               </p>
 //               <p>
 //                 <span className="font-medium">Last Updated:</span>{" "}
@@ -290,7 +337,6 @@
 //                     <div className="text-xs text-gray-500 border-t pt-2">
 //                       <p>Created by: {selectedMeeting.createdByName}</p>
 
-//                       {/* If selectedMeeting.date is also timestamp-like, format it safely */}
 //                       <p>
 //                         Date:{" "}
 //                         {(() => {
@@ -400,6 +446,7 @@ import React, { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { useAuth } from "@/contexts/AuthContext";
+import { createNotification } from "@/hooks/useNotifications";
 import {
   Dialog,
   DialogContent,
@@ -463,7 +510,8 @@ export function ViewDetailModal({
   onClose,
   record,
 }: ViewDetailModalProps) {
-  const { userProfile } = useAuth();
+  const { userProfile, currentUser } = useAuth();
+  const actorId = currentUser?.uid || userProfile?.id || "";
   const [comment, setComment] = useState("");
   const [selectedMeetingId, setSelectedMeetingId] = useState<string | null>(
     null,
@@ -526,11 +574,11 @@ export function ViewDetailModal({
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!comment.trim()) return;
 
     const timestamp = new Date();
     const userName = userProfile?.displayName || "Unknown User";
-
-    const newComment = { text: comment, timestamp, userName };
+    const actorId = currentUser?.uid || userProfile?.id || "";
 
     try {
       const recordDoc = doc(
@@ -541,10 +589,83 @@ export function ViewDetailModal({
         record.id,
       );
 
-      await updateDoc(recordDoc, {
-        comments: [...(record.comments || []), newComment],
+      const recordSnap = await getDoc(recordDoc);
+      if (!recordSnap.exists()) {
+        throw new Error("Record not found");
+      }
+
+      const latestRecord = recordSnap.data() as any;
+
+      const newComment = {
+        text: comment,
+        timestamp: timestamp.toISOString(),
+        userName,
+      };
+
+      const existingAdminParticipantIds = Array.isArray(
+        latestRecord.adminParticipantIds,
+      )
+        ? latestRecord.adminParticipantIds
+        : [];
+
+      const updatePayload: any = {
+        comments: [...(latestRecord.comments || []), newComment],
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      // If admin comments, register that admin on the record
+      if (userProfile?.role !== "sales") {
+        updatePayload.assignedAdminId = actorId;
+        updatePayload.assignedAdminName = userName;
+        updatePayload.adminParticipantIds = Array.from(
+          new Set([...existingAdminParticipantIds, actorId]),
+        );
+      }
+
+      await updateDoc(recordDoc, updatePayload);
+
+      if (userProfile?.role === "sales") {
+        const adminRecipientIds =
+          existingAdminParticipantIds.length > 0
+            ? Array.from(
+                new Set(
+                  existingAdminParticipantIds.filter(
+                    (id: string) => id && id !== actorId,
+                  ),
+                ),
+              )
+            : latestRecord.assignedAdminId &&
+                latestRecord.assignedAdminId !== actorId
+              ? [latestRecord.assignedAdminId]
+              : [];
+
+        for (const recipientId of adminRecipientIds) {
+          await createNotification({
+            recipientId,
+            type: "comment",
+            recordId: record.id,
+            message: `${userName} commented on Project ${latestRecord.projectName || record.projectName}: "${comment.substring(0, 50)}${comment.length > 50 ? "..." : ""}"`,
+            createdById: actorId,
+            createdByName: userName,
+          });
+        }
+      } else {
+        const salesRecipientId =
+          latestRecord.salesPersonId && latestRecord.salesPersonId !== actorId
+            ? latestRecord.salesPersonId
+            : undefined;
+
+        if (salesRecipientId) {
+          await createNotification({
+            recipientId: salesRecipientId,
+            type: "comment",
+            recordId: record.id,
+            message: `${userName} commented on Project ${latestRecord.projectName || record.projectName}: "${comment.substring(0, 50)}${comment.length > 50 ? "..." : ""}"`,
+            createdById: actorId,
+            createdByName: userName,
+          });
+        }
+      }
 
       setComment("");
       onClose();
@@ -552,7 +673,6 @@ export function ViewDetailModal({
       console.error("Error adding comment:", error);
     }
   };
-
   // ✅ Safe record updatedAt formatting
   const recordUpdatedAt = toJsDate((record as any).updatedAt);
 
@@ -572,7 +692,7 @@ export function ViewDetailModal({
           </DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-8">
+        <div className="space-y-4">
           {/* Basic Info */}
           <div className="bg-gray-50 p-5 rounded-xl shadow-sm border">
             <h3 className="text-lg font-semibold mb-3 text-gray-800">
@@ -598,9 +718,7 @@ export function ViewDetailModal({
                 <span className="font-medium">Status:</span>{" "}
                 {record.projectStatus}
               </p>
-              <p>
-                <span className="font-medium">Description:</span> {recordGoal}
-              </p>
+
               <p>
                 <span className="font-medium">Started:</span>{" "}
                 {recordCreatedAt
@@ -621,6 +739,7 @@ export function ViewDetailModal({
                   : "N/A"}
               </p>
             </div>
+            <span className="font-medium ">Description:</span> {recordGoal}
           </div>
 
           {/* Meeting Updates Section */}
@@ -687,7 +806,7 @@ export function ViewDetailModal({
                 {/* Selected Meeting Details */}
                 {selectedMeeting && (
                   <div className="border-t pt-4 space-y-4">
-                    {/* Meeting Comments */}
+                    {/* Comments for selected meeting */}
                     <div>
                       <Label className="text-sm font-medium text-gray-700 flex items-center gap-2">
                         <MessageSquare className="h-4 w-4" />
@@ -700,17 +819,19 @@ export function ViewDetailModal({
                             Loading comments...
                           </p>
                         ) : comments.length > 0 ? (
-                          comments.map((c) => {
-                            const createdAt = toJsDate((c as any).createdAt);
+                          comments.map((comment) => {
+                            const createdAt = toJsDate(
+                              (comment as any).createdAt,
+                            );
 
                             return (
                               <div
-                                key={c.id}
+                                key={comment.id}
                                 className="bg-white p-3 rounded border text-sm"
                               >
-                                <p className="text-gray-900">{c.text}</p>
+                                <p className="text-gray-900">{comment.text}</p>
                                 <div className="flex items-center gap-2 mt-1 text-xs text-gray-500">
-                                  <span>{c.authorName}</span>
+                                  <span>{comment.authorName}</span>
                                   <span>•</span>
                                   <span>
                                     {createdAt
@@ -731,7 +852,7 @@ export function ViewDetailModal({
                       </div>
                     </div>
 
-                    {/* Meeting Metadata */}
+                    {/* Selected Meeting Meta */}
                     <div className="text-xs text-gray-500 border-t pt-2">
                       <p>Created by: {selectedMeeting.createdByName}</p>
 
@@ -774,7 +895,7 @@ export function ViewDetailModal({
             )}
           </div>
 
-          {/* Comments Section */}
+          {/* Comments */}
           <div>
             <h3 className="text-lg font-semibold mb-3 text-gray-800">
               Comments
@@ -802,8 +923,8 @@ export function ViewDetailModal({
 
             <div className="space-y-3 mt-4">
               {record.comments?.length ? (
-                record.comments.map((c: any, index: number) => {
-                  const ts = toJsDate(c.timestamp);
+                record.comments.map((comment: any, index: number) => {
+                  const ts = toJsDate(comment.timestamp);
 
                   return (
                     <div
@@ -811,7 +932,7 @@ export function ViewDetailModal({
                       className="border rounded-lg p-3 bg-white shadow-sm"
                     >
                       <p className="text-sm">
-                        <strong>{c.userName}</strong>: {c.text}
+                        <strong>{comment.userName}</strong>: {comment.text}
                       </p>
                       <p className="text-xs text-gray-500 mt-1">
                         {ts ? ts.toLocaleString("en-GB") : "Pending..."}

@@ -1,12 +1,30 @@
-import { useState, useEffect } from 'react';
-import { collection, query, orderBy, onSnapshot, addDoc, serverTimestamp } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { MeetingUpdateComment, normalizeMeetingUpdateComment, InsertMeetingUpdateComment } from '@shared/schema';
-import { useAuth } from '@/contexts/AuthContext';
-import { createNotification } from '@/hooks/useNotifications';
+import { useState, useEffect } from "react";
+import {
+  collection,
+  query,
+  orderBy,
+  onSnapshot,
+  addDoc,
+  doc,
+  getDoc,
+  updateDoc,
+  serverTimestamp,
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import {
+  MeetingUpdateComment,
+  normalizeMeetingUpdateComment,
+  InsertMeetingUpdateComment,
+} from "@shared/schema";
+import { useAuth } from "@/contexts/AuthContext";
+import { createNotification } from "@/hooks/useNotifications";
 
-export function useMeetingUpdateComments(recordId?: string, meetingUpdateId?: string) {
-  const { userProfile } = useAuth();
+export function useMeetingUpdateComments(
+  recordId?: string,
+  meetingUpdateId?: string,
+) {
+  const { userProfile, currentUser } = useAuth();
+  const actorId = currentUser?.uid || userProfile?.id || "";
   const [comments, setComments] = useState<MeetingUpdateComment[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -18,69 +36,161 @@ export function useMeetingUpdateComments(recordId?: string, meetingUpdateId?: st
     }
 
     const q = query(
-      collection(db, `salesRecords/${recordId}/meetingUpdates/${meetingUpdateId}/comments`),
-      orderBy('createdAt', 'asc')
+      collection(
+        db,
+        "Panels",
+        "IEDGE-SYSTEM",
+        "salesRecords",
+        recordId,
+        "meetingUpdates",
+        meetingUpdateId,
+        "comments",
+      ),
+      orderBy("createdAt", "asc"),
     );
 
-    const unsubscribe = onSnapshot(q, (snapshot) => {
-      const commentList: MeetingUpdateComment[] = [];
-      snapshot.forEach((doc) => {
-        const data = doc.data();
-        commentList.push(normalizeMeetingUpdateComment({
-          id: doc.id,
-          ...data
-        }));
-      });
-      
-      setComments(commentList);
-      setLoading(false);
-    }, (error) => {
-      console.error('Error fetching meeting update comments:', error);
-      setLoading(false);
-    });
+    const unsubscribe = onSnapshot(
+      q,
+      (snapshot) => {
+        const commentList: MeetingUpdateComment[] = [];
+        snapshot.forEach((docSnap) => {
+          const data = docSnap.data();
+          commentList.push(
+            normalizeMeetingUpdateComment({
+              id: docSnap.id,
+              ...data,
+            }),
+          );
+        });
+
+        setComments(commentList);
+        setLoading(false);
+      },
+      (error) => {
+        console.error("Error fetching meeting update comments:", error);
+        setLoading(false);
+      },
+    );
 
     return () => unsubscribe();
   }, [recordId, meetingUpdateId]);
 
-  const addComment = async (text: string, recipientId?: string, explicitMeetingUpdateId?: string) => {
+  const addComment = async (
+    text: string,
+    _recipientId?: string,
+    explicitMeetingUpdateId?: string,
+    projectName?: string,
+  ) => {
     const targetMeetingUpdateId = explicitMeetingUpdateId || meetingUpdateId;
-    if (!recordId || !targetMeetingUpdateId || !userProfile || !text.trim()) return null;
+
+    if (!recordId || !targetMeetingUpdateId || !userProfile || !text.trim()) {
+      return null;
+    }
 
     try {
+      const recordDoc = doc(
+        db,
+        "Panels",
+        "IEDGE-SYSTEM",
+        "salesRecords",
+        recordId,
+      );
+
+      const recordSnap = await getDoc(recordDoc);
+      if (!recordSnap.exists()) {
+        throw new Error("Record not found");
+      }
+
+      const latestRecord = recordSnap.data() as any;
+
       const commentData: InsertMeetingUpdateComment = {
         meetingUpdateId: targetMeetingUpdateId,
         text: text.trim(),
-        authorId: userProfile.id,
+        authorId: actorId,
         authorName: userProfile.displayName,
-        authorRole: userProfile.role
+        authorRole: userProfile.role,
       };
 
       const commentDoc = await addDoc(
-        collection(db, `salesRecords/${recordId}/meetingUpdates/${targetMeetingUpdateId}/comments`),
+        collection(
+          db,
+          "Panels",
+          "IEDGE-SYSTEM",
+          "salesRecords",
+          recordId,
+          "meetingUpdates",
+          targetMeetingUpdateId,
+          "comments",
+        ),
         {
           ...commentData,
-          createdAt: serverTimestamp()
-        }
+          createdAt: serverTimestamp(),
+        },
       );
 
-      // Create notification for the other party (admin <-> sales person)
-      if (recipientId && recipientId !== userProfile.id) {
-        const message = `${userProfile.displayName} commented on meeting update: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}"`;
-        
-        await createNotification({
-          recipientId,
-          type: 'comment',
-          recordId,
-          meetingUpdateId: targetMeetingUpdateId,
-          message,
-          createdById: userProfile.id,
-          createdByName: userProfile.displayName
+      const existingAdminParticipantIds = Array.isArray(
+        latestRecord.adminParticipantIds,
+      )
+        ? latestRecord.adminParticipantIds
+        : [];
+
+      if (userProfile.role !== "sales") {
+        await updateDoc(recordDoc, {
+          assignedAdminId: actorId,
+          assignedAdminName: userProfile.displayName,
+          adminParticipantIds: Array.from(
+            new Set([...existingAdminParticipantIds, actorId]),
+          ),
+          updatedAt: serverTimestamp(),
         });
+
+        const salesRecipientId =
+          latestRecord.salesPersonId && latestRecord.salesPersonId !== actorId
+            ? latestRecord.salesPersonId
+            : undefined;
+
+        if (salesRecipientId) {
+          await createNotification({
+            recipientId: salesRecipientId,
+            type: "comment",
+            recordId,
+            meetingUpdateId: targetMeetingUpdateId,
+            message: `${userProfile.displayName} commented on Project ${projectName || latestRecord.projectName || "Untitled"}: "${text.substring(0, 50)}${text.length > 50 ? "..." : ""}"`,
+            createdById: actorId,
+            createdByName: userProfile.displayName,
+          });
+        }
+      } else {
+        const adminRecipientIds =
+          existingAdminParticipantIds.length > 0
+            ? Array.from(
+                new Set(
+                  existingAdminParticipantIds.filter(
+                    (id: string) => id && id !== actorId,
+                  ),
+                ),
+              )
+            : latestRecord.assignedAdminId &&
+                latestRecord.assignedAdminId !== actorId
+              ? [latestRecord.assignedAdminId]
+              : [];
+
+        for (const recipientId of adminRecipientIds) {
+          await createNotification({
+            recipientId,
+            type: "comment",
+            recordId,
+            meetingUpdateId: targetMeetingUpdateId,
+            message: `${userProfile.displayName} commented on Project ${projectName || latestRecord.projectName || "Untitled"}: "${text.substring(0, 50)}${text.length > 50 ? "..." : ""}"`,
+            createdById: actorId,
+            createdByName: userProfile.displayName,
+          });
+        }
       }
 
       return commentDoc.id;
     } catch (error) {
-      console.error('Error adding comment:', error);
+      console.error("Error adding comment:", error);
       throw error;
     }
   };
@@ -88,6 +198,6 @@ export function useMeetingUpdateComments(recordId?: string, meetingUpdateId?: st
   return {
     comments,
     loading,
-    addComment
+    addComment,
   };
 }

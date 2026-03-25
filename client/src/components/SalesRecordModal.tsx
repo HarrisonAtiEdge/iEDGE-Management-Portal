@@ -305,12 +305,7 @@
 //       return { ...s, nextFollowUpActionItems: arr };
 //     });
 
-//     const salesRef = collection(
-//   db,
-//   "Panels",
-//   "IEDGE-SYSTEM",
-//   "salesRecords"
-// );
+//   const salesRef = collection(db, "Panels", "IEDGE-SYSTEM", "salesRecords");
 
 //   // Prefill when editingRecord changes
 //   useEffect(() => {
@@ -429,26 +424,26 @@
 //       // }
 
 //       if (editingRecord) {
-//   const recordDoc = doc(
-//     db,
-//     "Panels",
-//     "IEDGE-SYSTEM",
-//     "salesRecords",
-//     editingRecord.id
-//   );
+//         const recordDoc = doc(
+//           db,
+//           "Panels",
+//           "IEDGE-SYSTEM",
+//           "salesRecords",
+//           editingRecord.id,
+//         );
 
-//   await updateDoc(recordDoc, {
-//     ...recordData,
-//     updatedAt: serverTimestamp(),
-//   });
-// } else {
-//   await addDoc(salesRef, {
-//     ...recordData,
-//     createdAt: serverTimestamp(),
-//     salesPersonId: userProfile.id,
-//     salesPersonName: userProfile.displayName,
-//   });
-// }
+//         await updateDoc(recordDoc, {
+//           ...recordData,
+//           updatedAt: serverTimestamp(),
+//         });
+//       } else {
+//         await addDoc(salesRef, {
+//           ...recordData,
+//           createdAt: serverTimestamp(),
+//           salesPersonId: userProfile.id,
+//           salesPersonName: userProfile.displayName,
+//         });
+//       }
 
 //       toast({
 //         title: "Success",
@@ -482,54 +477,54 @@
 //       userName,
 //     };
 
-//   //   try {
-//   //     const recordDoc = doc(db, "salesRecords", recordId);
-//   //     await updateDoc(recordDoc, {
-//   //       comments: [...(editingRecord?.comments || []), newComment],
-//   //       updatedAt: serverTimestamp(),
-//   //     });
-//   //     setComment("");
-//   //     toast({
-//   //       title: "Comment Added",
-//   //       description: "Your comment has been added successfully.",
-//   //     });
-//   //   } catch (err) {
-//   //     console.error("Error adding comment:", err);
-//   //     toast({
-//   //       title: "Error",
-//   //       description: "Failed to add comment.",
-//   //       variant: "destructive",
-//   //     });
-//   //   }
-//   // };
+//     //   try {
+//     //     const recordDoc = doc(db, "salesRecords", recordId);
+//     //     await updateDoc(recordDoc, {
+//     //       comments: [...(editingRecord?.comments || []), newComment],
+//     //       updatedAt: serverTimestamp(),
+//     //     });
+//     //     setComment("");
+//     //     toast({
+//     //       title: "Comment Added",
+//     //       description: "Your comment has been added successfully.",
+//     //     });
+//     //   } catch (err) {
+//     //     console.error("Error adding comment:", err);
+//     //     toast({
+//     //       title: "Error",
+//     //       description: "Failed to add comment.",
+//     //       variant: "destructive",
+//     //     });
+//     //   }
+//     // };
 
-//   try {
-//   const recordDoc = doc(
-//     db,
-//     "Panels",
-//     "IEDGE-SYSTEM",
-//     "salesRecords",
-//     recordId
-//   );
+//     try {
+//       const recordDoc = doc(
+//         db,
+//         "Panels",
+//         "IEDGE-SYSTEM",
+//         "salesRecords",
+//         recordId,
+//       );
 
-//   await updateDoc(recordDoc, {
-//     comments: [...(editingRecord?.comments || []), newComment],
-//     updatedAt: serverTimestamp(),
-//   });
+//       await updateDoc(recordDoc, {
+//         comments: [...(editingRecord?.comments || []), newComment],
+//         updatedAt: serverTimestamp(),
+//       });
 
-//   setComment("");
-//   toast({
-//     title: "Comment Added",
-//     description: "Your comment has been added successfully.",
-//   });
-// } catch (err) {
-//   console.error("Error adding comment:", err);
-//   toast({
-//     title: "Error",
-//     description: "Failed to add comment.",
-//     variant: "destructive",
-//   });
-// }
+//       setComment("");
+//       toast({
+//         title: "Comment Added",
+//         description: "Your comment has been added successfully.",
+//       });
+//     } catch (err) {
+//       console.error("Error adding comment:", err);
+//       toast({
+//         title: "Error",
+//         description: "Failed to add comment.",
+//         variant: "destructive",
+//       });
+//     }
 //   };
 
 //   // UI: wider, slightly more compact — ensures buttons aren't clipped
@@ -544,7 +539,7 @@
 
 //         <div className="flex h-[78vh] gap-6 text-sm">
 //           {/* Left form (scrollable) */}
-//           <div className="w-[340px] flex-shrink-0 border-r pr-4">
+//           <div className="w-[440px] flex-shrink-0 border-r pr-4">
 //             <form
 //               onSubmit={(e) => {
 //                 e.preventDefault();
@@ -552,7 +547,7 @@
 //               }}
 //               className="flex flex-col h-full"
 //             >
-//               <div className="overflow-y-auto pr-2 pb-4 space-y-4 max-h-[calc(78vh-72px)]">
+//               <div className="overflow-y-auto pr-2 pb-4 space-y-4 max-h-[calc(78vh-72px)] ">
 //                 <div className="space-y-3">
 //                   <h3
 //                     className="text-sm font-semibold"
@@ -664,7 +659,21 @@
 //                       />
 //                     </div>
 //                   </div>
-
+//                   <div>
+//                     <Label htmlFor="goal" className="text-xs font-medium">
+//                       Description
+//                     </Label>
+//                     <Textarea
+//                       id="goal"
+//                       value={formData.goal}
+//                       onChange={(e) =>
+//                         setFormData((s) => ({ ...s, goal: e.target.value }))
+//                       }
+//                       placeholder="Project Description..."
+//                       className="h-16 text-xs"
+//                       data-testid="textarea-goal"
+//                     />
+//                   </div>
 //                   <div className="grid grid-cols-2 gap-2">
 //                     <div>
 //                       <Label htmlFor="estimateNumber" className="text-xs">
@@ -777,22 +786,6 @@
 //                     <Label htmlFor="needHelp" className="text-xs">
 //                       Need Help
 //                     </Label>
-//                   </div>
-
-//                   <div>
-//                     <Label htmlFor="goal" className="text-xs font-medium">
-//                       Goal
-//                     </Label>
-//                     <Textarea
-//                       id="goal"
-//                       value={formData.goal}
-//                       onChange={(e) =>
-//                         setFormData((s) => ({ ...s, goal: e.target.value }))
-//                       }
-//                       placeholder="Enter your goal..."
-//                       className="h-16 text-xs"
-//                       data-testid="textarea-goal"
-//                     />
 //                   </div>
 
 //                   <div>
@@ -1405,6 +1398,7 @@ import { CalendarIcon, Plus, X, MessageSquare } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
 import { format, addDays, formatDistanceToNow } from "date-fns";
 import { useAuth } from "@/contexts/AuthContext";
+import { createNotification } from "@/hooks/useNotifications";
 import { useToast } from "@/hooks/use-toast";
 import { useMeetingUpdates } from "@/hooks/useMeetingUpdates";
 import { useMeetingUpdateComments } from "@/hooks/useMeetingUpdateComments";
@@ -1420,6 +1414,7 @@ import {
   addDoc,
   updateDoc,
   doc,
+  getDoc,
   serverTimestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -1473,7 +1468,8 @@ export function SalesRecordModal({
   editingRecord,
   clients,
 }: SalesRecordModalProps) {
-  const { userProfile } = useAuth();
+  const { userProfile, currentUser } = useAuth();
+  const actorId = currentUser?.uid || userProfile?.id || "";
   const { toast } = useToast();
 
   const [loading, setLoading] = useState(false);
@@ -1512,15 +1508,28 @@ export function SalesRecordModal({
     }
   }, [meetingUpdates, selectedMeetingId]);
 
-  // Helper: recipient id for notifications (keeps your original logic)
-  const getRecipientId = (): string | undefined => {
-    if (userProfile?.role === "sales") {
-      return editingRecord?.salesPersonId !== userProfile.id
-        ? editingRecord?.salesPersonId
-        : undefined;
-    } else {
-      return editingRecord?.salesPersonId;
+  // Notification helpers
+  const getAdminRecipientIds = (recordData: any): string[] => {
+    const participantIds = Array.isArray(recordData?.adminParticipantIds)
+      ? recordData.adminParticipantIds.filter(
+          (id: string) => !!id && id !== actorId,
+        )
+      : [];
+
+    if (participantIds.length > 0) {
+      return Array.from(new Set(participantIds));
     }
+
+    const fallbackAssignedAdminId = recordData?.assignedAdminId;
+    return fallbackAssignedAdminId && fallbackAssignedAdminId !== actorId
+      ? [fallbackAssignedAdminId]
+      : [];
+  };
+
+  const getSalesRecipientId = (recordData: any): string | undefined => {
+    return recordData?.salesPersonId && recordData.salesPersonId !== actorId
+      ? recordData.salesPersonId
+      : undefined;
   };
 
   // Meeting update helpers
@@ -1540,12 +1549,49 @@ export function SalesRecordModal({
       discussionNotes: newMeetingData.discussionNotes,
       actionItems: newMeetingData.actionItems.filter((item) => item.trim()),
       visit: newMeetingData.visit,
-      createdById: userProfile.id,
+      createdById: actorId,
       createdByName: userProfile.displayName,
     };
 
     try {
-      const meetingId = await createMeetingUpdate(newMeeting, getRecipientId());
+      const recordDoc = doc(
+        db,
+        "Panels",
+        "IEDGE-SYSTEM",
+        "salesRecords",
+        editingRecord.id,
+      );
+      const recordSnap = await getDoc(recordDoc);
+      const latestRecord = recordSnap.exists()
+        ? (recordSnap.data() as any)
+        : {};
+
+      if (userProfile.role !== "sales") {
+        const existingAdminParticipantIds = Array.isArray(
+          latestRecord.adminParticipantIds,
+        )
+          ? latestRecord.adminParticipantIds
+          : [];
+
+        await updateDoc(recordDoc, {
+          assignedAdminId: actorId,
+          assignedAdminName: userProfile.displayName,
+          adminParticipantIds: Array.from(
+            new Set([...existingAdminParticipantIds, actorId]),
+          ),
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      const meetingRecipientId =
+        userProfile.role === "sales"
+          ? getAdminRecipientIds(latestRecord)[0]
+          : getSalesRecipientId(latestRecord);
+
+      const meetingId = await createMeetingUpdate(
+        newMeeting,
+        meetingRecipientId,
+      );
       setSelectedMeetingId(meetingId);
       setShowNewMeetingForm(false);
       setNewMeetingDate(null);
@@ -1585,7 +1631,45 @@ export function SalesRecordModal({
     }
 
     try {
-      await addComment(meetingComment, getRecipientId(), selectedMeetingId);
+      const recordDoc = doc(
+        db,
+        "Panels",
+        "IEDGE-SYSTEM",
+        "salesRecords",
+        editingRecord.id,
+      );
+      const recordSnap = await getDoc(recordDoc);
+      const latestRecord = recordSnap.exists()
+        ? (recordSnap.data() as any)
+        : {};
+
+      if (userProfile.role !== "sales") {
+        const existingAdminParticipantIds = Array.isArray(
+          latestRecord.adminParticipantIds,
+        )
+          ? latestRecord.adminParticipantIds
+          : [];
+
+        await updateDoc(recordDoc, {
+          assignedAdminId: actorId,
+          assignedAdminName: userProfile.displayName,
+          adminParticipantIds: Array.from(
+            new Set([...existingAdminParticipantIds, actorId]),
+          ),
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      const meetingCommentRecipientId =
+        userProfile.role === "sales"
+          ? getAdminRecipientIds(latestRecord)[0]
+          : getSalesRecipientId(latestRecord);
+
+      await addComment(
+        meetingComment,
+        meetingCommentRecipientId,
+        selectedMeetingId,
+      );
       setMeetingComment("");
       toast({
         title: "Comment added",
@@ -1789,18 +1873,6 @@ export function SalesRecordModal({
         updatedAt: serverTimestamp(),
       };
 
-      // if (editingRecord) {
-      //   const recordDoc = doc(db, "salesRecords", editingRecord.id);
-      //   await updateDoc(recordDoc, recordData);
-      // } else {
-      //   await addDoc(collection(db, "salesRecords"), {
-      //     ...recordData,
-      //     createdAt: serverTimestamp(),
-      //     salesPersonId: userProfile.id,
-      //     salesPersonName: userProfile.displayName,
-      //   });
-      // }
-
       if (editingRecord) {
         const recordDoc = doc(
           db,
@@ -1810,16 +1882,75 @@ export function SalesRecordModal({
           editingRecord.id,
         );
 
-        await updateDoc(recordDoc, {
+        const existingSnap = await getDoc(recordDoc);
+        const existingData = existingSnap.exists()
+          ? (existingSnap.data() as any)
+          : {};
+
+        const existingAdminParticipantIds = Array.isArray(
+          existingData.adminParticipantIds,
+        )
+          ? existingData.adminParticipantIds
+          : [];
+
+        const finalRecordData: any = {
           ...recordData,
-          updatedAt: serverTimestamp(),
-        });
+          assignedAdminId:
+            userProfile.role !== "sales"
+              ? actorId
+              : existingData.assignedAdminId || null,
+          assignedAdminName:
+            userProfile.role !== "sales"
+              ? userProfile.displayName
+              : existingData.assignedAdminName || null,
+          adminParticipantIds:
+            userProfile.role !== "sales"
+              ? Array.from(new Set([...existingAdminParticipantIds, actorId]))
+              : existingAdminParticipantIds,
+        };
+
+        await updateDoc(recordDoc, finalRecordData);
+
+        if (userProfile.role === "sales") {
+          const adminRecipientIds = getAdminRecipientIds({
+            ...existingData,
+            ...finalRecordData,
+          });
+
+          for (const recipientId of adminRecipientIds) {
+            await createNotification({
+              recipientId,
+              type: "record_update",
+              recordId: editingRecord.id,
+              message: `${userProfile.displayName} updated Project ${formData.projectName}`,
+              createdById: actorId,
+              createdByName: userProfile.displayName,
+            });
+          }
+        } else {
+          const salesRecipientId = getSalesRecipientId(existingData);
+
+          if (salesRecipientId) {
+            await createNotification({
+              recipientId: salesRecipientId,
+              type: "record_update",
+              recordId: editingRecord.id,
+              message: `${userProfile.displayName} updated Project ${formData.projectName}`,
+              createdById: actorId,
+              createdByName: userProfile.displayName,
+            });
+          }
+        }
       } else {
         await addDoc(salesRef, {
           ...recordData,
           createdAt: serverTimestamp(),
-          salesPersonId: userProfile.id,
+          salesPersonId: actorId,
           salesPersonName: userProfile.displayName,
+          assignedAdminId: userProfile.role !== "sales" ? actorId : null,
+          assignedAdminName:
+            userProfile.role !== "sales" ? userProfile.displayName : null,
+          adminParticipantIds: userProfile.role !== "sales" ? [actorId] : [],
         });
       }
 
@@ -1849,32 +1980,6 @@ export function SalesRecordModal({
 
     const timestamp = new Date();
     const userName = userProfile?.displayName ?? "Unknown User";
-    const newComment = {
-      text: comment,
-      timestamp: timestamp.toISOString(),
-      userName,
-    };
-
-    //   try {
-    //     const recordDoc = doc(db, "salesRecords", recordId);
-    //     await updateDoc(recordDoc, {
-    //       comments: [...(editingRecord?.comments || []), newComment],
-    //       updatedAt: serverTimestamp(),
-    //     });
-    //     setComment("");
-    //     toast({
-    //       title: "Comment Added",
-    //       description: "Your comment has been added successfully.",
-    //     });
-    //   } catch (err) {
-    //     console.error("Error adding comment:", err);
-    //     toast({
-    //       title: "Error",
-    //       description: "Failed to add comment.",
-    //       variant: "destructive",
-    //     });
-    //   }
-    // };
 
     try {
       const recordDoc = doc(
@@ -1885,10 +1990,75 @@ export function SalesRecordModal({
         recordId,
       );
 
-      await updateDoc(recordDoc, {
-        comments: [...(editingRecord?.comments || []), newComment],
+      const recordSnap = await getDoc(recordDoc);
+      if (!recordSnap.exists()) {
+        throw new Error("Record not found");
+      }
+
+      const latestRecord = recordSnap.data() as any;
+      const existingAdminParticipantIds = Array.isArray(
+        latestRecord.adminParticipantIds,
+      )
+        ? latestRecord.adminParticipantIds
+        : [];
+
+      const newComment = {
+        text: comment,
+        timestamp: timestamp.toISOString(),
+        userName,
+      };
+
+      const updatePayload: any = {
+        comments: [...(latestRecord.comments || []), newComment],
         updatedAt: serverTimestamp(),
-      });
+      };
+
+      if (userProfile?.role !== "sales") {
+        updatePayload.assignedAdminId = actorId;
+        updatePayload.assignedAdminName = userName;
+        updatePayload.adminParticipantIds = Array.from(
+          new Set([...existingAdminParticipantIds, actorId]),
+        );
+      }
+
+      await updateDoc(recordDoc, updatePayload);
+
+      if (userProfile?.role === "sales") {
+        const adminRecipientIds = getAdminRecipientIds(latestRecord);
+
+        if (adminRecipientIds.length === 0) {
+          toast({
+            title: "No admin linked",
+            description:
+              "No admin has commented on this record yet, so there is no admin to notify.",
+            variant: "destructive",
+          });
+        }
+
+        for (const recipientId of adminRecipientIds) {
+          await createNotification({
+            recipientId,
+            type: "comment",
+            recordId,
+            message: `${userName} commented on Project ${latestRecord.projectName || editingRecord.projectName}: "${comment.substring(0, 50)}${comment.length > 50 ? "..." : ""}"`,
+            createdById: actorId,
+            createdByName: userName,
+          });
+        }
+      } else {
+        const salesRecipientId = getSalesRecipientId(latestRecord);
+
+        if (salesRecipientId) {
+          await createNotification({
+            recipientId: salesRecipientId,
+            type: "comment",
+            recordId,
+            message: `${userName} commented on Project ${latestRecord.projectName || editingRecord.projectName}: "${comment.substring(0, 50)}${comment.length > 50 ? "..." : ""}"`,
+            createdById: actorId,
+            createdByName: userName,
+          });
+        }
+      }
 
       setComment("");
       toast({
@@ -1987,6 +2157,7 @@ export function SalesRecordModal({
                     <Input
                       id="contactMobile"
                       type="tel"
+                      required
                       value={formData.contactMobile}
                       onChange={(e) =>
                         setFormData((s) => ({
@@ -2043,6 +2214,7 @@ export function SalesRecordModal({
                     </Label>
                     <Textarea
                       id="goal"
+                      required
                       value={formData.goal}
                       onChange={(e) =>
                         setFormData((s) => ({ ...s, goal: e.target.value }))
