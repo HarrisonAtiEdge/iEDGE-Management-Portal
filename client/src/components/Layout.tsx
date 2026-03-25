@@ -30,7 +30,6 @@ import {
   PlaneTakeoff,
   CreditCard,
   HandCoins,
-  WalletCards,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -58,7 +57,6 @@ const LUCIDE_ICONS: Record<string, LucideIcon> = {
   PlaneTakeoff,
   CreditCard,
   HandCoins,
-  WalletCards,
 };
 
 // ✅ Backward-compat: if Firestore still has old FontAwesome strings, map them to Lucide
@@ -104,7 +102,6 @@ const AVAILABLE_TABS = [
   { path: "/usertravel", label: "Book Hotel", icon: "BedDouble" },
   { path: "/booking", label: "Bookings", icon: "Hotel" },
   { path: "/invoice-estimate", label: "Invoice Estimate", icon: "ScrollText" },
-  { path: "/accounts", label: "Account ledger", icon: "WalletCards" },
 ];
 
 interface SidebarItem {
@@ -283,7 +280,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
         <nav className="space-y-2">
           {sidebarItems.map((item) => {
-            const showDot = unreadCount > 0 && item.path === "/booking";
+            const showDot =
+              unreadCount > 0 && item.path === "/sales-management";
             const Icon = getSidebarIcon(item.icon);
 
             return (
