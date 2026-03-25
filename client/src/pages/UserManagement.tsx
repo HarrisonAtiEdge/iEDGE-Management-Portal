@@ -60,22 +60,23 @@ import {
 // Sidebar / Static Tabs
 // --------------------
 const AVAILABLE_TABS = [
-  { path: "/dashboard", label: "Dashboard", icon: LayoutDashboard },
-  { path: "/sales-dashboard", label: "Sales Dashboard", icon: LineChart },
-  { path: "/sales", label: "Sales" },
-  { path: "/clients", label: "Clients" },
-  { path: "/records", label: "Records" },
-  { path: "/online-accounts", label: "Online Accounts" },
-  { path: "/expenses", label: "Expense Sheets" },
-  { path: "/invoices", label: "Budget Request " },
-  { path: "/finance", label: "Finance" },
-  { path: "/operation", label: "Operation" },
-  { path: "/estimate", label: "Estimates" },
-  { path: "/sales-management", label: "Sales Management" },
-  { path: "/travel/hotel", label: "Travel" },
-  { path: "/invoice-estimate", label: "Invoice Estimiates" },
-  { path: "/usertravel", label: "Book Hotel" },
-  { path: "/booking", label: "Bookings" },
+  { path: "/dashboard", label: "Dashboard", icon: "LayoutDashboard" },
+  { path: "/sales-dashboard", label: "Sales Dashboard", icon: "LineChart" },
+  { path: "/sales", label: "Sales", icon: "BarChart3" },
+  { path: "/clients", label: "Clients", icon: "Users" },
+  { path: "/records", label: "Records", icon: "Archive" },
+  { path: "/online-accounts", label: "Online Accounts", icon: "CreditCard" },
+  { path: "/expenses", label: "Expense Sheets", icon: "Receipt" },
+  { path: "/invoices", label: "Budget Request", icon: "HandCoins" },
+  { path: "/finance", label: "Finance", icon: "Receipt" },
+  { path: "/operation", label: "Operation", icon: "Settings" },
+  { path: "/estimate", label: "Estimates", icon: "Scroll" },
+  { path: "/sales-management", label: "Sales Management", icon: "PieChart" },
+  { path: "/travel/hotel", label: "Travel", icon: "PlaneTakeoff" },
+  { path: "/invoice-estimate", label: "Invoice Estimates", icon: "ScrollText" },
+  { path: "/usertravel", label: "Book Hotel", icon: "BedDouble" },
+  { path: "/booking", label: "Bookings", icon: "Hotel" },
+  { path: "/accounts", label: "Account ledger", icon: "WalletCards" },
 ];
 
 const PANEL_ID = "IEDGE-SYSTEM";
@@ -88,7 +89,7 @@ interface Role {
   name: string;
   description?: string;
   users?: number;
-  items: { path: string; label: string }[] | string[];
+  items: { path: string; label: string; icon?: string }[] | string[];
   usersList?: User[];
 }
 
@@ -517,7 +518,7 @@ export default function UserManagement() {
 
       const itemsToSave = AVAILABLE_TABS.filter((t) =>
         selectedTabs.includes(t.path),
-      ).map((t) => ({ path: t.path, label: t.label }));
+      ).map((t) => ({ path: t.path, label: t.label, icon: t.icon }));
 
       await setDoc(
         roleRef,

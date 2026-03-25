@@ -30,11 +30,12 @@ import {
   PlaneTakeoff,
   CreditCard,
   HandCoins,
+  WalletCards,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useNotifications } from "@/hooks/useNotifications";
-
+import { ThemeToggle } from "@/components/theme-toggle";
 const PANEL_ID = "IEDGE-SYSTEM";
 
 // ✅ Lucide icon registry (use these keys in Firestore: icon: "LayoutDashboard", etc.)
@@ -57,6 +58,7 @@ const LUCIDE_ICONS: Record<string, LucideIcon> = {
   PlaneTakeoff,
   CreditCard,
   HandCoins,
+  WalletCards,
 };
 
 // ✅ Backward-compat: if Firestore still has old FontAwesome strings, map them to Lucide
@@ -102,6 +104,7 @@ const AVAILABLE_TABS = [
   { path: "/usertravel", label: "Book Hotel", icon: "BedDouble" },
   { path: "/booking", label: "Bookings", icon: "Hotel" },
   { path: "/invoice-estimate", label: "Invoice Estimate", icon: "ScrollText" },
+  { path: "/accounts", label: "Account ledger", icon: "WalletCards" },
 ];
 
 interface SidebarItem {
@@ -234,10 +237,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     sidebarItems.find((i) => i.path === location)?.label || "Dashboard";
 
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-background text-foreground">
       {/* Sidebar */}
       <aside
-        className={`bg-white shadow-md flex flex-col transition-all duration-200 ${
+        className={`bg-card border-r border-border shadow-sm flex flex-col transition-all duration-200 ${
           effectiveCollapsed ? "w-16 px-2 py-4" : "w-64 p-4"
         }`}
         onMouseEnter={() => {
@@ -253,7 +256,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           }`}
         >
           {effectiveCollapsed ? (
-            <div className="h-9 w-9 rounded-md pl-3 flex items-center    font-bold"></div>
+            <div className="h-9 w-9 rounded-md pl-3 flex items-center font-bold"></div>
           ) : (
             <h2 className="text-sm font-bold pl-2">iEDGE Management</h2>
           )}
@@ -310,7 +313,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                           </span>
                         )}
 
-                        {/* Dot when collapsed */}
                         {showDot && effectiveCollapsed && (
                           <span className="absolute -top-1 -right-1 flex h-2.5 w-2.5">
                             <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
@@ -322,7 +324,6 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                       {!effectiveCollapsed && <span>{item.label}</span>}
                     </div>
 
-                    {/* Dot when expanded */}
                     {showDot && !effectiveCollapsed && (
                       <span className="relative flex h-2.5 w-2.5">
                         <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500 opacity-75" />
@@ -340,13 +341,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       {/* Main content */}
       <main className="flex-1 flex flex-col">
         {/* Header */}
-        <header className="flex items-center justify-between px-6 py-4 border-b bg-white">
+        <header className="flex items-center justify-between px-6 py-4 border-b border-border bg-card">
           <h1 className="text-lg font-semibold">{pageTitle}</h1>
           <div className="flex items-center gap-4">
+            <ThemeToggle />
             <NotificationBell />
             <div className="flex items-center gap-2">
               <div className="flex items-center space-x-2 bg-secondary px-3 py-3 rounded-full">
-                <User className="h-4 w-4 text-slate-600" />
+                <User className="h-4 w-4 text-muted-foreground" />
                 <span className="text-sm font-medium text-secondary-foreground">
                   {userName}
                 </span>
@@ -357,7 +359,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
               <Button
                 variant="outline"
-                className="text-slate-600 hover:text-slate-900"
+                className="gap-2"
                 onClick={handleLogout}
               >
                 Logout

@@ -132,12 +132,10 @@ export default function EstimateInvoiceForm({
 
   const companyInvoiceConfig: Record<string, { prefix: string; key: string }> =
     {
-      iEDGE: { prefix: "S", key: "iedge" },
-      "iEDGE - Digital & Creative": { prefix: "IDC", key: "iedge_digital" },
-      "iEDGE - Events & Activations": {
-        prefix: "S",
-        key: "iedge_events",
-      },
+      iEDGE: { prefix: "S", key: "iedge_sales" },
+      "iEDGE - Digital & Creative": { prefix: "S", key: "iedge_sales" },
+      "iEDGE - Events & Activations": { prefix: "S", key: "iedge_sales" },
+
       "iEDGE - Health Sciences": { prefix: "IHS", key: "iedge_health" },
       "iEDGE - International Education": {
         prefix: "IIE",
@@ -145,6 +143,7 @@ export default function EstimateInvoiceForm({
       },
       "iEDGE - Trading": { prefix: "ITR", key: "iedge_trade" },
       "iEDGE - Travel & Tours": { prefix: "S-T", key: "iedge_travel" },
+
       Catapult: { prefix: "CAT", key: "catapult" },
       iConsultant: { prefix: "IC", key: "iconsultant" },
       "Let's Save Green": { prefix: "LSG", key: "lsg" },
@@ -713,11 +712,76 @@ export default function EstimateInvoiceForm({
           companyConfig.key,
         );
 
-        const counterSnap = await tx.get(counterRef);
+        let current = 0;
 
-        const current = Number(
-          counterSnap.exists() ? counterSnap.data()?.current : 0,
-        );
+        // One-time migration for shared S counter
+        if (companyConfig.key === "iedge_sales") {
+          const sharedCounterSnap = await tx.get(counterRef);
+
+          if (sharedCounterSnap.exists()) {
+            current = Number(sharedCounterSnap.data()?.current || 0);
+          } else {
+            const legacyIedgeRef = doc(
+              db,
+              "Panels",
+              PANEL_ID,
+              "counters",
+              "estimateInvoices",
+              "companies",
+              "iedge",
+            );
+
+            const legacyDigitalRef = doc(
+              db,
+              "Panels",
+              PANEL_ID,
+              "counters",
+              "estimateInvoices",
+              "companies",
+              "iedge_digital",
+            );
+
+            const legacyEventsRef = doc(
+              db,
+              "Panels",
+              PANEL_ID,
+              "counters",
+              "estimateInvoices",
+              "companies",
+              "iedge_events",
+            );
+
+            const legacyIedgeSnap = await tx.get(legacyIedgeRef);
+            const legacyDigitalSnap = await tx.get(legacyDigitalRef);
+            const legacyEventsSnap = await tx.get(legacyEventsRef);
+
+            const legacyIedgeCurrent = Number(
+              legacyIedgeSnap.exists() ? legacyIedgeSnap.data()?.current : 0,
+            );
+
+            const legacyDigitalCurrent = Number(
+              legacyDigitalSnap.exists()
+                ? legacyDigitalSnap.data()?.current
+                : 0,
+            );
+
+            const legacyEventsCurrent = Number(
+              legacyEventsSnap.exists() ? legacyEventsSnap.data()?.current : 0,
+            );
+
+            // Start the new shared counter from the highest old counter
+            current = Math.max(
+              legacyIedgeCurrent,
+              legacyDigitalCurrent,
+              legacyEventsCurrent,
+            );
+          }
+        } else {
+          const counterSnap = await tx.get(counterRef);
+          current = Number(
+            counterSnap.exists() ? counterSnap.data()?.current : 0,
+          );
+        }
 
         const nextNumber = current + 1;
 
