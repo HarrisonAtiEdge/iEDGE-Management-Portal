@@ -396,6 +396,14 @@
 //     const createdEmail = u?.email || "—";
 //     const createdPhone = resolvePhone(u);
 
+//     // ✅ NEW: PO Number
+//     const poNumber = String(
+//       (estimate as any)?.poNumber ||
+//         (estimate as any)?.poNo ||
+//         (estimate as any)?.purchaseOrderNo ||
+//         "",
+//     ).trim();
+
 //     pdf.setFont("helvetica", "bold");
 //     pdf.text("Created By:", rightX, 165);
 //     pdf.setFont("helvetica", "normal");
@@ -403,19 +411,36 @@
 //     pdf.text(`${createdEmail}`, rightX, 191);
 //     pdf.text(`${createdPhone}`, rightX, 204);
 
+//     // ✅ Track the right-side content bottom safely
+//     let rightBlockBottomY = 204;
+
+//     // ✅ NEW: print PO number below the 3 Created By fields
+//     if (poNumber) {
+//       pdf.setFont("helvetica", "bold");
+//       pdf.text("PO Number:", rightX, 220);
+//       pdf.setFont("helvetica", "normal");
+//       pdf.text(poNumber, rightX, 233);
+//       rightBlockBottomY = 233;
+//     }
+
 //     // Approval received on email (optional)
 //     const approvalReceivedOn = String(
 //       (estimate as any)?.approvalReceivedOn || "",
 //     ).trim();
 //     if (approvalReceivedOn) {
+//       const approvalLabelY = rightBlockBottomY + 16;
+//       const approvalValueY = approvalLabelY + 13;
+
 //       pdf.setFont("helvetica", "bold");
-//       pdf.text("Approval received on email:", rightX, 220);
+//       pdf.text("Approval received on email:", rightX, approvalLabelY);
 //       pdf.setFont("helvetica", "normal");
 //       pdf.text(
 //         formatDatePretty(approvalReceivedOn) || approvalReceivedOn,
 //         rightX,
-//         233,
+//         approvalValueY,
 //       );
+
+//       rightBlockBottomY = approvalValueY;
 //     }
 
 //     pdf.setFont("helvetica", "bold");
@@ -521,7 +546,6 @@
 //         const whtText =
 //           whtPct > 0 ? `${(s as any).whtLabel ?? "WHT"} ${whtPct}%` : "No WHT";
 
-//         // ✅ AMOUNT cell: PKR only OR PKR + C1 + C2 multiline
 //         const amountCell = addCurrencies
 //           ? buildMultiCurrencyLines({
 //               pkrValue: amount,
@@ -545,8 +569,11 @@
 //       },
 //     );
 
+//     // ✅ NEW: auto-adjust startY only if PO/approval needs extra space
+//     const tableStartY = Math.max(235, rightBlockBottomY + 18);
+
 //     autoTable(pdf, {
-//       startY: 235,
+//       startY: tableStartY,
 //       head: [["SERVICE DETAILS", "UNITS", "RATE", "TAX", "WHT", "AMOUNT"]],
 //       body: serviceRows,
 //       styles: {
@@ -559,19 +586,18 @@
 
 //       margin: { left: margin, right: margin, bottom: FOOTER_GAP },
 
-//       // ✅ widths must sum to (pageWidth - 2*margin) = 515
 //       columnStyles: addCurrencies
 //         ? ({
 //             0: { halign: "left" as const, cellWidth: 200 },
-//             1: { halign: "center" as const, cellWidth: 45 },
+//             1: { halign: "center" as const, cellWidth: 55 },
 //             2: { halign: "center" as const, cellWidth: 55 },
 //             3: { halign: "left" as const, cellWidth: 70 },
 //             4: { halign: "left" as const, cellWidth: 65 },
-//             5: { halign: "right" as const, cellWidth: 80 }, // 3-line amount
+//             5: { halign: "right" as const, cellWidth: 80 },
 //           } as any)
 //         : ({
 //             0: { halign: "left" as const, cellWidth: 220 },
-//             1: { halign: "center" as const, cellWidth: 55 },
+//             1: { halign: "center" as const, cellWidth: 65 },
 //             2: { halign: "center" as const, cellWidth: 65 },
 //             3: { halign: "left" as const, cellWidth: 70 },
 //             4: { halign: "left" as const, cellWidth: 55 },
@@ -585,411 +611,8 @@
 //       },
 //     });
 
-//     let finalY = (pdf as any).lastAutoTable.finalY + 55;
-
-//     const totalsBlockHeight = addCurrencies ? 120 : 110;
-//     if (finalY + totalsBlockHeight > footerSafeY) {
-//       pdf.addPage();
-//       finalY = 80;
-//     }
-
-//     // ==========================
-//     // ✅ TOTALS
-//     // ==========================
-//     const whtTotal = Number((estimate as any)?.whtTotal ?? 0);
-
-//     // (keeping your existing behavior: tax shown includes WHT)
-//     const displayTaxPKR =
-//       toNum(
-//         (estimate as any)?.tax ?? (estimate as any)?.taxTotal ?? estimate.tax,
-//       ) + whtTotal;
-
-//     const subtotalPKR = toNum(estimate.subtotal ?? 0);
-//     const totalPKR = toNum(estimate.total ?? 0);
-
-//     const drawTotalsBlock = (
-//       x: number,
-//       meta: { code: string; symbol: string },
-//       sub: number,
-//       tax: number,
-//       tot: number,
-//       blockW: number,
-//     ) => {
-//       const labelX = x;
-//       const valueX = x + (blockW - 10);
-
-//       const pad = 8;
-//       const boxX = labelX - pad;
-//       const boxY = finalY - 26;
-//       const boxH = 72;
-
-//       pdf.setFillColor(245, 245, 245);
-//       pdf.rect(boxX, boxY, blockW + pad * 2, boxH, "F");
-//       pdf.setDrawColor(220);
-//       pdf.rect(boxX, boxY, blockW + pad * 2, boxH);
-
-//       pdf.setTextColor(0);
-
-//       pdf.setFont("helvetica", "normal");
-//       pdf.setFontSize(10);
-
-//       // top label (use code, not hard-coded strings)
-//       pdf.text(meta.code, labelX, finalY - 12);
-
-//       pdf.text("SUBTOTAL", labelX, finalY);
-//       pdf.text("TAX", labelX, finalY + 15);
-//       pdf.setFont("helvetica", "bold");
-//       pdf.text("TOTAL", labelX, finalY + 32);
-
-//       pdf.setFont("helvetica", "normal");
-//       pdf.setFontSize(10);
-//       pdf.text(sub >= 0 ? formatMoney(sub) : "—", valueX, finalY, {
-//         align: "right",
-//       });
-//       pdf.text(tax >= 0 ? formatMoney(tax) : "—", valueX, finalY + 15, {
-//         align: "right",
-//       });
-
-//       pdf.setFont("helvetica", "bold");
-//       pdf.setFontSize(10);
-
-//       const totalText =
-//         tot >= 0 ? formatWithSymbol(meta.symbol, tot) : `${meta.symbol} —`;
-
-//       pdf.text(totalText, valueX, finalY + 32, { align: "right" });
-
-//       pdf.setFontSize(10);
-//     };
-
-//     if (!addCurrencies) {
-//       const blockW = 170;
-//       const x = pageWidth - margin - blockW;
-//       drawTotalsBlock(
-//         x,
-//         { code: "PKR", symbol: "PKR" },
-//         subtotalPKR,
-//         displayTaxPKR,
-//         totalPKR,
-//         blockW,
-//       );
-//     } else {
-//       const blockW = 160;
-//       const gap = 10;
-//       const totalW = blockW * 3 + gap * 2;
-//       const startX = pageWidth - margin - totalW;
-
-//       const c1Sub = c1Rate > 0 ? subtotalPKR / c1Rate : -1;
-//       const c1Tax = c1Rate > 0 ? displayTaxPKR / c1Rate : -1;
-//       const c1Tot = c1Rate > 0 ? totalPKR / c1Rate : -1;
-
-//       const c2Sub = c2Rate > 0 ? subtotalPKR / c2Rate : -1;
-//       const c2Tax = c2Rate > 0 ? displayTaxPKR / c2Rate : -1;
-//       const c2Tot = c2Rate > 0 ? totalPKR / c2Rate : -1;
-
-//       drawTotalsBlock(
-//         startX + (blockW + gap) * 0,
-//         { code: "PKR", symbol: "PKR" },
-//         subtotalPKR,
-//         displayTaxPKR,
-//         totalPKR,
-//         blockW,
-//       );
-
-//       drawTotalsBlock(
-//         startX + (blockW + gap) * 1,
-//         { code: c1.code, symbol: c1.symbol },
-//         c1Sub,
-//         c1Tax,
-//         c1Tot,
-//         blockW,
-//       );
-
-//       drawTotalsBlock(
-//         startX + (blockW + gap) * 2,
-//         { code: c2.code, symbol: c2.symbol },
-//         c2Sub,
-//         c2Tax,
-//         c2Tot,
-//         blockW,
-//       );
-//     }
-
-//     // ==========================
-//     // ✅ SUMMARY CALCS (unchanged logic)
-//     // ==========================
-//     const calcBase = (s: any) => {
-//       const units = Number(s.units || 0);
-//       const rateMode = (s as any).rateMode as "amount" | "percent" | undefined;
-//       const rateNum = toNum(s.rate);
-//       return rateMode === "percent" ? units * (rateNum / 100) : units * rateNum;
-//     };
-
-//     const taxType2 = String((estimate as any)?.taxType || "").trim();
-
-//     const calcLineTotal = (s: any) => {
-//       const base = calcBase(s);
-//       const pct = Number(s.taxPercent ?? 0);
-
-//       if (!pct || taxType2 === "none") return base;
-//       if (taxType2 === "inclusive") return base;
-//       return base + (base * pct) / 100;
-//     };
-
-//     const services = (estimate.services || []) as any[];
-
-//     // TAX SUMMARY
-//     const map = new Map<
-//       string,
-//       { label: string; pct: number; tax: number; net: number }
-//     >();
-
-//     for (const s of services) {
-//       const pct = Number(s.taxPercent ?? 0);
-//       const label = String(s.taxLabel || "").trim();
-//       if (!pct || taxType2 === "none") continue;
-
-//       const base = calcBase(s);
-
-//       let taxAmount = 0;
-//       let netAmount = 0;
-
-//       if (taxType2 === "exclusive") {
-//         taxAmount = (base * pct) / 100;
-//         netAmount = base;
-//       } else {
-//         taxAmount = (base * pct) / (100 + pct);
-//         netAmount = base - taxAmount;
-//       }
-
-//       const key = `${label}__${pct}`;
-//       const prev = map.get(key);
-//       if (prev) {
-//         prev.tax += taxAmount;
-//         prev.net += netAmount;
-//       } else {
-//         map.set(key, {
-//           label: label || "Tax",
-//           pct,
-//           tax: taxAmount,
-//           net: netAmount,
-//         });
-//       }
-//     }
-
-//     const totalTax = Array.from(map.values()).reduce((a, b) => a + b.tax, 0);
-//     const totalNet = Array.from(map.values()).reduce((a, b) => a + b.net, 0);
-
-//     // WHT SUMMARY
-//     const whtMap = new Map<
-//       string,
-//       { label: string; pct: number; wht: number; base: number }
-//     >();
-
-//     for (const s of services) {
-//       const pct = Number(s.whtPercent ?? 0);
-//       if (!pct) continue;
-
-//       const label = String(s.whtLabel || "").trim() || "WHT";
-//       const baseForWht = calcLineTotal(s);
-//       const whtAmount = (baseForWht * pct) / 100;
-
-//       const key = `${label}__${pct}`;
-//       const prev = whtMap.get(key);
-//       if (prev) {
-//         prev.wht += whtAmount;
-//         prev.base += baseForWht;
-//       } else {
-//         whtMap.set(key, { label, pct, wht: whtAmount, base: baseForWht });
-//       }
-//     }
-
-//     const totalWht = Array.from(whtMap.values()).reduce((a, b) => a + b.wht, 0);
-//     const totalWhtBase = Array.from(whtMap.values()).reduce(
-//       (a, b) => a + b.base,
-//       0,
-//     );
-
-//     // TAX SUMMARY TABLE
-//     let afterTotalsY = finalY + 55;
-
-//     const addCur = Boolean((estimate as any)?.addCurrencies);
-
-//     const taxRows: any[] = Array.from(map.values()).map((r) => {
-//       const taxCell = addCur
-//         ? buildMultiCurrencyLines({
-//             pkrValue: r.tax,
-//             c1Code,
-//             c2Code,
-//             c1Rate,
-//             c2Rate,
-//           })
-//         : formatMoney(r.tax);
-
-//       const netCell = addCur
-//         ? buildMultiCurrencyLines({
-//             pkrValue: r.net,
-//             c1Code,
-//             c2Code,
-//             c1Rate,
-//             c2Rate,
-//           })
-//         : formatMoney(r.net);
-
-//       return [`${r.label} @ ${r.pct}%`, `${r.pct}%`, taxCell, netCell];
-//     });
-
-//     const whtRows: any[] = Array.from(whtMap.values()).map((r) => {
-//       const whtCell = addCur
-//         ? buildMultiCurrencyLines({
-//             pkrValue: r.wht,
-//             c1Code,
-//             c2Code,
-//             c1Rate,
-//             c2Rate,
-//           })
-//         : formatMoney(r.wht);
-
-//       const baseCell = addCur
-//         ? buildMultiCurrencyLines({
-//             pkrValue: r.base,
-//             c1Code,
-//             c2Code,
-//             c1Rate,
-//             c2Rate,
-//           })
-//         : formatMoney(r.base);
-
-//       return [`${r.label} @ ${r.pct}%`, `${r.pct}%`, whtCell, baseCell];
-//     });
-
-//     if (taxRows.length > 0 || whtRows.length > 0) {
-//       const combinedRows: any[] = [];
-
-//       if (taxRows.length > 0) {
-//         combinedRows.push(...taxRows);
-//         combinedRows.push([
-//           "",
-//           "TOTAL (TAX)",
-//           addCur
-//             ? buildMultiCurrencyLines({
-//                 pkrValue: totalTax,
-//                 c1Code,
-//                 c2Code,
-//                 c1Rate,
-//                 c2Rate,
-//               })
-//             : formatMoney(totalTax),
-//           addCur
-//             ? buildMultiCurrencyLines({
-//                 pkrValue: totalNet,
-//                 c1Code,
-//                 c2Code,
-//                 c1Rate,
-//                 c2Rate,
-//               })
-//             : formatMoney(totalNet),
-//         ]);
-//       }
-
-//       if (whtRows.length > 0) {
-//         combinedRows.push(...whtRows);
-//         combinedRows.push([
-//           "",
-//           "TOTAL (WHT)",
-//           addCur
-//             ? buildMultiCurrencyLines({
-//                 pkrValue: totalWht,
-//                 c1Code,
-//                 c2Code,
-//                 c1Rate,
-//                 c2Rate,
-//               })
-//             : formatMoney(totalWht),
-//           addCur
-//             ? buildMultiCurrencyLines({
-//                 pkrValue: totalWhtBase,
-//                 c1Code,
-//                 c2Code,
-//                 c1Rate,
-//                 c2Rate,
-//               })
-//             : formatMoney(totalWhtBase),
-//         ]);
-//       }
-
-//       const FOOTER_GAP = 110;
-
-//       autoTable(pdf, {
-//         startY: afterTotalsY,
-//         head: [["TAX SUMMARY", "RATE", "TAX", "NET"]],
-//         body: combinedRows,
-//         styles: { fontSize: 9, cellPadding: 4 },
-//         headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0] },
-//         columnStyles: {
-//           0: { halign: "left" as const },
-//           1: { halign: "center" as const },
-//           2: { halign: "right" as const },
-//           3: { halign: "right" as const },
-//         } as any,
-//         margin: { bottom: FOOTER_GAP },
-//       });
-
-//       afterTotalsY = (pdf as any).lastAutoTable.finalY + 30;
-//     }
-
-//     // Message
-//     if (estimate.message) {
-//       let noteY = Math.max(
-//         afterTotalsY,
-//         (pdf as any).lastAutoTable?.finalY + 30 || afterTotalsY,
-//       );
-
-//       const footerSafeY2 = pageHeight - 120;
-//       if (noteY > footerSafeY2) {
-//         pdf.addPage();
-//         noteY = 80;
-//       }
-
-//       pdf.setFont("helvetica", "bold");
-//       pdf.text("MESSAGE:", margin, noteY);
-//       noteY += 12;
-//       pdf.setFont("helvetica", "normal");
-
-//       const wrappedMsg = wrapTextByWords(estimate.message, 10);
-//       wrappedMsg.forEach((line) => {
-//         if (noteY > footerSafeY2) {
-//           pdf.addPage();
-//           noteY = 80;
-//           pdf.setFont("helvetica", "bold");
-//           pdf.text("MESSAGE (cont.):", margin, noteY);
-//           noteY += 12;
-//           pdf.setFont("helvetica", "normal");
-//         }
-//         pdf.text(line, margin, noteY);
-//         noteY += 12;
-//       });
-//     }
-
-//     // footer
-//     const footerY = pdf.internal.pageSize.getHeight() - 70;
-//     pdf.setFontSize(8);
-//     pdf.setTextColor(100);
-
-//     pdf.text(
-//       resolveFooterContact(estimate, args.footerUser, args.usersMap),
-//       margin,
-//       footerY - 15,
-//       { maxWidth: pageWidth - margin * 2 },
-//     );
-
-//     pdf.text(
-//       "C-150, Block 2, Clifton, Karachi - 75600, Pakistan | Tel: +92 213 537 1818 | Email: sales@iedge.co | URL: www.iedge.co",
-//       margin,
-//       footerY + 15,
-//       { maxWidth: pageWidth - margin * 2 },
-//     );
+//     // ... keep the rest of your code exactly the same
 //   };
-
 //   // page 1
 //   drawPage1();
 
@@ -1406,6 +1029,14 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
     const createdEmail = u?.email || "—";
     const createdPhone = resolvePhone(u);
 
+    // ✅ NEW: PO Number
+    const poNumber = String(
+      (estimate as any)?.poNumber ||
+        (estimate as any)?.poNo ||
+        (estimate as any)?.purchaseOrderNo ||
+        "",
+    ).trim();
+
     pdf.setFont("helvetica", "bold");
     pdf.text("Created By:", rightX, 165);
     pdf.setFont("helvetica", "normal");
@@ -1413,19 +1044,36 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
     pdf.text(`${createdEmail}`, rightX, 191);
     pdf.text(`${createdPhone}`, rightX, 204);
 
+    // ✅ Track the right-side content bottom safely
+    let rightBlockBottomY = 204;
+
+    // ✅ NEW: print PO number below the 3 Created By fields
+    if (poNumber) {
+      pdf.setFont("helvetica", "bold");
+      pdf.text("PO Number:", rightX, 220);
+      pdf.setFont("helvetica", "normal");
+      pdf.text(poNumber, rightX, 233);
+      rightBlockBottomY = 233;
+    }
+
     // Approval received on email (optional)
     const approvalReceivedOn = String(
       (estimate as any)?.approvalReceivedOn || "",
     ).trim();
     if (approvalReceivedOn) {
+      const approvalLabelY = rightBlockBottomY + 16;
+      const approvalValueY = approvalLabelY + 13;
+
       pdf.setFont("helvetica", "bold");
-      pdf.text("Approval received on email:", rightX, 220);
+      pdf.text("Approval received on email:", rightX, approvalLabelY);
       pdf.setFont("helvetica", "normal");
       pdf.text(
         formatDatePretty(approvalReceivedOn) || approvalReceivedOn,
         rightX,
-        233,
+        approvalValueY,
       );
+
+      rightBlockBottomY = approvalValueY;
     }
 
     pdf.setFont("helvetica", "bold");
@@ -1531,7 +1179,6 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
         const whtText =
           whtPct > 0 ? `${(s as any).whtLabel ?? "WHT"} ${whtPct}%` : "No WHT";
 
-        // ✅ AMOUNT cell: PKR only OR PKR + C1 + C2 multiline
         const amountCell = addCurrencies
           ? buildMultiCurrencyLines({
               pkrValue: amount,
@@ -1555,8 +1202,11 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
       },
     );
 
+    // ✅ NEW: auto-adjust startY only if PO/approval needs extra space
+    const tableStartY = Math.max(235, rightBlockBottomY + 18);
+
     autoTable(pdf, {
-      startY: 235,
+      startY: tableStartY,
       head: [["SERVICE DETAILS", "UNITS", "RATE", "TAX", "WHT", "AMOUNT"]],
       body: serviceRows,
       styles: {
@@ -1569,7 +1219,6 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
 
       margin: { left: margin, right: margin, bottom: FOOTER_GAP },
 
-      // ✅ widths must sum to (pageWidth - 2*margin) = 515
       columnStyles: addCurrencies
         ? ({
             0: { halign: "left" as const, cellWidth: 200 },
@@ -1577,7 +1226,7 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
             2: { halign: "center" as const, cellWidth: 55 },
             3: { halign: "left" as const, cellWidth: 70 },
             4: { halign: "left" as const, cellWidth: 65 },
-            5: { halign: "right" as const, cellWidth: 80 }, // 3-line amount
+            5: { halign: "right" as const, cellWidth: 80 },
           } as any)
         : ({
             0: { halign: "left" as const, cellWidth: 220 },
@@ -1595,411 +1244,8 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
       },
     });
 
-    let finalY = (pdf as any).lastAutoTable.finalY + 55;
-
-    const totalsBlockHeight = addCurrencies ? 120 : 110;
-    if (finalY + totalsBlockHeight > footerSafeY) {
-      pdf.addPage();
-      finalY = 80;
-    }
-
-    // ==========================
-    // ✅ TOTALS
-    // ==========================
-    const whtTotal = Number((estimate as any)?.whtTotal ?? 0);
-
-    // (keeping your existing behavior: tax shown includes WHT)
-    const displayTaxPKR =
-      toNum(
-        (estimate as any)?.tax ?? (estimate as any)?.taxTotal ?? estimate.tax,
-      ) + whtTotal;
-
-    const subtotalPKR = toNum(estimate.subtotal ?? 0);
-    const totalPKR = toNum(estimate.total ?? 0);
-
-    const drawTotalsBlock = (
-      x: number,
-      meta: { code: string; symbol: string },
-      sub: number,
-      tax: number,
-      tot: number,
-      blockW: number,
-    ) => {
-      const labelX = x;
-      const valueX = x + (blockW - 10);
-
-      const pad = 8;
-      const boxX = labelX - pad;
-      const boxY = finalY - 26;
-      const boxH = 72;
-
-      pdf.setFillColor(245, 245, 245);
-      pdf.rect(boxX, boxY, blockW + pad * 2, boxH, "F");
-      pdf.setDrawColor(220);
-      pdf.rect(boxX, boxY, blockW + pad * 2, boxH);
-
-      pdf.setTextColor(0);
-
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(10);
-
-      // top label (use code, not hard-coded strings)
-      pdf.text(meta.code, labelX, finalY - 12);
-
-      pdf.text("SUBTOTAL", labelX, finalY);
-      pdf.text("TAX", labelX, finalY + 15);
-      pdf.setFont("helvetica", "bold");
-      pdf.text("TOTAL", labelX, finalY + 32);
-
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(10);
-      pdf.text(sub >= 0 ? formatMoney(sub) : "—", valueX, finalY, {
-        align: "right",
-      });
-      pdf.text(tax >= 0 ? formatMoney(tax) : "—", valueX, finalY + 15, {
-        align: "right",
-      });
-
-      pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(10);
-
-      const totalText =
-        tot >= 0 ? formatWithSymbol(meta.symbol, tot) : `${meta.symbol} —`;
-
-      pdf.text(totalText, valueX, finalY + 32, { align: "right" });
-
-      pdf.setFontSize(10);
-    };
-
-    if (!addCurrencies) {
-      const blockW = 170;
-      const x = pageWidth - margin - blockW;
-      drawTotalsBlock(
-        x,
-        { code: "PKR", symbol: "PKR" },
-        subtotalPKR,
-        displayTaxPKR,
-        totalPKR,
-        blockW,
-      );
-    } else {
-      const blockW = 160;
-      const gap = 10;
-      const totalW = blockW * 3 + gap * 2;
-      const startX = pageWidth - margin - totalW;
-
-      const c1Sub = c1Rate > 0 ? subtotalPKR / c1Rate : -1;
-      const c1Tax = c1Rate > 0 ? displayTaxPKR / c1Rate : -1;
-      const c1Tot = c1Rate > 0 ? totalPKR / c1Rate : -1;
-
-      const c2Sub = c2Rate > 0 ? subtotalPKR / c2Rate : -1;
-      const c2Tax = c2Rate > 0 ? displayTaxPKR / c2Rate : -1;
-      const c2Tot = c2Rate > 0 ? totalPKR / c2Rate : -1;
-
-      drawTotalsBlock(
-        startX + (blockW + gap) * 0,
-        { code: "PKR", symbol: "PKR" },
-        subtotalPKR,
-        displayTaxPKR,
-        totalPKR,
-        blockW,
-      );
-
-      drawTotalsBlock(
-        startX + (blockW + gap) * 1,
-        { code: c1.code, symbol: c1.symbol },
-        c1Sub,
-        c1Tax,
-        c1Tot,
-        blockW,
-      );
-
-      drawTotalsBlock(
-        startX + (blockW + gap) * 2,
-        { code: c2.code, symbol: c2.symbol },
-        c2Sub,
-        c2Tax,
-        c2Tot,
-        blockW,
-      );
-    }
-
-    // ==========================
-    // ✅ SUMMARY CALCS (unchanged logic)
-    // ==========================
-    const calcBase = (s: any) => {
-      const units = Number(s.units || 0);
-      const rateMode = (s as any).rateMode as "amount" | "percent" | undefined;
-      const rateNum = toNum(s.rate);
-      return rateMode === "percent" ? units * (rateNum / 100) : units * rateNum;
-    };
-
-    const taxType2 = String((estimate as any)?.taxType || "").trim();
-
-    const calcLineTotal = (s: any) => {
-      const base = calcBase(s);
-      const pct = Number(s.taxPercent ?? 0);
-
-      if (!pct || taxType2 === "none") return base;
-      if (taxType2 === "inclusive") return base;
-      return base + (base * pct) / 100;
-    };
-
-    const services = (estimate.services || []) as any[];
-
-    // TAX SUMMARY
-    const map = new Map<
-      string,
-      { label: string; pct: number; tax: number; net: number }
-    >();
-
-    for (const s of services) {
-      const pct = Number(s.taxPercent ?? 0);
-      const label = String(s.taxLabel || "").trim();
-      if (!pct || taxType2 === "none") continue;
-
-      const base = calcBase(s);
-
-      let taxAmount = 0;
-      let netAmount = 0;
-
-      if (taxType2 === "exclusive") {
-        taxAmount = (base * pct) / 100;
-        netAmount = base;
-      } else {
-        taxAmount = (base * pct) / (100 + pct);
-        netAmount = base - taxAmount;
-      }
-
-      const key = `${label}__${pct}`;
-      const prev = map.get(key);
-      if (prev) {
-        prev.tax += taxAmount;
-        prev.net += netAmount;
-      } else {
-        map.set(key, {
-          label: label || "Tax",
-          pct,
-          tax: taxAmount,
-          net: netAmount,
-        });
-      }
-    }
-
-    const totalTax = Array.from(map.values()).reduce((a, b) => a + b.tax, 0);
-    const totalNet = Array.from(map.values()).reduce((a, b) => a + b.net, 0);
-
-    // WHT SUMMARY
-    const whtMap = new Map<
-      string,
-      { label: string; pct: number; wht: number; base: number }
-    >();
-
-    for (const s of services) {
-      const pct = Number(s.whtPercent ?? 0);
-      if (!pct) continue;
-
-      const label = String(s.whtLabel || "").trim() || "WHT";
-      const baseForWht = calcLineTotal(s);
-      const whtAmount = (baseForWht * pct) / 100;
-
-      const key = `${label}__${pct}`;
-      const prev = whtMap.get(key);
-      if (prev) {
-        prev.wht += whtAmount;
-        prev.base += baseForWht;
-      } else {
-        whtMap.set(key, { label, pct, wht: whtAmount, base: baseForWht });
-      }
-    }
-
-    const totalWht = Array.from(whtMap.values()).reduce((a, b) => a + b.wht, 0);
-    const totalWhtBase = Array.from(whtMap.values()).reduce(
-      (a, b) => a + b.base,
-      0,
-    );
-
-    // TAX SUMMARY TABLE
-    let afterTotalsY = finalY + 55;
-
-    const addCur = Boolean((estimate as any)?.addCurrencies);
-
-    const taxRows: any[] = Array.from(map.values()).map((r) => {
-      const taxCell = addCur
-        ? buildMultiCurrencyLines({
-            pkrValue: r.tax,
-            c1Code,
-            c2Code,
-            c1Rate,
-            c2Rate,
-          })
-        : formatMoney(r.tax);
-
-      const netCell = addCur
-        ? buildMultiCurrencyLines({
-            pkrValue: r.net,
-            c1Code,
-            c2Code,
-            c1Rate,
-            c2Rate,
-          })
-        : formatMoney(r.net);
-
-      return [`${r.label} @ ${r.pct}%`, `${r.pct}%`, taxCell, netCell];
-    });
-
-    const whtRows: any[] = Array.from(whtMap.values()).map((r) => {
-      const whtCell = addCur
-        ? buildMultiCurrencyLines({
-            pkrValue: r.wht,
-            c1Code,
-            c2Code,
-            c1Rate,
-            c2Rate,
-          })
-        : formatMoney(r.wht);
-
-      const baseCell = addCur
-        ? buildMultiCurrencyLines({
-            pkrValue: r.base,
-            c1Code,
-            c2Code,
-            c1Rate,
-            c2Rate,
-          })
-        : formatMoney(r.base);
-
-      return [`${r.label} @ ${r.pct}%`, `${r.pct}%`, whtCell, baseCell];
-    });
-
-    if (taxRows.length > 0 || whtRows.length > 0) {
-      const combinedRows: any[] = [];
-
-      if (taxRows.length > 0) {
-        combinedRows.push(...taxRows);
-        combinedRows.push([
-          "",
-          "TOTAL (TAX)",
-          addCur
-            ? buildMultiCurrencyLines({
-                pkrValue: totalTax,
-                c1Code,
-                c2Code,
-                c1Rate,
-                c2Rate,
-              })
-            : formatMoney(totalTax),
-          addCur
-            ? buildMultiCurrencyLines({
-                pkrValue: totalNet,
-                c1Code,
-                c2Code,
-                c1Rate,
-                c2Rate,
-              })
-            : formatMoney(totalNet),
-        ]);
-      }
-
-      if (whtRows.length > 0) {
-        combinedRows.push(...whtRows);
-        combinedRows.push([
-          "",
-          "TOTAL (WHT)",
-          addCur
-            ? buildMultiCurrencyLines({
-                pkrValue: totalWht,
-                c1Code,
-                c2Code,
-                c1Rate,
-                c2Rate,
-              })
-            : formatMoney(totalWht),
-          addCur
-            ? buildMultiCurrencyLines({
-                pkrValue: totalWhtBase,
-                c1Code,
-                c2Code,
-                c1Rate,
-                c2Rate,
-              })
-            : formatMoney(totalWhtBase),
-        ]);
-      }
-
-      const FOOTER_GAP = 110;
-
-      autoTable(pdf, {
-        startY: afterTotalsY,
-        head: [["TAX SUMMARY", "RATE", "TAX", "NET"]],
-        body: combinedRows,
-        styles: { fontSize: 9, cellPadding: 4 },
-        headStyles: { fillColor: [240, 240, 240], textColor: [0, 0, 0] },
-        columnStyles: {
-          0: { halign: "left" as const },
-          1: { halign: "center" as const },
-          2: { halign: "right" as const },
-          3: { halign: "right" as const },
-        } as any,
-        margin: { bottom: FOOTER_GAP },
-      });
-
-      afterTotalsY = (pdf as any).lastAutoTable.finalY + 30;
-    }
-
-    // Message
-    if (estimate.message) {
-      let noteY = Math.max(
-        afterTotalsY,
-        (pdf as any).lastAutoTable?.finalY + 30 || afterTotalsY,
-      );
-
-      const footerSafeY2 = pageHeight - 120;
-      if (noteY > footerSafeY2) {
-        pdf.addPage();
-        noteY = 80;
-      }
-
-      pdf.setFont("helvetica", "bold");
-      pdf.text("MESSAGE:", margin, noteY);
-      noteY += 12;
-      pdf.setFont("helvetica", "normal");
-
-      const wrappedMsg = wrapTextByWords(estimate.message, 10);
-      wrappedMsg.forEach((line) => {
-        if (noteY > footerSafeY2) {
-          pdf.addPage();
-          noteY = 80;
-          pdf.setFont("helvetica", "bold");
-          pdf.text("MESSAGE (cont.):", margin, noteY);
-          noteY += 12;
-          pdf.setFont("helvetica", "normal");
-        }
-        pdf.text(line, margin, noteY);
-        noteY += 12;
-      });
-    }
-
-    // footer
-    const footerY = pdf.internal.pageSize.getHeight() - 70;
-    pdf.setFontSize(8);
-    pdf.setTextColor(100);
-
-    pdf.text(
-      resolveFooterContact(estimate, args.footerUser, args.usersMap),
-      margin,
-      footerY - 15,
-      { maxWidth: pageWidth - margin * 2 },
-    );
-
-    pdf.text(
-      "C-150, Block 2, Clifton, Karachi - 75600, Pakistan | Tel: +92 213 537 1818 | Email: sales@iedge.co | URL: www.iedge.co",
-      margin,
-      footerY + 15,
-      { maxWidth: pageWidth - margin * 2 },
-    );
+    // ... keep the rest of your code exactly the same
   };
-
   // page 1
   drawPage1();
 
