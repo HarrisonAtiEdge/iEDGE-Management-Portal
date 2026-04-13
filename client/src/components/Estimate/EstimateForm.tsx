@@ -45,6 +45,15 @@
 // } from "@dnd-kit/sortable";
 // import { CSS } from "@dnd-kit/utilities";
 
+// interface ProjectCodeOption {
+//   id: string;
+//   projectCode: string;
+//   projectName: string;
+//   client: string;
+//   salesRecordId: string;
+//   salesPersonId: string;
+// }
+
 // // ✅ popular currencies (extend anytime)
 // const POPULAR_CURRENCIES = [
 //   { code: "USD", name: "US Dollar", symbol: "US$" },
@@ -457,6 +466,32 @@
 //   );
 // }
 
+// const normalizeProjectCode = (value: unknown) =>
+//   String(value || "")
+//     .trim()
+//     .toLowerCase();
+
+// const readEstimateContext = () => {
+//   try {
+//     const raw = localStorage.getItem("iedge-estimate-context");
+//     return raw ? JSON.parse(raw) : null;
+//   } catch {
+//     return null;
+//   }
+// };
+
+// const clearEstimateContext = () => {
+//   try {
+//     localStorage.removeItem("iedge-estimate-context");
+//     localStorage.removeItem("iedge-estimate-project-code");
+//     localStorage.removeItem("iedge-estimate-sales-record-id");
+//     localStorage.removeItem("iedge-estimate-project-name");
+//     localStorage.removeItem("iedge-estimate-client");
+//   } catch {
+//     // ignore localStorage cleanup errors
+//   }
+// };
+
 // export default function EstimateForm({
 //   existingEstimate,
 //   duplicateMode = false,
@@ -483,6 +518,11 @@
 
 //   const [approvalReceivedOn, setApprovalReceivedOn] = useState("");
 
+//   const [projectCode, setProjectCode] = useState("");
+//   const [linkedSalesRecordId, setLinkedSalesRecordId] = useState("");
+//   const [projectCodeOptions, setProjectCodeOptions] = useState<
+//     ProjectCodeOption[]
+//   >([]);
 //   const [loggedInUser, setLoggedInUser] = useState<{
 //     displayName?: string;
 //     email?: string;
@@ -566,6 +606,16 @@
 //       },
 //     ],
 //     [],
+//   );
+
+//   const selectedProjectCodeOption = useMemo(
+//     () =>
+//       projectCodeOptions.find(
+//         (item) =>
+//           normalizeProjectCode(item.projectCode) ===
+//           normalizeProjectCode(projectCode),
+//       ) || null,
+//     [projectCodeOptions, projectCode],
 //   );
 
 //   const [services, setServices] = useState<ServiceItem[]>(initialServices);
@@ -808,7 +858,17 @@
 
 //   useEffect(() => {
 //     if (!existingEstimate) return;
-
+//     setProjectCode(
+//       String(
+//         (existingEstimate as any)?.projectCode ||
+//           (existingEstimate as any)?.linkedProjectCode ||
+//           (existingEstimate as any)?.salesProjectCode ||
+//           "",
+//       ),
+//     );
+//     setLinkedSalesRecordId(
+//       String((existingEstimate as any)?.salesRecordId || ""),
+//     );
 //     setStatus((existingEstimate as any)?.status ?? "RFQ Sent");
 //     setApprovalReceivedOn((existingEstimate as any)?.approvalReceivedOn ?? "");
 
@@ -1298,6 +1358,139 @@
 //     // eslint-disable-next-line react-hooks/exhaustive-deps
 //   }, [addCurrencies, usdRate, euroRate]);
 
+//   useEffect(() => {
+//     const loadProjectCodes = async () => {
+//       const uid = auth.currentUser?.uid;
+//       const context = readEstimateContext();
+//       const contextCode = String(
+//         context?.projectCode ||
+//           localStorage.getItem("iedge-estimate-project-code") ||
+//           "",
+//       ).trim();
+//       const contextSalesRecordId = String(
+//         context?.salesRecordId ||
+//           localStorage.getItem("iedge-estimate-sales-record-id") ||
+//           "",
+//       ).trim();
+
+//       try {
+//         const snapshot = await getDocs(
+//           collection(db, "Panels", "IEDGE-SYSTEM", "salesRecords"),
+//         );
+
+//         const options = snapshot.docs
+//           .map((docSnap) => {
+//             const data = docSnap.data() as any;
+//             return {
+//               id: docSnap.id,
+//               salesRecordId: docSnap.id,
+//               projectCode: String(data.projectCode || "").trim(),
+//               projectName: String(data.projectName || "").trim(),
+//               client: String(data.client || "").trim(),
+//               salesPersonId: String(
+//                 data.salesPersonId || data.createdBy || "",
+//               ).trim(),
+//             } as ProjectCodeOption;
+//           })
+//           .filter(
+//             (item) =>
+//               item.projectCode &&
+//               (!uid ||
+//                 item.salesPersonId === uid ||
+//                 item.salesRecordId === contextSalesRecordId),
+//           )
+//           .sort((a, b) => a.projectCode.localeCompare(b.projectCode));
+
+//         if (
+//           contextCode &&
+//           !options.some(
+//             (item) =>
+//               normalizeProjectCode(item.projectCode) ===
+//               normalizeProjectCode(contextCode),
+//           )
+//         ) {
+//           options.unshift({
+//             id: contextSalesRecordId || contextCode,
+//             salesRecordId: contextSalesRecordId,
+//             projectCode: contextCode,
+//             projectName: String(context?.projectName || "").trim(),
+//             client: String(context?.client || "").trim(),
+//             salesPersonId: uid || "",
+//           });
+//         }
+
+//         setProjectCodeOptions(options);
+
+//         const existingCode = String(
+//           (existingEstimate as any)?.projectCode ||
+//             (existingEstimate as any)?.linkedProjectCode ||
+//             (existingEstimate as any)?.salesProjectCode ||
+//             "",
+//         ).trim();
+
+//         const nextCode = existingCode || contextCode;
+//         if (nextCode) {
+//           setProjectCode(nextCode);
+//         }
+
+//         if (contextSalesRecordId) {
+//           setLinkedSalesRecordId(contextSalesRecordId);
+//         }
+//       } catch (error) {
+//         console.error("Error loading project codes:", error);
+//         setProjectCodeOptions([]);
+//       }
+//     };
+
+//     loadProjectCodes();
+//   }, [existingEstimate]);
+
+//   useEffect(() => {
+//     const matched = projectCodeOptions.find(
+//       (item) =>
+//         normalizeProjectCode(item.projectCode) ===
+//         normalizeProjectCode(projectCode),
+//     );
+
+//     if (!matched) {
+//       return;
+//     }
+
+//     if (
+//       matched.salesRecordId &&
+//       matched.salesRecordId !== linkedSalesRecordId
+//     ) {
+//       setLinkedSalesRecordId(matched.salesRecordId);
+//     }
+
+//     if (matched.client) {
+//       if (matched.client !== client) {
+//         setClient(matched.client);
+//       }
+
+//       const selectedClientOption =
+//         clients.find(
+//           (c) =>
+//             c.name.trim().toLowerCase() === matched.client.trim().toLowerCase(),
+//         ) || null;
+
+//       if (
+//         selectedClientOption &&
+//         selectedClient?.name?.trim().toLowerCase() !==
+//           selectedClientOption.name.trim().toLowerCase()
+//       ) {
+//         setSelectedClient(selectedClientOption);
+//       }
+//     }
+//   }, [
+//     projectCode,
+//     projectCodeOptions,
+//     clients,
+//     linkedSalesRecordId,
+//     client,
+//     selectedClient,
+//   ]);
+
 //   const resetForm = () => {
 //     setEditId(null);
 //     setEstimateNo("");
@@ -1323,7 +1516,8 @@
 
 //     setCurrency1Code("USD");
 //     setCurrency2Code("EUR");
-
+//     setProjectCode("");
+//     setLinkedSalesRecordId("");
 //     setUsdRate("");
 //     setEuroRate("");
 
@@ -1353,6 +1547,7 @@
 
 //     setSubmitAttempted(false);
 //     setOpenServiceRowId(null);
+//     clearEstimateContext();
 //   };
 
 //   const handleSave = async () => {
@@ -1488,6 +1683,10 @@
 //       company,
 //       subject,
 //       message,
+//       projectCode,
+//       linkedProjectCode: projectCode,
+//       salesProjectCode: projectCode,
+//       salesRecordId: linkedSalesRecordId || undefined,
 //       status,
 //       address: selectedClient?.address || "",
 //       info: selectedClient?.addtionalInfo || "",
@@ -1534,6 +1733,7 @@
 //         const pdfURL = URL.createObjectURL(blob);
 //         setPreviewURL(pdfURL);
 //         setIsPreviewOpen(true);
+//         clearEstimateContext();
 
 //         onSave?.(estimateToUpdate);
 //       } else {
@@ -1583,6 +1783,7 @@
 //         const pdfURL = URL.createObjectURL(blob);
 //         setPreviewURL(pdfURL);
 //         setIsPreviewOpen(true);
+//         clearEstimateContext();
 
 //         onSave?.(createdEstimate);
 
@@ -1721,7 +1922,7 @@
 //           Basic Information
 //         </h3>
 
-//         <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+//         <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
 //           <div>
 //             <label className="block text-sm font-medium text-gray-600 mb-1">
 //               Estimate No
@@ -1731,6 +1932,59 @@
 //               readOnly
 //               className="w-full rounded-lg border border-gray-300 p-2 text-sm bg-gray-50"
 //             />
+//           </div>
+
+//           <div>
+//             <label className="block text-sm font-medium text-gray-600 mb-1">
+//               Project Code
+//             </label>
+//             <select
+//               className={fieldClass(
+//                 "w-full rounded-lg border border-gray-300 p-2 text-sm",
+//                 submitAttempted && !String(projectCode || "").trim(),
+//               )}
+//               value={projectCode}
+//               onChange={(e) => {
+//                 const selectedCode = e.target.value;
+//                 setProjectCode(selectedCode);
+
+//                 const matched = projectCodeOptions.find(
+//                   (item) =>
+//                     normalizeProjectCode(item.projectCode) ===
+//                     normalizeProjectCode(selectedCode),
+//                 );
+
+//                 if (matched) {
+//                   setLinkedSalesRecordId(matched.salesRecordId);
+
+//                   if (matched.client) {
+//                     setClient(matched.client);
+//                     const selected = clients.find(
+//                       (c) => c.name === matched.client,
+//                     );
+//                     setSelectedClient(selected || null);
+//                   }
+//                 }
+//               }}
+//             >
+//               <option value="">Select Project Code</option>
+//               {projectCodeOptions.map((item) => (
+//                 <option key={item.id} value={item.projectCode}>
+//                   {[item.projectCode, item.projectName, item.client]
+//                     .filter(Boolean)
+//                     .join(" • ")}
+//                 </option>
+//               ))}
+//             </select>
+
+//             {selectedProjectCodeOption ? (
+//               <p className="mt-2 text-xs text-gray-500">
+//                 {selectedProjectCodeOption.client || "No client"}
+//                 {selectedProjectCodeOption.projectName
+//                   ? ` • ${selectedProjectCodeOption.projectName}`
+//                   : ""}
+//               </p>
+//             ) : null}
 //           </div>
 
 //           <div>
@@ -4231,12 +4485,22 @@ export default function EstimateForm({
   useEffect(() => {
     const loadProjectCodes = async () => {
       const uid = auth.currentUser?.uid;
+      const role = String(localStorage.getItem("role") || "")
+        .trim()
+        .toLowerCase();
+
+      const canSeeAllProjectCodes =
+        role === "main_admin" ||
+        role === "finance" ||
+        role === "financial_admin";
+
       const context = readEstimateContext();
       const contextCode = String(
         context?.projectCode ||
           localStorage.getItem("iedge-estimate-project-code") ||
           "",
       ).trim();
+
       const contextSalesRecordId = String(
         context?.salesRecordId ||
           localStorage.getItem("iedge-estimate-sales-record-id") ||
@@ -4265,7 +4529,8 @@ export default function EstimateForm({
           .filter(
             (item) =>
               item.projectCode &&
-              (!uid ||
+              (canSeeAllProjectCodes ||
+                !uid ||
                 item.salesPersonId === uid ||
                 item.salesRecordId === contextSalesRecordId),
           )
