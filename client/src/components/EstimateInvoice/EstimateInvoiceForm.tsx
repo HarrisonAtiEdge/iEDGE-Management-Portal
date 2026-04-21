@@ -41,6 +41,7 @@
 //   whtLabel: "WHT",
 //   whtPercent: 0,
 // };
+
 // const PANEL_ID = "IEDGE-SYSTEM";
 
 // export type EstimateInvoice = any;
@@ -50,26 +51,29 @@
 //   duplicateMode?: boolean;
 // };
 
+// type Totals = {
+//   subtotal: number;
+//   tax: number;
+//   whtTotal: number;
+//   total: number;
+// };
+
 // export default function EstimateInvoiceForm({
 //   existingInvoice,
 //   duplicateMode = false,
 // }: Props) {
 //   const [editId, setEditId] = useState<string | null>(null);
 
-//   // Convert-from-estimate
 //   const [estimateNoInput, setEstimateNoInput] = useState("");
 
-//   // PDF preview
 //   const [previewURL, setPreviewURL] = useState<string | null>(null);
 //   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
 
-//   // Logged-in user (for footer)
 //   const [loggedInUser, setLoggedInUser] = useState<any>(null);
 
-//   // ==== Invoice fields (full estimate-like set) ====
 //   const [invoiceNo, setInvoiceNo] = useState("");
-//   const [invoiceDate, setInvoiceDate] = useState(""); // yyyy-mm-dd
-//   const [dueDate, setDueDate] = useState(""); // optional
+//   const [invoiceDate, setInvoiceDate] = useState("");
+//   const [dueDate, setDueDate] = useState("");
 
 //   const [company, setCompany] = useState<string>("");
 //   const [withLogo, setWithLogo] = useState<boolean>(true);
@@ -80,7 +84,6 @@
 //   const [projectOwner, setProjectOwner] = useState("");
 //   const [subject, setSubject] = useState("");
 
-//   // ✅ PO Number
 //   const [poNumber, setPoNumber] = useState("");
 
 //   const [previousEstimateTotal, setPreviousEstimateTotal] = useState<
@@ -98,18 +101,23 @@
 
 //   const [invoiceHeading, setInvoiceHeading] =
 //     useState<string>("Sales Tax Invoice");
+
+//   const [selectedPercentage, setSelectedPercentage] = useState<string>("100");
+
 //   const [message, setMessage] = useState("");
 //   const [termsConditionTitle, setTermsConditionTitle] = useState("");
 //   const [termsConditionText, setTermsConditionText] = useState("");
+
 //   const [subtotal, setSubtotal] = useState<number>(0);
 //   const [tax, setTax] = useState<number>(0);
 //   const [whtTotal, setWhtTotal] = useState<number>(0);
 //   const [total, setTotal] = useState<number>(0);
+
 //   const [status, setStatus] = useState<string>("Unpaid");
 //   const [loading, setLoading] = useState(false);
 //   const savingRef = useRef(false);
 //   const [preferDbTotals, setPreferDbTotals] = useState(false);
-//   // ✅ Companies list
+
 //   const companyList = [
 //     { name: "iEDGE", logo: "/Iedge-TM-Logos-01.png" },
 //     {
@@ -154,12 +162,12 @@
 //     () => collection(db, "Panels", PANEL_ID, "estimates"),
 //     [],
 //   );
+
 //   const invoicesRef = useMemo(
 //     () => collection(db, "Panels", PANEL_ID, "estimateInvoices"),
 //     [],
 //   );
 
-//   // Load logged-in user for footer
 //   useEffect(() => {
 //     const uid = auth.currentUser?.uid;
 //     if (!uid) return;
@@ -172,42 +180,56 @@
 //     return () => unsub();
 //   }, []);
 
-//   type Totals = {
-//     subtotal: number;
-//     tax: number;
-//     whtTotal: number;
-//     total: number;
+//   const normalizePercentage = (value: string | number) => {
+//     const n = Number(value);
+//     if (!Number.isFinite(n)) return 100;
+//     if (n < 0) return 0;
+//     if (n > 100) return 100;
+//     return Number(n.toFixed(2));
+//   };
+
+//   const computeSelectedPercentageTotals = (
+//     actual: { subtotal: number; tax: number; total: number },
+//     percentageValue: string | number,
+//   ) => {
+//     const pct = normalizePercentage(percentageValue);
+//     const factor = pct / 100;
+
+//     return {
+//       selectedPercentage: pct,
+//       selectedPercentageSubtotal: Number((actual.subtotal * factor).toFixed(2)),
+//       selectedPercentageTax: Number((actual.tax * factor).toFixed(2)),
+//       selectedPercentageTotal: Number((actual.total * factor).toFixed(2)),
+//     };
 //   };
 
 //   const computeTotals = (
 //     nextServices: ServiceItem[],
 //     nextTaxType: "none" | "exclusive" | "inclusive",
 //   ): Totals => {
-//     const calcBase = (s: ServiceItem) => {
+//     const calcBaseInner = (s: ServiceItem) => {
 //       const units = Number(s.units || 0);
 //       const rateNum = Number(String(s.rate ?? 0).replace(/,/g, "")) || 0;
 //       const mode = (s.rateMode || "amount") as "amount" | "percent";
 //       return mode === "percent" ? units * (rateNum / 100) : units * rateNum;
 //     };
 
-//     const baseSum = nextServices.reduce((sum, s) => sum + calcBase(s), 0);
+//     const baseSum = nextServices.reduce((sum, s) => sum + calcBaseInner(s), 0);
 
-//     // Tax
 //     let taxSum = 0;
 //     if (nextTaxType !== "none") {
 //       for (const s of nextServices) {
 //         const pct = Number(s.taxPercent ?? 0);
 //         if (!pct) continue;
 
-//         const base = calcBase(s);
+//         const base = calcBaseInner(s);
 //         if (nextTaxType === "exclusive") taxSum += (base * pct) / 100;
-//         else taxSum += (base * pct) / (100 + pct); // inclusive extraction
+//         else taxSum += (base * pct) / (100 + pct);
 //       }
 //     }
 
-//     // WHT (keeping your existing behavior: added to total)
 //     const lineTotalForWht = (s: ServiceItem) => {
-//       const base = calcBase(s);
+//       const base = calcBaseInner(s);
 //       const pct = Number(s.taxPercent ?? 0);
 
 //       if (!pct || nextTaxType === "none") return base;
@@ -222,21 +244,21 @@
 //       const baseForWht = lineTotalForWht(s);
 //       whtSum += (baseForWht * pct) / 100;
 //     }
+
 //     const computedSubtotal =
 //       nextTaxType === "inclusive" ? baseSum - taxSum : baseSum;
 
 //     const computedTotal =
 //       computedSubtotal + (nextTaxType === "none" ? 0 : taxSum) + whtSum;
 
-//     const subtotal = Number(computedSubtotal.toFixed(2));
-//     const tax = Number(taxSum.toFixed(2));
-//     const whtTotal = Number(whtSum.toFixed(2));
-//     const total = Number(computedTotal.toFixed(2));
-
-//     return { subtotal, tax, whtTotal, total };
+//     return {
+//       subtotal: Number(computedSubtotal.toFixed(2)),
+//       tax: Number(taxSum.toFixed(2)),
+//       whtTotal: Number(whtSum.toFixed(2)),
+//       total: Number(computedTotal.toFixed(2)),
+//     };
 //   };
 
-//   // ====== Totals calculator ======
 //   const calcBase = (s: ServiceItem) => {
 //     const units = Number(s.units || 0);
 //     const rateNum = Number(String(s.rate ?? 0).replace(/,/g, "")) || 0;
@@ -247,7 +269,6 @@
 //   const recalcTotals = (nextServices = services, nextTaxType = taxType) => {
 //     const baseSum = nextServices.reduce((sum, s) => sum + calcBase(s), 0);
 
-//     // Tax calc (line-level taxPercent)
 //     let taxSum = 0;
 //     if (nextTaxType !== "none") {
 //       for (const s of nextServices) {
@@ -255,7 +276,6 @@
 //         if (!pct) continue;
 
 //         const base = calcBase(s);
-
 //         if (nextTaxType === "exclusive") {
 //           taxSum += (base * pct) / 100;
 //         } else {
@@ -264,7 +284,6 @@
 //       }
 //     }
 
-//     // WHT calc: always exclusive on line total (base + tax if exclusive, base if inclusive/none)
 //     const lineTotalForWht = (s: ServiceItem) => {
 //       const base = calcBase(s);
 //       const pct = Number(s.taxPercent ?? 0);
@@ -281,6 +300,7 @@
 //       const baseForWht = lineTotalForWht(s);
 //       whtSum += (baseForWht * pct) / 100;
 //     }
+
 //     const computedSubtotal =
 //       nextTaxType === "inclusive" ? baseSum - taxSum : baseSum;
 
@@ -302,7 +322,6 @@
 //     setWhtTotal(t.whtTotal);
 //     setTotal(t.total);
 
-//     // Use computed total for warnings (your current code checks stale `total`)
 //     if (previousEstimateTotal !== null) {
 //       if (t.total > previousEstimateTotal) {
 //         const ok = window.confirm(
@@ -328,7 +347,6 @@
 //     }
 //   }, [services, taxType, preferDbTotals, previousEstimateTotal]);
 
-//   // ✅ Money formatting
 //   const money = (n: number) => {
 //     const x = Number(n || 0);
 //     const isWhole = Math.abs(x - Math.round(x)) < 1e-9;
@@ -338,7 +356,6 @@
 //     });
 //   };
 
-//   // ✅ LIVE Tax Summary grouping
 //   const taxSummary = useMemo(() => {
 //     const tType = String(taxType || "exclusive");
 //     const taxMap = new Map<
@@ -389,14 +406,14 @@
 //       }
 //     }
 
-//     const taxRows = Array.from(taxMap.values()).sort((a, b) =>
-//       a.label.localeCompare(b.label),
-//     );
-//     const whtRows = Array.from(whtMap.values()).sort((a, b) =>
-//       a.label.localeCompare(b.label),
-//     );
-
-//     return { taxRows, whtRows };
+//     return {
+//       taxRows: Array.from(taxMap.values()).sort((a, b) =>
+//         a.label.localeCompare(b.label),
+//       ),
+//       whtRows: Array.from(whtMap.values()).sort((a, b) =>
+//         a.label.localeCompare(b.label),
+//       ),
+//     };
 //   }, [services, taxType]);
 
 //   useEffect(() => {
@@ -407,9 +424,7 @@
 //     }
 //   }, [existingInvoice]);
 
-//   // ====== Edit / Duplicate fill ======
 //   useEffect(() => {
-//     // ---------- CREATE MODE (no existing invoice) ----------
 //     if (!existingInvoice) {
 //       setEditId(null);
 //       setInvoiceNo("");
@@ -431,7 +446,7 @@
 //       setPaymentTerm("");
 //       setTaxType("exclusive");
 
-//       setPreferDbTotals(false); // create mode: always compute live totals
+//       setPreferDbTotals(false);
 //       setSubtotal(0);
 //       setTax(0);
 //       setWhtTotal(0);
@@ -439,6 +454,7 @@
 
 //       setServices([{ ...defaultRow }]);
 
+//       setSelectedPercentage("100");
 //       setMessage("");
 //       setTermsConditionTitle("");
 //       setTermsConditionText("");
@@ -447,7 +463,6 @@
 //       return;
 //     }
 
-//     // ---------- EDIT / DUPLICATE MODE (existing invoice present) ----------
 //     setEditId(duplicateMode ? null : (existingInvoice.id ?? null));
 
 //     setInvoiceNo(duplicateMode ? "" : (existingInvoice.invoiceNo ?? ""));
@@ -483,6 +498,7 @@
 
 //     setServices(nextServices);
 
+//     setSelectedPercentage(String(existingInvoice.selectedPercentage ?? 100));
 //     setMessage(existingInvoice.message ?? "");
 //     setTermsConditionTitle(existingInvoice.termsConditionTitle ?? "");
 //     setTermsConditionText(
@@ -493,8 +509,6 @@
 
 //     setStatus(existingInvoice.status ?? "Unpaid");
 
-//     // If we are editing an existing record (not duplicating),
-//     // show totals exactly as stored in DB until user changes anything.
 //     if (!duplicateMode) {
 //       setPreferDbTotals(true);
 //       setSubtotal(Number(existingInvoice.subtotal ?? 0));
@@ -502,12 +516,10 @@
 //       setWhtTotal(Number(existingInvoice.whtTotal ?? 0));
 //       setTotal(Number(existingInvoice.total ?? 0));
 //     } else {
-//       // Duplicating: treat like a new invoice, compute live totals.
 //       setPreferDbTotals(false);
 //     }
 //   }, [existingInvoice, duplicateMode]);
 
-//   // ====== Load estimate and copy ALL fields to invoice form ======
 //   const loadEstimateAndPrefill = async () => {
 //     setPreferDbTotals(false);
 //     const estNo = estimateNoInput.trim();
@@ -528,7 +540,6 @@
 
 //       setPreviousEstimateTotal(Number(estData.total || 0));
 
-//       // prevent duplicate invoice (create mode only)
 //       if (!editId) {
 //         const qInv = query(
 //           invoicesRef,
@@ -541,7 +552,6 @@
 //         }
 //       }
 
-//       // Copy everything estimate-like
 //       setCompany(estData.company ?? "");
 //       setWithLogo(Boolean(estData.withLogo ?? true));
 
@@ -550,10 +560,7 @@
 //       setAddress(estData.address ?? "");
 //       setProjectOwner(estData.projectOwner ?? "");
 //       setSubject(estData.subject ?? "");
-
-//       // ✅ PO from estimate
 //       setPoNumber(estData.poNumber ?? "");
-
 //       setPaymentTerm(estData.paymentTerm ?? "");
 //       setTaxType((estData.taxType ?? "exclusive") as any);
 
@@ -563,13 +570,13 @@
 //           : services,
 //       );
 
+//       setSelectedPercentage(String(estData.selectedPercentage ?? 100));
 //       setMessage(estData.message ?? "");
 //       setTermsConditionTitle(estData.termsConditionTitle ?? "");
 //       setTermsConditionText(
 //         estData.termsConditionText ?? estData.termsCondition ?? "",
 //       );
 
-//       // invoice dates
 //       setInvoiceDate(new Date().toISOString().slice(0, 10));
 //       setDueDate("");
 
@@ -596,7 +603,6 @@
 //     setIsPreviewOpen(true);
 //   };
 
-//   // ====== Save / Update invoice ======
 //   const handleSaveInvoice = async () => {
 //     if (savingRef.current) return;
 //     savingRef.current = true;
@@ -623,7 +629,6 @@
 
 //     setLoading(true);
 //     try {
-//       // find estimate to link
 //       const qEst = query(estimatesRef, where("estimateNo", "==", estNo));
 //       const estSnap = await getDocs(qEst);
 //       if (estSnap.empty) {
@@ -634,10 +639,17 @@
 //       const estDoc = estSnap.docs[0];
 //       const estData = estDoc.data() as any;
 
-//       // Always recalc before save
 //       const t = computeTotals(services, taxType);
 
-//       // keep UI in sync too
+//       const selectedPctTotals = computeSelectedPercentageTotals(
+//         {
+//           subtotal: t.subtotal,
+//           tax: t.tax,
+//           total: t.total,
+//         },
+//         selectedPercentage,
+//       );
+
 //       setSubtotal(t.subtotal);
 //       setTax(t.tax);
 //       setWhtTotal(t.whtTotal);
@@ -655,8 +667,6 @@
 //           address,
 //           projectOwner,
 //           subject,
-
-//           // ✅ PO
 //           poNumber,
 
 //           paymentTerm,
@@ -672,6 +682,12 @@
 //           tax: t.tax,
 //           whtTotal: t.whtTotal,
 //           total: t.total,
+
+//           selectedPercentage: selectedPctTotals.selectedPercentage,
+//           selectedPercentageSubtotal:
+//             selectedPctTotals.selectedPercentageSubtotal,
+//           selectedPercentageTax: selectedPctTotals.selectedPercentageTax,
+//           selectedPercentageTotal: selectedPctTotals.selectedPercentageTotal,
 
 //           invoiceNo: existingInvoice?.invoiceNo || invoiceNo,
 //           invoiceDate: invoiceDate || new Date().toISOString().slice(0, 10),
@@ -714,7 +730,6 @@
 
 //         let current = 0;
 
-//         // One-time migration for shared S counter
 //         if (companyConfig.key === "iedge_sales") {
 //           const sharedCounterSnap = await tx.get(counterRef);
 
@@ -769,7 +784,6 @@
 //               legacyEventsSnap.exists() ? legacyEventsSnap.data()?.current : 0,
 //             );
 
-//             // Start the new shared counter from the highest old counter
 //             current = Math.max(
 //               legacyIedgeCurrent,
 //               legacyDigitalCurrent,
@@ -802,8 +816,6 @@
 //           address,
 //           projectOwner,
 //           subject,
-
-//           // ✅ PO
 //           poNumber,
 
 //           paymentTerm,
@@ -819,6 +831,12 @@
 //           tax: t.tax,
 //           whtTotal: t.whtTotal,
 //           total: t.total,
+
+//           selectedPercentage: selectedPctTotals.selectedPercentage,
+//           selectedPercentageSubtotal:
+//             selectedPctTotals.selectedPercentageSubtotal,
+//           selectedPercentageTax: selectedPctTotals.selectedPercentageTax,
+//           selectedPercentageTotal: selectedPctTotals.selectedPercentageTotal,
 
 //           invoiceNo: nextInvoiceNo,
 //           invoiceDate: invoiceDate || new Date().toISOString().slice(0, 10),
@@ -862,7 +880,6 @@
 //     }
 //   };
 
-//   // ====== Services UI handlers ======
 //   const updateService = (idx: number, patch: Partial<ServiceItem>) => {
 //     setPreferDbTotals(false);
 //     setServices((prev) => {
@@ -922,7 +939,6 @@
 //           </select>
 //         </div>
 
-//         {/* Load Estimate */}
 //         <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
 //           <div className="md:col-span-2">
 //             <label className="text-sm font-medium">Estimate No</label>
@@ -945,7 +961,6 @@
 //           </div>
 //         </div>
 
-//         {/* Invoice meta */}
 //         <div className="mt-4 grid grid-cols-1 md:grid-cols-4 gap-3">
 //           <div>
 //             <label className="text-sm font-medium">Invoice No</label>
@@ -990,7 +1005,6 @@
 //             </select>
 //           </div>
 
-//           {/* ✅ PO Number */}
 //           <div>
 //             <label className="text-sm font-medium">PO Number</label>
 //             <Input
@@ -1002,7 +1016,6 @@
 //           </div>
 //         </div>
 
-//         {/* Company */}
 //         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
 //           <div>
 //             <label className="text-sm font-medium">Company</label>
@@ -1038,6 +1051,7 @@
 //                 onChange={(e) => {
 //                   setPreferDbTotals(false);
 //                   setTaxType(e.target.value as any);
+//                   recalcTotals(services, e.target.value as any);
 //                 }}
 //               >
 //                 <option value="exclusive">Exclusive</option>
@@ -1048,7 +1062,6 @@
 //           </div>
 //         </div>
 
-//         {/* Client / details */}
 //         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
 //           <div>
 //             <label className="text-sm font-medium">Client</label>
@@ -1107,7 +1120,6 @@
 //           </div>
 //         </div>
 
-//         {/* Services */}
 //         <div className="mt-6">
 //           <div className="flex items-center justify-between">
 //             <div className="text-sm font-semibold">Services</div>
@@ -1171,7 +1183,7 @@
 //                         value={s.rateMode || "amount"}
 //                         onChange={(e) =>
 //                           updateService(idx, {
-//                             rateMode: e.target.value as any,
+//                             rateMode: e.target.value as "amount" | "percent",
 //                           })
 //                         }
 //                       >
@@ -1250,7 +1262,6 @@
 //             </table>
 //           </div>
 
-//           {/* Totals + Tax Summary */}
 //           <div className="mt-4 grid grid-cols-1 lg:grid-cols-2 gap-4 items-start">
 //             <div className="border rounded p-4 text-sm bg-white">
 //               <div className="flex items-center justify-between font-semibold tracking-wide">
@@ -1303,11 +1314,9 @@
 //                             className="flex items-center justify-between"
 //                           >
 //                             <span className="truncate max-w-[70%]">
-//                               {r.label} @ {r.pct}%
+//                               {r.label} ({r.pct}%)
 //                             </span>
-//                             <span className="font-medium">
-//                               {money(r.amount)}
-//                             </span>
+//                             <span>{money(r.amount)}</span>
 //                           </div>
 //                         ))}
 //                       </div>
@@ -1326,11 +1335,9 @@
 //                             className="flex items-center justify-between"
 //                           >
 //                             <span className="truncate max-w-[70%]">
-//                               {r.label} @ {r.pct}%
+//                               {r.label} ({r.pct}%)
 //                             </span>
-//                             <span className="font-medium">
-//                               {money(r.amount)}
-//                             </span>
+//                             <span>{money(r.amount)}</span>
 //                           </div>
 //                         ))}
 //                       </div>
@@ -1342,48 +1349,153 @@
 //           </div>
 //         </div>
 
-//         {/* Message + Terms */}
-//         <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-3">
+//         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">
 //           <div>
-//             <label className="text-sm font-medium">Message</label>
-//             <textarea
+//             <label className="text-sm font-medium">Select Percentage</label>
+//             <select
 //               className="mt-1 w-full border rounded-md p-2 text-sm"
-//               rows={5}
-//               value={message}
-//               onChange={(e) => setMessage(e.target.value)}
-//             />
+//               value={selectedPercentage}
+//               onChange={(e) => setSelectedPercentage(e.target.value)}
+//             >
+//               <option value="100">100%</option>
+//               <option value="75">75%</option>
+//               <option value="50">50%</option>
+//               <option value="25">25%</option>
+//               <option value="0">0%</option>
+//             </select>
 //           </div>
 
 //           <div>
-//             <label className="text-sm font-medium">
-//               Terms & Conditions Title
-//             </label>
+//             <label className="text-sm font-medium">Custom Percentage</label>
 //             <Input
+//               type="number"
+//               min="0"
+//               max="100"
+//               step="0.01"
+//               value={selectedPercentage}
+//               onChange={(e) => setSelectedPercentage(e.target.value)}
 //               className="mt-1"
-//               value={termsConditionTitle}
-//               onChange={(e) => setTermsConditionTitle(e.target.value)}
-//             />
-
-//             <label className="text-sm font-medium mt-3 block">
-//               Terms & Conditions Text
-//             </label>
-//             <textarea
-//               className="mt-1 w-full border rounded-md p-2 text-sm"
-//               rows={5}
-//               value={termsConditionText}
-//               onChange={(e) => setTermsConditionText(e.target.value)}
+//               placeholder="Enter %"
 //             />
 //           </div>
 //         </div>
 
-//         {/* Save */}
-//         <div className="mt-5 flex gap-2">
+//         <div className="mt-4 border rounded p-4 bg-white">
+//           <div className="text-sm font-semibold mb-2">
+//             Selected Percentage Amount
+//           </div>
+//           {normalizePercentage(selectedPercentage) < 100 && (
+//             <div className="mt-4 border rounded p-4 bg-white">
+//               <div className="space-y-3 text-sm">
+//                 <div className="flex items-center justify-between font-semibold tracking-wide">
+//                   <span className="uppercase">
+//                     Subtotal ({normalizePercentage(selectedPercentage)}%)
+//                   </span>
+//                   <span>
+//                     {money(
+//                       computeSelectedPercentageTotals(
+//                         { subtotal, tax, total },
+//                         selectedPercentage,
+//                       ).selectedPercentageSubtotal,
+//                     )}
+//                   </span>
+//                 </div>
+
+//                 <div className="flex items-center justify-between font-semibold tracking-wide">
+//                   <span className="uppercase">
+//                     Tax ({normalizePercentage(selectedPercentage)}%)
+//                   </span>
+//                   <span>
+//                     {money(
+//                       computeSelectedPercentageTotals(
+//                         { subtotal, tax, total },
+//                         selectedPercentage,
+//                       ).selectedPercentageTax,
+//                     )}
+//                   </span>
+//                 </div>
+
+//                 <div className="flex items-center justify-between font-semibold tracking-wide">
+//                   <span className="uppercase">
+//                     WHT ({normalizePercentage(selectedPercentage)}%)
+//                   </span>
+//                   <span>
+//                     {money(
+//                       whtTotal *
+//                         (normalizePercentage(selectedPercentage) / 100),
+//                     )}
+//                   </span>
+//                 </div>
+
+//                 <div className="pt-3 border-t flex items-center justify-between font-bold text-base mt-3">
+//                   <span className="uppercase">
+//                     Total ({normalizePercentage(selectedPercentage)}%)
+//                   </span>
+//                   <span>
+//                     {money(
+//                       computeSelectedPercentageTotals(
+//                         { subtotal, tax, total },
+//                         selectedPercentage,
+//                       ).selectedPercentageTotal,
+//                     )}
+//                   </span>
+//                 </div>
+
+//                 <div className="text-[11px] text-gray-500 mt-2">
+//                   (Total = Subtotal + Tax + WHT)
+//                 </div>
+//               </div>
+//             </div>
+//           )}
+//         </div>
+
+//         <div className="mt-4">
+//           <label className="text-sm font-medium">Message</label>
+//           <textarea
+//             className="mt-1 w-full border rounded-md p-2 text-sm"
+//             rows={4}
+//             value={message}
+//             onChange={(e) => setMessage(e.target.value)}
+//           />
+//         </div>
+
+//         <div className="mt-4">
+//           <label className="text-sm font-medium">
+//             Terms & Conditions Title
+//           </label>
+//           <Input
+//             value={termsConditionTitle}
+//             onChange={(e) => setTermsConditionTitle(e.target.value)}
+//             className="mt-1"
+//             placeholder="e.g. Terms & Conditions"
+//           />
+//         </div>
+
+//         <div className="mt-4">
+//           <label className="text-sm font-medium">Terms & Conditions Text</label>
+//           <textarea
+//             className="mt-1 w-full border rounded-md p-2 text-sm"
+//             rows={5}
+//             value={termsConditionText}
+//             onChange={(e) => setTermsConditionText(e.target.value)}
+//           />
+//         </div>
+
+//         <div className="mt-6 flex flex-wrap gap-2">
 //           <Button onClick={handleSaveInvoice} disabled={loading}>
 //             {loading ? "Saving..." : editId ? "Update Invoice" : "Save Invoice"}
 //           </Button>
+
+//           {previewURL && (
+//             <Button
+//               variant="outline"
+//               onClick={() => setIsPreviewOpen((v) => !v)}
+//             >
+//               {isPreviewOpen ? "Hide Preview" : "Show Preview"}
+//             </Button>
+//           )}
 //         </div>
 //       </Card>
-
 //       {/* PDF Preview */}
 //       {isPreviewOpen && previewURL && (
 //         <div className="fixed inset-0 bg-black bg-opacity-60 flex items-center justify-center z-50">
@@ -2009,6 +2121,37 @@ export default function EstimateInvoiceForm({
     }
   };
 
+  const clearInvoiceForm = () => {
+    setEditId(null);
+    setEstimateNoInput("");
+    setInvoiceNo("");
+    setInvoiceDate(new Date().toISOString().slice(0, 10));
+    setDueDate("");
+    setCompany("");
+    setWithLogo(true);
+    setClient("");
+    setInfo("");
+    setAddress("");
+    setProjectOwner("");
+    setSubject("");
+    setPoNumber("");
+    setPreviousEstimateTotal(null);
+    setPaymentTerm("");
+    setTaxType("exclusive");
+    setServices([{ ...defaultRow }]);
+    setInvoiceHeading("Sales Tax Invoice");
+    setSelectedPercentage("100");
+    setMessage("");
+    setTermsConditionTitle("");
+    setTermsConditionText("");
+    setSubtotal(0);
+    setTax(0);
+    setWhtTotal(0);
+    setTotal(0);
+    setStatus("Unpaid");
+    setPreferDbTotals(false);
+  };
+
   const openPdfPreview = async (invoiceData: any) => {
     const blob = await buildEstimateInvoicePdfBlob({
       invoice: invoiceData,
@@ -2128,6 +2271,7 @@ export default function EstimateInvoiceForm({
 
         alert("Invoice updated successfully.");
         await openPdfPreview({ ...(existingInvoice || {}), ...updatedInvoice });
+        clearInvoiceForm();
         return;
       }
 
@@ -2291,6 +2435,7 @@ export default function EstimateInvoiceForm({
       setInvoiceNo(created.invoiceNo);
       alert(`✅ Invoice created: ${created.invoiceNo}`);
       await openPdfPreview(created.invoiceToSave);
+      clearInvoiceForm();
     } catch (e) {
       console.error(e);
       alert("Failed to save invoice.");
@@ -2422,6 +2567,7 @@ export default function EstimateInvoiceForm({
               <option value="Partially Paid">Partially Paid</option>
               <option value="Paid">Paid</option>
               <option value="Cancelled">Cancelled</option>
+              <option value="Void">Void</option>
             </select>
           </div>
 
@@ -2703,6 +2849,13 @@ export default function EstimateInvoiceForm({
                 <span className="uppercase">Total</span>
                 <span>{money(total)}</span>
               </div>
+
+              {status === "Void" && (
+                <div className="flex items-center justify-between font-semibold text-sm mt-2 text-red-600">
+                  <span>(Void)</span>
+                  <span>{money(0)}</span>
+                </div>
+              )}
 
               <div className="text-[11px] text-gray-500 mt-2">
                 (Total = Subtotal + Tax + WHT)

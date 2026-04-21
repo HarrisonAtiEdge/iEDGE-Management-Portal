@@ -92,6 +92,7 @@
 //   fuelType: FuelType;
 //   kms: string;
 //   approvalStatus: string;
+//   approvalRemark?: string;
 //   approvalSubmittedAt: string;
 //   approvalSubmittedById: string;
 //   approvalSubmittedByName: string;
@@ -156,6 +157,7 @@
 //   fuelType: "bike",
 //   kms: "",
 //   approvalStatus: "not_submitted",
+//   approvalRemark: "",
 //   approvalSubmittedAt: "",
 //   approvalSubmittedById: "",
 //   approvalSubmittedByName: "",
@@ -669,6 +671,10 @@
 //   );
 // }
 
+// function isNewSequenceProjectCode(value: unknown) {
+//   return /^IE-\d{4}-\d+$/.test(String(value || "").trim());
+// }
+
 // async function getNextProjectCode() {
 //   const year = new Date().getFullYear();
 //   const counterRef = doc(
@@ -903,8 +909,11 @@
 //     [allUsers],
 //   );
 
-//   const generatedProjectCode =
-//     editingRecord?.projectCode || formData.projectCode;
+//   const generatedProjectCode = editingRecord?.projectCode
+//     ? String(editingRecord.projectCode)
+//     : isNewSequenceProjectCode(formData.projectCode)
+//       ? String(formData.projectCode)
+//       : "";
 
 //   useEffect(() => {
 //     if (!isOpen || !generatedProjectCode) {
@@ -1244,15 +1253,14 @@
 //       return;
 //     }
 
-//     if (newMeetingData.reimbursement.enabled && !billFile) {
-//       toast({
-//         title: "Bill attachment required",
-//         description:
-//           "Please attach the bill before submitting the reimbursement claim.",
-//         variant: "destructive",
-//       });
-//       return;
-//     }
+//     // if (newMeetingData.reimbursement.enabled && !billFile) {
+//     //   toast({
+//     //     title: "Bill attachment required",
+//     //     description: "Please attach the bill before submitting the reimbursement claim.",
+//     //     variant: "destructive",
+//     //   });
+//     //   return;
+//     // }
 
 //     let uploadedBillData = {
 //       billFileName: newMeetingData.reimbursement.billFileName,
@@ -1580,10 +1588,16 @@
 //       );
 //       const filteredFollowUpActionItems =
 //         formData.nextFollowUpActionItems.filter((it) => it.trim() !== "");
-//       const finalProjectCode =
-//         editingRecord?.projectCode ||
-//         formData.projectCode ||
-//         (await getNextProjectCode());
+//       const existingProjectCode = String(
+//         editingRecord?.projectCode || "",
+//       ).trim();
+//       const draftProjectCode = String(formData.projectCode || "").trim();
+
+//       const finalProjectCode = existingProjectCode
+//         ? existingProjectCode
+//         : isNewSequenceProjectCode(draftProjectCode)
+//           ? draftProjectCode
+//           : await getNextProjectCode();
 
 //       const recordData: any = {
 //         client: formData.client,
@@ -2160,6 +2174,38 @@
 //                           className="h-8"
 //                           data-testid="input-projected-value"
 //                         />
+//                       </div>
+
+//                       <div>
+//                         <Label htmlFor="projectStatus" className="text-xs">
+//                           Project Status *
+//                         </Label>
+//                         <Select
+//                           value={formData.projectStatus}
+//                           onValueChange={(value) =>
+//                             setFormData((s) => ({
+//                               ...s,
+//                               projectStatus: value as SalesStatus,
+//                             }))
+//                           }
+//                         >
+//                           <SelectTrigger
+//                             className="h-8"
+//                             data-testid="select-project-status"
+//                           >
+//                             <SelectValue placeholder="Select project status" />
+//                           </SelectTrigger>
+//                           <SelectContent>
+//                             {STATUS_OPTIONS.map((option) => (
+//                               <SelectItem
+//                                 key={option.value}
+//                                 value={option.value}
+//                               >
+//                                 {option.label}
+//                               </SelectItem>
+//                             ))}
+//                           </SelectContent>
+//                         </Select>
 //                       </div>
 
 //                       <div className="xl:col-span-2">
@@ -2977,15 +3023,30 @@
 //                     </div>
 
 //                     {selectedMeeting.reimbursement?.enabled && (
-//                       <div className="rounded-lg border p-4 space-y-2">
-//                         <Label className="text-sm font-medium">
-//                           Reimbursement
-//                         </Label>
+//                       <div className="rounded-lg border p-4 space-y-3">
+//                         <div className="flex items-center justify-between gap-2">
+//                           <Label className="text-sm font-medium">
+//                             Reimbursement
+//                           </Label>
+//                           <Badge
+//                             variant="outline"
+//                             className="text-xs capitalize"
+//                           >
+//                             {String(
+//                               selectedMeeting.reimbursement.approvalStatus ||
+//                                 "not_submitted",
+//                             )
+//                               .replace(/_/g, " ")
+//                               .toLowerCase()}
+//                           </Badge>
+//                         </div>
+
 //                         <div className="grid grid-cols-2 gap-2 text-sm">
 //                           <div>
 //                             <span className="font-medium">Amount:</span>{" "}
 //                             {selectedMeeting.reimbursement.amount || "N/A"}
 //                           </div>
+
 //                           <div>
 //                             <span className="font-medium">Bill:</span>{" "}
 //                             {selectedMeeting.reimbursement.billFileName ||
@@ -2995,56 +3056,41 @@
 //                                 href={selectedMeeting.reimbursement.billUrl}
 //                                 target="_blank"
 //                                 rel="noreferrer"
-//                                 className="ml-2 inline-flex items-center gap-1 text-blue-600 hover:underline"
+//                                 className="ml-2 inline-flex items-center text-blue-600 hover:underline"
 //                               >
-//                                 View <ExternalLink className="h-3 w-3" />
+//                                 <ExternalLink className="mr-1 h-3 w-3" />
+//                                 View
 //                               </a>
 //                             ) : null}
 //                           </div>
+
 //                           <div className="col-span-2">
 //                             <span className="font-medium">Detail:</span>{" "}
 //                             {selectedMeeting.reimbursement.detail || "N/A"}
 //                           </div>
-//                           <div className="col-span-2 text-xs text-muted-foreground">
-//                             {selectedMeeting.reimbursement.claimRuleText ||
-//                               "Claim reimbursements on the day of meeting otherwise you cannot claim after that date."}
+
+//                           <div>
+//                             <span className="font-medium">Fuel Type:</span>{" "}
+//                             {selectedMeeting.reimbursement.fuelClaimEnabled
+//                               ? selectedMeeting.reimbursement.fuelType || "N/A"
+//                               : "N/A"}
 //                           </div>
-//                           {selectedMeeting.reimbursement.approvalStatus ? (
-//                             <div>
-//                               <span className="font-medium">Approval:</span>{" "}
-//                               {String(
-//                                 selectedMeeting.reimbursement.approvalStatus,
-//                               )
-//                                 .replace(/_/g, " ")
-//                                 .split(" ")
-//                                 .filter(Boolean)
-//                                 .map(
-//                                   (word: string) =>
-//                                     word.charAt(0).toUpperCase() +
-//                                     word.slice(1),
-//                                 )
-//                                 .join(" ")}
-//                             </div>
-//                           ) : null}
-//                           {selectedMeeting.reimbursement.fuelClaimEnabled && (
-//                             <>
-//                               <div>
-//                                 <span className="font-medium">Fuel Type:</span>{" "}
-//                                 {selectedMeeting.reimbursement.fuelType}
-//                               </div>
-//                               <div>
-//                                 <span className="font-medium">KMs:</span>{" "}
-//                                 {selectedMeeting.reimbursement.kms || "0"}
-//                               </div>
-//                             </>
-//                           )}
-//                           {selectedMeeting.reimbursement.claimStatus ===
-//                             "date_passed" && (
-//                             <div className="col-span-2 text-red-600 text-xs font-medium">
-//                               You cannot claim because the meeting date is
-//                               passed.
-//                             </div>
-//                           )}
+
+//                           <div>
+//                             <span className="font-medium">KMs:</span>{" "}
+//                             {selectedMeeting.reimbursement.fuelClaimEnabled
+//                               ? selectedMeeting.reimbursement.kms || "N/A"
+//                               : "N/A"}
+//                           </div>
+
+//                           <div className="col-span-2 rounded-md bg-muted/30 p-3">
+//                             <span className="font-medium">Remark:</span>{" "}
+//                             {selectedMeeting.reimbursement.approvalRemark ||
+//                               selectedMeeting.reimbursement.adminRemark ||
+//                               selectedMeeting.reimbursement.remark ||
+//                               selectedMeeting.reimbursement.remarks ||
+//                               "No remark added"}
+//                           </div>
 //                         </div>
 //                       </div>
 //                     )}

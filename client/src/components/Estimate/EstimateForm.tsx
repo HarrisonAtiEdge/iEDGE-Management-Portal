@@ -1361,12 +1361,22 @@
 //   useEffect(() => {
 //     const loadProjectCodes = async () => {
 //       const uid = auth.currentUser?.uid;
+//       const role = String(localStorage.getItem("role") || "")
+//         .trim()
+//         .toLowerCase();
+
+//       const canSeeAllProjectCodes =
+//         role === "main_admin" ||
+//         role === "finance" ||
+//         role === "financial_admin";
+
 //       const context = readEstimateContext();
 //       const contextCode = String(
 //         context?.projectCode ||
 //           localStorage.getItem("iedge-estimate-project-code") ||
 //           "",
 //       ).trim();
+
 //       const contextSalesRecordId = String(
 //         context?.salesRecordId ||
 //           localStorage.getItem("iedge-estimate-sales-record-id") ||
@@ -1395,7 +1405,8 @@
 //           .filter(
 //             (item) =>
 //               item.projectCode &&
-//               (!uid ||
+//               (canSeeAllProjectCodes ||
+//                 !uid ||
 //                 item.salesPersonId === uid ||
 //                 item.salesRecordId === contextSalesRecordId),
 //           )
@@ -5073,7 +5084,9 @@ export default function EstimateForm({
             <label className="block text-sm font-medium text-gray-600 mb-1">
               Project Code
             </label>
-            <select
+
+            <input
+              list="project-code-options"
               className={fieldClass(
                 "w-full rounded-lg border border-gray-300 p-2 text-sm",
                 submitAttempted && !String(projectCode || "").trim(),
@@ -5101,16 +5114,20 @@ export default function EstimateForm({
                   }
                 }
               }}
-            >
-              <option value="">Select Project Code</option>
+              placeholder="Search or select Project Code"
+            />
+
+            <datalist id="project-code-options">
               {projectCodeOptions.map((item) => (
-                <option key={item.id} value={item.projectCode}>
-                  {[item.projectCode, item.projectName, item.client]
+                <option
+                  key={item.id}
+                  value={item.projectCode}
+                  label={[item.projectCode, item.projectName, item.client]
                     .filter(Boolean)
                     .join(" • ")}
-                </option>
+                />
               ))}
-            </select>
+            </datalist>
 
             {selectedProjectCodeOption ? (
               <p className="mt-2 text-xs text-gray-500">
