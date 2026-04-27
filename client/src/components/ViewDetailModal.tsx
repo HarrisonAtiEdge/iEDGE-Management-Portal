@@ -1053,9 +1053,6 @@
 //                             <p className="text-sm font-semibold text-gray-900 truncate">
 //                               {item.number}
 //                             </p>
-//                             <p className="text-xs text-gray-500 truncate">
-//                               {item.createdByName || "Creator unavailable"}
-//                             </p>
 //                           </div>
 //                           <Badge className={statusBadgeClass(item.status)}>
 //                             {item.status || "Saved"}
@@ -2617,6 +2614,9 @@ export function ViewDetailModal({
                           <div className="min-w-0">
                             <p className="text-sm font-semibold text-gray-900 truncate">
                               {item.number}
+                            </p>
+                            <p className="text-xs text-gray-500 truncate">
+                              {item.createdByName || "Creator unavailable"}
                             </p>
                           </div>
                           <Badge className={statusBadgeClass(item.status)}>

@@ -77,6 +77,9 @@ const AVAILABLE_TABS = [
   { path: "/usertravel", label: "Book Hotel", icon: "BedDouble" },
   { path: "/booking", label: "Bookings", icon: "Hotel" },
   { path: "/accounts", label: "Account ledger", icon: "WalletCards" },
+  { path: "/suppliers", label: "Suppliers", icon: "BookUser" },
+  { path: "/contact-persons", label: "Contact Persons", icon: "User" },
+  { path: "/reimbursement", label: "Reimbursement", icon: "Receipt" },
 ];
 
 const PANEL_ID = "IEDGE-SYSTEM";

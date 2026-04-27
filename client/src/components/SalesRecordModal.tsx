@@ -3436,11 +3436,16 @@ type ReimbursementData = {
   fuelType: FuelType;
   kms: string;
   approvalStatus: string;
-  approvalRemark?: string;
   approvalSubmittedAt: string;
   approvalSubmittedById: string;
   approvalSubmittedByName: string;
   approvalRecipientIds: string[];
+  approvedAmount?: number;
+  approvalRemarks?: string;
+  approvedBy?: string;
+  approvedById?: string;
+  approvalDecisionAt?: any;
+  paymentStatus?: string;
 };
 
 interface SalesFormData {
@@ -3501,7 +3506,6 @@ const EMPTY_REIMBURSEMENT: ReimbursementData = {
   fuelType: "bike",
   kms: "",
   approvalStatus: "not_submitted",
-  approvalRemark: "",
   approvalSubmittedAt: "",
   approvalSubmittedById: "",
   approvalSubmittedByName: "",
@@ -6367,30 +6371,15 @@ export function SalesRecordModal({
                     </div>
 
                     {selectedMeeting.reimbursement?.enabled && (
-                      <div className="rounded-lg border p-4 space-y-3">
-                        <div className="flex items-center justify-between gap-2">
-                          <Label className="text-sm font-medium">
-                            Reimbursement
-                          </Label>
-                          <Badge
-                            variant="outline"
-                            className="text-xs capitalize"
-                          >
-                            {String(
-                              selectedMeeting.reimbursement.approvalStatus ||
-                                "not_submitted",
-                            )
-                              .replace(/_/g, " ")
-                              .toLowerCase()}
-                          </Badge>
-                        </div>
-
+                      <div className="rounded-lg border p-4 space-y-2">
+                        <Label className="text-sm font-medium">
+                          Reimbursement
+                        </Label>
                         <div className="grid grid-cols-2 gap-2 text-sm">
                           <div>
                             <span className="font-medium">Amount:</span>{" "}
                             {selectedMeeting.reimbursement.amount || "N/A"}
                           </div>
-
                           <div>
                             <span className="font-medium">Bill:</span>{" "}
                             {selectedMeeting.reimbursement.billFileName ||
@@ -6400,41 +6389,66 @@ export function SalesRecordModal({
                                 href={selectedMeeting.reimbursement.billUrl}
                                 target="_blank"
                                 rel="noreferrer"
-                                className="ml-2 inline-flex items-center text-blue-600 hover:underline"
+                                className="ml-2 inline-flex items-center gap-1 text-blue-600 hover:underline"
                               >
-                                <ExternalLink className="mr-1 h-3 w-3" />
-                                View
+                                View <ExternalLink className="h-3 w-3" />
                               </a>
                             ) : null}
                           </div>
-
                           <div className="col-span-2">
                             <span className="font-medium">Detail:</span>{" "}
                             {selectedMeeting.reimbursement.detail || "N/A"}
                           </div>
-
-                          <div>
-                            <span className="font-medium">Fuel Type:</span>{" "}
-                            {selectedMeeting.reimbursement.fuelClaimEnabled
-                              ? selectedMeeting.reimbursement.fuelType || "N/A"
-                              : "N/A"}
+                          <div className="col-span-2 text-xs text-muted-foreground">
+                            {selectedMeeting.reimbursement.claimRuleText ||
+                              "Claim reimbursements on the day of meeting otherwise you cannot claim after that date."}
                           </div>
+                          {selectedMeeting.reimbursement.approvalStatus ? (
+                            <div>
+                              <span className="font-medium">Approval:</span>{" "}
+                              {String(
+                                selectedMeeting.reimbursement.approvalStatus,
+                              )
+                                .replace(/_/g, " ")
+                                .split(" ")
+                                .filter(Boolean)
+                                .map(
+                                  (word: string) =>
+                                    word.charAt(0).toUpperCase() +
+                                    word.slice(1),
+                                )
+                                .join(" ")}
+                            </div>
+                          ) : null}
 
-                          <div>
-                            <span className="font-medium">KMs:</span>{" "}
-                            {selectedMeeting.reimbursement.fuelClaimEnabled
-                              ? selectedMeeting.reimbursement.kms || "N/A"
-                              : "N/A"}
-                          </div>
+                          {selectedMeeting.reimbursement.approvalRemarks ? (
+                            <div className="col-span-2 rounded-md border bg-muted/40 p-2">
+                              <span className="font-medium">
+                                Approval Remarks:
+                              </span>{" "}
+                              {selectedMeeting.reimbursement.approvalRemarks}
+                            </div>
+                          ) : null}
 
-                          <div className="col-span-2 rounded-md bg-muted/30 p-3">
-                            <span className="font-medium">Remark:</span>{" "}
-                            {selectedMeeting.reimbursement.approvalRemark ||
-                              selectedMeeting.reimbursement.adminRemark ||
-                              selectedMeeting.reimbursement.remark ||
-                              selectedMeeting.reimbursement.remarks ||
-                              "No remark added"}
-                          </div>
+                          {selectedMeeting.reimbursement.fuelClaimEnabled && (
+                            <>
+                              <div>
+                                <span className="font-medium">Fuel Type:</span>{" "}
+                                {selectedMeeting.reimbursement.fuelType}
+                              </div>
+                              <div>
+                                <span className="font-medium">KMs:</span>{" "}
+                                {selectedMeeting.reimbursement.kms || "0"}
+                              </div>
+                            </>
+                          )}
+                          {selectedMeeting.reimbursement.claimStatus ===
+                            "date_passed" && (
+                            <div className="col-span-2 text-red-600 text-xs font-medium">
+                              You cannot claim because the meeting date is
+                              passed.
+                            </div>
+                          )}
                         </div>
                       </div>
                     )}

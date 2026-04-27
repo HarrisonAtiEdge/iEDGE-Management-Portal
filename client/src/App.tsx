@@ -4,6 +4,7 @@
 // import { QueryClientProvider } from "@tanstack/react-query";
 // import { Toaster } from "@/components/ui/toaster";
 // import { TooltipProvider } from "@/components/ui/tooltip";
+// import { ThemeToggle } from "@/components/theme-toggle";
 
 // import Estimates from "./pages/Estimate";
 // import InternationalEstimates from "@/pages/InternationalEstimates";
@@ -37,6 +38,7 @@
 // import UserTravel from "./pages/UserTravel";
 // import HotelSettings from "./pages/Travel/HotelSettings";
 // import BookingPage from "@/pages/Booking";
+// import AccountsPage from "./pages/AccountsPage";
 
 // function AuthenticatedApp() {
 //   const { currentUser } = useAuth();
@@ -65,7 +67,6 @@
 //           <Redirect to="/dashboard" />
 //         </Route>
 
-//         {/* No more allowedRoles */}
 //         <Route path="/dashboard">
 //           <ProtectedRoute>
 //             <Dashboard />
@@ -166,6 +167,12 @@
 //           </ProtectedRoute>
 //         </Route>
 
+//         <Route path="/accounts">
+//           <ProtectedRoute>
+//             <AccountsPage />
+//           </ProtectedRoute>
+//         </Route>
+
 //         <Route path="/estimateInternational">
 //           <ProtectedRoute>
 //             <InternationalEstimates />
@@ -183,6 +190,7 @@
 //             <TravelHotel />
 //           </ProtectedRoute>
 //         </Route>
+
 //         <Route path="/travel/HotelSettings">
 //           <ProtectedRoute>
 //             <HotelSettings />
@@ -228,6 +236,9 @@
 //     <QueryClientProvider client={queryClient}>
 //       <TooltipProvider>
 //         <AuthProvider>
+//           {/* <div className="fixed right-4 top-4 z-[9999]">
+//             <ThemeToggle />
+//           </div> */}
 //           <Toaster />
 //           <AuthenticatedApp />
 //         </AuthProvider>
@@ -279,6 +290,9 @@ import UserTravel from "./pages/UserTravel";
 import HotelSettings from "./pages/Travel/HotelSettings";
 import BookingPage from "@/pages/Booking";
 import AccountsPage from "./pages/AccountsPage";
+import SuppliersPage from "./pages/SuppliersPage";
+import ContactPersonsPage from "./pages/ContactPersonsPage";
+import ReimbursementDashboard from "./components/ReimbursementDashboard";
 
 function AuthenticatedApp() {
   const { currentUser } = useAuth();
@@ -410,6 +424,24 @@ function AuthenticatedApp() {
         <Route path="/accounts">
           <ProtectedRoute>
             <AccountsPage />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="suppliers">
+          <ProtectedRoute>
+            <SuppliersPage />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="contact-persons">
+          <ProtectedRoute>
+            <ContactPersonsPage />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/reimbursement">
+          <ProtectedRoute>
+            <ReimbursementDashboard />
           </ProtectedRoute>
         </Route>
 

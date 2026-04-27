@@ -1,6 +1,6 @@
-
 // import { useState, useEffect } from "react";
 // import { useAuth } from "@/contexts/AuthContext";
+// import { Eye, Pencil, Copy, Trash2 } from "lucide-react";
 // import {
 //   collection,
 //   addDoc,
@@ -11,13 +11,12 @@
 //   getDocs,
 //   query,
 //   orderBy,
+//   getDoc,
 // } from "firebase/firestore";
-// import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-// import { db, storage } from "@/lib/firebase";
+// import { db } from "@/lib/firebase";
 // import {
 //   Dialog,
 //   DialogContent,
-//   DialogDescription,
 //   DialogHeader,
 //   DialogTitle,
 // } from "@/components/ui/dialog";
@@ -26,1339 +25,733 @@
 // import { Label } from "@/components/ui/label";
 // import { Textarea } from "@/components/ui/textarea";
 // import { useToast } from "@/hooks/use-toast";
-// import type { InvoiceRequest } from "@shared/schema";
+// import { Calendar } from "@/components/ui/calendar";
+// import { Popover, PopoverTrigger, PopoverContent } from "@/components/ui/popover";
+// import { format } from "date-fns";
+// import { CalendarIcon } from "lucide-react";
 
 // const PANEL_ID = "IEDGE-SYSTEM";
 
 // type InvoiceType = "general" | "project";
-
-// interface InvoiceRequestModalProps {
-//   isOpen: boolean;
-//   onClose: () => void;
-//   onSuccess: () => void;
-//   editingInvoice?: InvoiceRequest | null;
-// }
 
 // export default function InvoiceRequestModal({
 //   isOpen,
 //   onClose,
 //   onSuccess,
 //   editingInvoice = null,
-// }: InvoiceRequestModalProps) {
+// }: any) {
 //   const { userProfile } = useAuth();
 //   const { toast } = useToast();
 //   const [loading, setLoading] = useState(false);
-//   const [files, setFiles] = useState<FileList | null>(null);
-
-
-
-//   // ✅ Tabs: General invoice vs Project invoice
 //   const [invoiceType, setInvoiceType] = useState<InvoiceType>("general");
-
-//   // ✅ Clients dropdown
-//   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
-//   const [clientsLoading, setClientsLoading] = useState(false);
-
-//   const [lineItems, setLineItems] = useState([
-//     {
-//       id: 1,
-//       vendor: "",
-//       description: "",
-//       quantity: "",
-//       unitPrice: "",
-//       amount: 0,
-//     },
-//   ]);
-
+//   /* ===================== ESTIMATES ===================== */
+//   const [estimates, setEstimates] = useState<any[]>([]);
+//   const [selectedEstimateId, setSelectedEstimateId] = useState("");
+//   const [subject, setSubject] = useState("");
+//   const [message, setMessage] = useState("");
+//   /* ===================== FORM DATA ===================== */
 //   const [formData, setFormData] = useState({
 //     requestId: "",
 //     clientName: "",
 //     project: "",
+//     projectCode: "", // 🔥 MANUAL
 //     title: "",
 //     comment: "",
 //   });
 
-//   // Load clients whenever modal opens (light + safe)
-//   useEffect(() => {
-//     if (!isOpen) return;
+//   /* ===================== LINE ITEMS ===================== */
+//   const [lineItems, setLineItems] = useState([
+//     {
+//       id: 1,
+//       date: "",
+//       service: "",
+//       description: "",
+//       vendor: "",
+//       units: "",
+//       unitRate: "",
+//       tax: "",
+//       total: 0,
+//       comment: "",
+//     },
+//   ]);
 
-//     let mounted = true;
+//   /* ===================== FETCH ESTIMATES ===================== */
+//   useEffect(() => {
+//     if (!isOpen || invoiceType !== "project") return;
+
 //     (async () => {
-//       try {
-//         setClientsLoading(true);
+//       const snap = await getDocs(
+//         collection(db, "Panels", PANEL_ID, "estimates")
+//       );
 
-//         // 🔁 Adjust this collection path if your clients live somewhere else.
-//         // Current assumption: Panels/{PANEL_ID}/clients
-//         const clientsRef = collection(db, "Panels", PANEL_ID, "clients");
-//         const qy = query(clientsRef, orderBy("name"));
-//         const snap = await getDocs(qy);
-
-//         const list = snap.docs.map((d) => ({
+//       setEstimates(
+//         snap.docs.map((d) => ({
 //           id: d.id,
-//           name: (d.data() as any)?.name ?? "",
-//         }));
-
-//         if (mounted) setClients(list.filter((c) => c.name));
-//       } catch (err) {
-//         console.error("Failed to load clients:", err);
-//         // Don't block the form if clients fail to load.
-//         if (mounted) setClients([]);
-//       } finally {
-//         if (mounted) setClientsLoading(false);
-//       }
+//           ...d.data(),
+//         }))
+//       );
 //     })();
-
-//     return () => {
-//       mounted = false;
-//     };
-//   }, [isOpen]);
+//   }, [isOpen, invoiceType]);
 
 //   useEffect(() => {
-//     if (!isOpen) return;
-
-//     if (editingInvoice) {
-//       // Pre-populate form with existing data
-//       setFormData({
-//         requestId: editingInvoice.requestId,
-//         clientName: editingInvoice.clientName,
-//         project: editingInvoice.project,
-//         title: (editingInvoice as any).title ?? "", // safe even if old data has no title
-//         comment: editingInvoice.comment || "",
-//       });
-
-
-//       // Keep existing behavior intact: if edit has a client, treat as project
-//       setInvoiceType(editingInvoice.clientName ? "project" : "general");
-
-//       setLineItems(editingInvoice.lineItems);
-//       setFiles(null); // Reset files for editing
-//     } else if (!formData.requestId) {
-//       // Generate new ID for creating new invoice
-//       generateNextRequestId();
-//       setInvoiceType("general");
-//       setFormData((prev) => ({ ...prev, clientName: "" }));
-//     }
-//   }, [isOpen, editingInvoice]);
-
-//   // When switching to General invoice, clear client (since it should not submit)
-//   useEffect(() => {
-//     if (invoiceType === "general" && formData.clientName) {
-//       setFormData((prev) => ({ ...prev, clientName: "" }));
+//     if (invoiceType === "general") {
+//       setSubject("");
+//       setMessage("");
 //     }
 //   }, [invoiceType]);
 
-//   async function generateNextRequestId() {
-//     try {
-//       const nextId = await runTransaction(db, async (transaction) => {
-//         const counterRef = doc(
-//           db,
-//           "Panels",
-//           PANEL_ID,
-//           "counters",
-//           "invoiceRequest"
-//         );
+//   /* ===================== ESTIMATE SELECT ===================== */
 
-//         const counterDoc = await transaction.get(counterRef);
+//   function handleEstimateSelect(id: string) {
+//     setSelectedEstimateId(id);
 
-//         let nextNumber = 1;
-//         if (counterDoc.exists()) {
-//           nextNumber = counterDoc.data().count + 1;
-//         }
+//     const est = estimates.find((e) => e.id === id);
+//     if (!est) return;
 
-//         transaction.set(counterRef, { count: nextNumber }, { merge: true });
+//     console.log("Selected Estimate:", est); // debug (optional)
 
-//         return `REQ-${String(nextNumber).padStart(5, "0")}`;
-//       });
-
-//       setFormData((prev) => ({ ...prev, requestId: nextId }));
-//     } catch (error) {
-//       console.error("Failed to generate request ID:", error);
-//       setFormData((prev) => ({
-//         ...prev,
-//         requestId: `REQ-${String(Date.now()).slice(-4)}`,
-//       }));
-//     }
+//     setFormData((prev) => ({
+//       ...prev,
+//       clientName: est.client || "", // ✅ FIX
+//       title: est.subject || "", // ✅ FIX
+//       project: est.projectOwner || "", // ✅ FIX
+//       // ❌ projectCode yahan intentionally NAHI
+//     }));
 //   }
+
+//   /* ===================== LINE ITEM LOGIC ===================== */
 
 //   function updateLineItem(id: number, field: string, value: string) {
 //     setLineItems((prev) =>
 //       prev.map((item) => {
-//         if (item.id === id) {
-//           const updated: any = { ...item, [field]: value };
-//           if (field === "quantity" || field === "unitPrice") {
-//             const qty =
-//               parseFloat(field === "quantity" ? value : updated.quantity) || 0;
-//             const price =
-//               parseFloat(field === "unitPrice" ? value : updated.unitPrice) ||
-//               0;
-//             updated.amount = qty * price;
-//           }
-//           return updated;
-//         }
-//         return item;
+//         if (item.id !== id) return item;
+
+//         const updated: any = { ...item, [field]: value };
+
+//         const units =
+//           updated.units === "" || updated.units === "."
+//             ? 0
+//             : parseFloat(updated.units);
+
+//         const rate =
+//           updated.unitRate === "" || updated.unitRate === "."
+//             ? 0
+//             : parseFloat(updated.unitRate);
+
+//         const tax =
+//           updated.tax === "" || updated.tax === "."
+//             ? 0
+//             : parseFloat(updated.tax);
+
+//         updated.total = (units || 0) * (rate || 0) + (tax || 0);
+
+//         return updated;
 //       })
 //     );
 //   }
 
 //   function addLineItem() {
-//     const newId = Math.max(...lineItems.map((item) => item.id)) + 1;
 //     setLineItems((prev) => [
 //       ...prev,
 //       {
-//         id: newId,
-//         vendor: "",
+//         id: prev.length + 1,
+//         date: "",
+//         service: "",
 //         description: "",
-//         quantity: "",
-//         unitPrice: "",
-//         amount: 0,
+//         vendor: "",
+//         units: "",
+//         unitRate: "",
+//         tax: "",
+//         total: 0,
+//         comment: "",
 //       },
 //     ]);
 //   }
 
 //   function removeLineItem(id: number) {
 //     if (lineItems.length > 1) {
-//       setLineItems((prev) => prev.filter((item) => item.id !== id));
+//       setLineItems((prev) => prev.filter((i) => i.id !== id));
 //     }
 //   }
 
-//   const totalAmount = lineItems.reduce((sum, item) => sum + item.amount, 0);
+//   const totalAmount = lineItems.reduce((s, i) => s + i.total, 0);
 
-//   async function handleSubmit(e: React.FormEvent | null = null) {
-//     if (e) e.preventDefault();
+//   /* ===================== SUBMIT ===================== */
 
-//     if (!userProfile) {
-//       toast({
-//         title: "Error",
-//         description: "User not authenticated",
-//         variant: "destructive",
-//       });
-//       return;
-//     }
-
-//     // ✅ Client required ONLY when Project invoice
-//     if (invoiceType === "project" && !formData.clientName) {
-//       toast({
-//         title: "Error",
-//         description: "Please select a client for Project Invoice",
-//         variant: "destructive",
-//       });
-//       return;
-//     }
-
-//     // ✅ Keep your existing validation logic for line-items (no draft mode now)
-//     if (lineItems.some((item) => !item.vendor || !item.description)) {
-//       toast({
-//         title: "Error",
-//         description: "Please fill in all line item details",
-//         variant: "destructive",
-//       });
-//       return;
-//     }
-
-//     if (invoiceType === "general" && !formData.title.trim()) {
-//       toast({
-//         title: "Error",
-//         description: "Please enter a Title for General invoice",
-//         variant: "destructive",
-//       });
-//       return;
-//     }
-
-//     if (invoiceType === "project" && !formData.project.trim()) {
-//       toast({
-//         title: "Error",
-//         description: "Please enter a Project for Project Invoice",
-//         variant: "destructive",
-//       });
-//       return;
-//     }
+//   async function handleSubmit(e: any) {
+//     e.preventDefault();
+//     if (!userProfile) return;
 
 //     try {
 //       setLoading(true);
 
-//       // Upload supporting documents
-//       const documentUrls: string[] = [];
-//       if (files && files.length > 0) {
-//         for (let i = 0; i < files.length; i++) {
-//           const file = files[i];
-//           const fileRef = ref(storage, `invoices/${Date.now()}_${file.name}`);
-//           const snapshot = await uploadBytes(fileRef, file);
-//           const downloadUrl = await getDownloadURL(snapshot.ref);
-//           documentUrls.push(downloadUrl);
-//         }
+//       // 🔹 CREATE MODE
+//       if (!editingInvoice) {
+//         const requestId = await generateRequestId();
+
+//         await addDoc(collection(db, "Panels", PANEL_ID, "invoiceRequests"), {
+//           requestId,
+//           invoiceType,
+//           estimateId: selectedEstimateId,
+//           clientName: formData.clientName,
+//           project: formData.project,
+//           projectCode: formData.projectCode,
+//           title: formData.title,
+//           lineItems,
+//           totalAmount,
+//           subject,
+//           message,
+
+//           status: "pending_main_admin", // ✅ changed
+//           submittedAt: serverTimestamp(),
+//           editDate: null,
+//           submittedBy: userProfile.id,
+//         });
+
+//         toast({ title: "Payment request submitted" });
 //       }
 
-//       const clientNameToSave = invoiceType === "project" ? formData.clientName : "";
-//       const projectToSave = invoiceType === "project" ? formData.project : "";
-//       const titleToSave = invoiceType === "general" ? formData.title : "";
-
-//       // ✅ Only submit clientName if project invoice; otherwise store as ""
-
-
-//       if (editingInvoice) {
-//         const existingDocuments = editingInvoice.supportingDocuments || [];
-//         const allDocuments = [...existingDocuments, ...documentUrls];
+//       // 🔹 EDIT / RESUBMIT MODE
+//       else {
 
 //         await updateDoc(
 //           doc(db, "Panels", PANEL_ID, "invoiceRequests", editingInvoice.id),
 //           {
-//             clientName: clientNameToSave,
-//             project: projectToSave,
-//             title: titleToSave,
+//             estimateId: selectedEstimateId,
+//             clientName: formData.clientName,
+//             project: formData.project,
+//             projectCode: formData.projectCode,
+//             title: formData.title,
+//             lineItems,
+//             totalAmount,
+//             subject,
+//             message,
 
-//             lineItems: lineItems,
-//             totalAmount: totalAmount,
-//             comment: formData.comment,
-//             supportingDocuments: allDocuments,
-//             status: "pending_operational_admin",
-//             updatedAt: serverTimestamp(),
-//             // Optional metadata (won't break anything if unused):
-//             invoiceType,
+//             status: "pending_main_admin", // ✅ changed
+//             editDate: serverTimestamp(),
 //           }
 //         );
-//       } else {
-//         await addDoc(collection(db, "Panels", PANEL_ID, "invoiceRequests"), {
-//           requestId: formData.requestId,
-//           clientName: clientNameToSave,
-//           project: projectToSave,
-//           title: titleToSave,
-//           lineItems: lineItems,
-//           totalAmount: totalAmount,
-//           comment: formData.comment,
-//           supportingDocuments: documentUrls,
-//           status: "pending_operational_admin",
-//           submittedBy: userProfile.id,
-//           submittedAt: serverTimestamp(),
-//           approvalHistory: [],
-//           invoiceType, // Optional metadata
-//         });
+
+//         toast({ title: "Payment request resubmitted" });
 //       }
 
-//       toast({
-//         title: "Success",
-//         description: editingInvoice
-//           ? "Invoice request updated successfully"
-//           : "Invoice request submitted successfully",
-//       });
-
-//       if (!editingInvoice) {
-//         setFormData({
-//           requestId: "",
-//           clientName: "",
-//           project: "",
-//           title: "",
-//           comment: "",
-//         });
-//         generateNextRequestId();
-//         setInvoiceType("general");
-//         setLineItems([
-//           {
-//             id: 1,
-//             vendor: "",
-//             description: "",
-//             quantity: "",
-//             unitPrice: "",
-//             amount: 0,
-//           },
-//         ]);
-//       }
-
-//       setFiles(null);
 //       onSuccess();
-//     } catch (error: any) {
-//       console.error("Failed to submit invoice request:", error);
-//       toast({
-//         title: "Error",
-//         description: error.message || "Failed to submit invoice request",
-//         variant: "destructive",
-//       });
+//     } catch (err) {
+//       console.error(err);
+//       toast({ title: "Error", variant: "destructive" });
 //     } finally {
 //       setLoading(false);
 //     }
 //   }
 
+//   async function generateRequestId() {
+//     const counterRef = doc(
+//       db,
+//       "Panels",
+//       PANEL_ID,
+//       "counters",
+//       "invoiceRequests"
+//     );
+
+//     return await runTransaction(db, async (transaction) => {
+//       const snap = await transaction.get(counterRef);
+
+//       let count = 1;
+
+//       if (!snap.exists()) {
+//         transaction.set(counterRef, { count: 1 });
+//       } else {
+//         count = (snap.data().count || 0) + 1;
+//         transaction.update(counterRef, { count });
+//       }
+
+//       const year = new Date().getFullYear();
+//       return `PR-${year}-${String(count).padStart(4, "0")}`;
+//     });
+//   }
+
+
+//   useEffect(() => {
+//     if (!editingInvoice) return;
+
+//     setInvoiceType(editingInvoice.invoiceType || "project");
+//     setSelectedEstimateId(editingInvoice.estimateId || "");
+
+//     setFormData({
+//       requestId: editingInvoice.requestId,
+//       clientName: editingInvoice.clientName || "",
+//       project: editingInvoice.project || "",
+//       projectCode: editingInvoice.projectCode || "",
+//       title: editingInvoice.title || "",
+//       comment: editingInvoice.comment || "",
+//     });
+
+//     // ✅ SAFE LINE ITEMS (EDIT MODE FIX)
+//     setLineItems(
+//       editingInvoice.lineItems?.length
+//         ? editingInvoice.lineItems
+//         : [
+//           {
+//             id: 1,
+//             date: "",
+//             service: "",
+//             description: "",
+//             vendor: "",
+//             units: "",
+//             unitRate: "",
+//             tax: "",
+//             total: 0,
+//             comment: "",
+//           },
+//         ]
+//     );
+//   }, [editingInvoice]);
+
+//   /* ===================== UI ===================== */
 //   return (
 //     <Dialog open={isOpen} onOpenChange={onClose}>
-//       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+//       {/* <DialogContent className="max-w-6xl"> */}
+//       <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto">
 //         <DialogHeader>
-//           <DialogTitle className="flex items-center space-x-2">
-//             <i
-//               className={`fas ${editingInvoice
-//                 ? "fa-edit text-orange-600"
-//                 : "fa-file-plus text-blue-600"
-//                 }`}
-//             ></i>
-//             <span>{editingInvoice ? "Edit Request Form" : "New Request Form"}</span>
-//           </DialogTitle>
-//           <DialogDescription>
-//             {editingInvoice
-//               ? "Update and resubmit your request with changes"
-//               : "Submit a new operational request with item details"}
-//           </DialogDescription>
+//           <DialogTitle>New Payment Request</DialogTitle>
 //         </DialogHeader>
 
 //         <form onSubmit={handleSubmit} className="space-y-6">
-//           {/* Request ID */}
-//           <div>
-//             <Label
-//               htmlFor="requestId"
-//               className="text-sm font-medium text-gray-700"
-//             >
-//               <i className="fas fa-hashtag mr-1"></i>
-//               Request ID: {formData.requestId}
-//             </Label>
-//           </div>
-
-//           {/* ✅ Tabs */}
-//           <div className="flex items-center gap-2">
+//           {/* Tabs */}
+//           <div className="flex gap-2">
 //             <Button
 //               type="button"
 //               variant={invoiceType === "general" ? "default" : "outline"}
 //               onClick={() => setInvoiceType("general")}
-//               className={invoiceType === "general" ? "bg-blue-600 hover:bg-blue-700" : ""}
-//               data-testid="tab-general-invoice"
 //             >
-//               General invoice
+//               General
 //             </Button>
 //             <Button
 //               type="button"
 //               variant={invoiceType === "project" ? "default" : "outline"}
 //               onClick={() => setInvoiceType("project")}
-//               className={invoiceType === "project" ? "bg-blue-600 hover:bg-blue-700" : ""}
-//               data-testid="tab-project-invoice"
 //             >
-//               Project Invoice
+//               Project
 //             </Button>
 //           </div>
 
-//           {/* Client + Project */}
-//           {/* Client / Project / Title */}
-//           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-//             {/* Client ONLY for Project Invoice */}
-//             {invoiceType === "project" ? (
+//           {/* Estimate */}
+
+//           {/* {invoiceType === "general" && (
+//             <div className="grid grid-cols-1 gap-4">
+              
 //               <div>
-//                 <Label htmlFor="clientName">Client Name *</Label>
-//                 <select
-//                   id="clientName"
+//                 <Label>Subject *</Label>
+//                 <Input
+//                   value={subject}
+//                   onChange={(e) => setSubject(e.target.value)}
+//                   placeholder="Enter invoice subject"
+//                   required
+//                 />
+//               </div>
+
+             
+//               <div>
+//                 <Label>Message *</Label>
+//                 <Textarea
+//                   value={message}
+//                   onChange={(e) => setMessage(e.target.value)}
+//                   placeholder="Enter invoice message"
+//                   rows={4}
+//                   required
+//                 />
+//               </div>
+//             </div>
+//           )} */}
+
+//           {invoiceType === "general" && (
+//             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+
+//               <div>
+//                 <Label>Client Name *</Label>
+//                 <Input
 //                   value={formData.clientName}
 //                   onChange={(e) =>
 //                     setFormData({ ...formData, clientName: e.target.value })
 //                   }
+//                   placeholder="Enter client name"
 //                   required
-//                   className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-//                   data-testid="select-client-name"
-//                   disabled={clientsLoading}
-//                 >
-//                   <option value="">
-//                     {clientsLoading ? "Loading clients..." : "Select a client"}
-//                   </option>
-//                   {clients.map((c) => (
-//                     <option key={c.id} value={c.name}>
-//                       {c.name}
-//                     </option>
-//                   ))}
-//                 </select>
-//               </div>
-//             ) : (
-//               <div />
-//             )}
-
-//             {/* Project ONLY for Project Invoice */}
-//             {invoiceType === "project" ? (
-//               <div>
-//                 <Label htmlFor="project">Project *</Label>
-//                 <Input
-//                   id="project"
-//                   value={formData.project}
-//                   onChange={(e) =>
-//                     setFormData({ ...formData, project: e.target.value })
-//                   }
-//                   placeholder="Enter project name"
-//                   required
-//                   data-testid="input-project"
 //                 />
 //               </div>
-//             ) : (
-//               /* Title ONLY for General Invoice */
+
 //               <div>
-//                 <Label htmlFor="title">Title *</Label>
+//                 <Label>Title *</Label>
 //                 <Input
-//                   id="title"
 //                   value={formData.title}
 //                   onChange={(e) =>
 //                     setFormData({ ...formData, title: e.target.value })
 //                   }
 //                   placeholder="Enter invoice title"
 //                   required
-//                   data-testid="input-title"
 //                 />
 //               </div>
-//             )}
-//           </div>
 
-
-//           {/* Line Items */}
-//           <div>
-//             <div className="flex items-center justify-between mb-4">
-//               <Label className="text-lg font-semibold">Line Items</Label>
-//               <Button
-//                 type="button"
-//                 variant="outline"
-//                 size="sm"
-//                 onClick={addLineItem}
-//                 data-testid="button-add-line-item"
-//               >
-//                 Add New
-//               </Button>
-//             </div>
-
-//             <div className="space-y-6">
-//               {lineItems.map((item, index) => (
-//                 <div
-//                   key={item.id}
-//                   className="border border-gray-200 rounded-lg p-4 space-y-4"
-//                 >
-//                   <div className="flex items-center justify-between">
-//                     <h4 className="font-medium text-gray-900">
-//                       Item {index + 1}
-//                     </h4>
-//                     {lineItems.length > 1 && (
-//                       <Button
-//                         type="button"
-//                         variant="ghost"
-//                         size="sm"
-//                         onClick={() => removeLineItem(item.id)}
-//                         className="text-red-600 hover:text-red-800"
-//                         data-testid={`button-remove-item-${item.id}`}
-//                       >
-//                         <i className="fas fa-trash"></i>
-//                       </Button>
-//                     )}
-//                   </div>
-
-//                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-//                     <div>
-//                       <Label htmlFor={`vendor-${item.id}`}>Vendor *</Label>
-//                       <Input
-//                         id={`vendor-${item.id}`}
-//                         value={item.vendor}
-//                         onChange={(e) =>
-//                           updateLineItem(item.id, "vendor", e.target.value)
-//                         }
-//                         placeholder="Enter vendor name"
-//                         required
-//                         data-testid={`input-vendor-${item.id}`}
-//                       />
-//                     </div>
-//                     <div>
-//                       <Label htmlFor={`description-${item.id}`}>
-//                         Item Description *
-//                       </Label>
-//                       <Input
-//                         id={`description-${item.id}`}
-//                         value={item.description}
-//                         onChange={(e) =>
-//                           updateLineItem(item.id, "description", e.target.value)
-//                         }
-//                         placeholder="Describe the item"
-//                         required
-//                         data-testid={`input-description-${item.id}`}
-//                       />
-//                     </div>
-//                   </div>
-
-//                   <div className="grid grid-cols-3 gap-4">
-//                     <div>
-//                       <Label htmlFor={`quantity-${item.id}`}>Quantity *</Label>
-//                       <Input
-//                         id={`quantity-${item.id}`}
-//                         type="number"
-//                         step="0.01"
-//                         value={item.quantity}
-//                         onChange={(e) =>
-//                           updateLineItem(item.id, "quantity", e.target.value)
-//                         }
-//                         placeholder="0"
-//                         required
-//                         data-testid={`input-quantity-${item.id}`}
-//                       />
-//                     </div>
-//                     <div>
-//                       <Label htmlFor={`unitPrice-${item.id}`}>Unit Price *</Label>
-//                       <Input
-//                         id={`unitPrice-${item.id}`}
-//                         type="number"
-//                         step="0.01"
-//                         value={item.unitPrice}
-//                         onChange={(e) =>
-//                           updateLineItem(item.id, "unitPrice", e.target.value)
-//                         }
-//                         placeholder="0.00"
-//                         required
-//                         data-testid={`input-unit-price-${item.id}`}
-//                       />
-//                     </div>
-//                     <div>
-//                       <Label htmlFor={`amount-${item.id}`}>Amount</Label>
-//                       <Input
-//                         id={`amount-${item.id}`}
-//                         type="number"
-//                         value={item.amount.toFixed(2)}
-//                         readOnly
-//                         className="bg-gray-50"
-//                         data-testid={`display-amount-${item.id}`}
-//                       />
-//                     </div>
-//                   </div>
-//                 </div>
-//               ))}
-//             </div>
-
-//             {/* Total Amount */}
-//             <div className="flex justify-end mt-4">
-//               <div className="bg-gray-50 px-4 py-2 rounded-lg">
-//                 <span className="text-lg font-semibold">
-//                   Total Amount: Rs {totalAmount.toFixed(2)}
-//                 </span>
-//               </div>
-//             </div>
-//           </div>
-
-//           {/* Comment (Optional) */}
-//           <div>
-//             <Label htmlFor="comment">Comment (Optional)</Label>
-//             <Textarea
-//               id="comment"
-//               rows={3}
-//               value={formData.comment}
-//               onChange={(e) =>
-//                 setFormData({ ...formData, comment: e.target.value })
-//               }
-//               placeholder="Add any additional comments or notes..."
-//               data-testid="textarea-comment"
-//             />
-//           </div>
-
-//           <div>
-//             <Label htmlFor="documents">Supporting Documents</Label>
-//             <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed border-border rounded-lg hover:border-ring transition-colors">
-//               <div className="space-y-1 text-center">
-//                 <i className="fas fa-cloud-upload-alt text-3xl text-muted-foreground"></i>
-//                 <div className="flex text-sm text-muted-foreground">
-//                   <label className="relative cursor-pointer rounded-md font-medium text-primary hover:text-primary/80">
-//                     <span>Upload files</span>
-//                     <input
-//                       type="file"
-//                       className="sr-only"
-//                       multiple
-//                       accept=".pdf,.jpg,.jpeg,.png"
-//                       onChange={(e) => setFiles(e.target.files)}
-//                       data-testid="input-documents"
-//                     />
-//                   </label>
-//                   <p className="pl-1">or drag and drop</p>
-//                 </div>
-//                 <p className="text-xs text-muted-foreground">
-//                   PDF, PNG, JPG up to 10MB each
-//                 </p>
-//                 {files && files.length > 0 && (
-//                   <p className="text-sm text-green-600">
-//                     <i className="fas fa-check mr-1"></i>
-//                     {files.length} file(s) selected
-//                   </p>
-//                 )}
-//               </div>
-//             </div>
-//           </div>
-
-//           {/* ✅ Footer buttons (Draft removed) */}
-//           <div className="flex justify-end space-x-3">
-//             <Button
-//               type="button"
-//               variant="outline"
-//               onClick={onClose}
-//               data-testid="button-cancel"
-//             >
-//               Cancel
-//             </Button>
-
-//             <Button
-//               type="submit"
-//               disabled={loading}
-//               className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2"
-//               data-testid="button-submit-invoice"
-//             >
-//               {loading ? (
-//                 <>
-//                   <i className="fas fa-spinner fa-spin mr-2"></i>
-//                   {editingInvoice ? "Updating..." : "Submitting..."}
-//                 </>
-//               ) : editingInvoice ? (
-//                 "Update Request"
-//               ) : (
-//                 `Submit Request Rs: {formData.requestId}`
-//               )}
-//             </Button>
-//           </div>
-//         </form>
-//       </DialogContent>
-//     </Dialog>
-//   );
-// }
-
-
-
-
-
-
-
-// import { useState, useEffect } from "react";
-// import { useAuth } from "@/contexts/AuthContext";
-// import {
-//   collection,
-//   addDoc,
-//   serverTimestamp,
-//   doc,
-//   updateDoc,
-//   runTransaction,
-//   getDocs,
-//   query,
-//   orderBy,
-// } from "firebase/firestore";
-// import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-// import { db, storage } from "@/lib/firebase";
-// import {
-//   Dialog,
-//   DialogContent,
-//   DialogDescription,
-//   DialogHeader,
-//   DialogTitle,
-// } from "@/components/ui/dialog";
-// import { Button } from "@/components/ui/button";
-// import { Input } from "@/components/ui/input";
-// import { Label } from "@/components/ui/label";
-// import { Textarea } from "@/components/ui/textarea";
-// import { useToast } from "@/hooks/use-toast";
-// import type { InvoiceRequest } from "@shared/schema";
-
-// const PANEL_ID = "IEDGE-SYSTEM";
-
-// type InvoiceType = "general" | "project";
-
-// interface InvoiceRequestModalProps {
-//   isOpen: boolean;
-//   onClose: () => void;
-//   onSuccess: () => void;
-//   editingInvoice?: InvoiceRequest | null;
-// }
-
-// export default function InvoiceRequestModal({
-//   isOpen,
-//   onClose,
-//   onSuccess,
-//   editingInvoice = null,
-// }: InvoiceRequestModalProps) {
-//   const { userProfile } = useAuth();
-//   const { toast } = useToast();
-//   const [loading, setLoading] = useState(false);
-//   const [files, setFiles] = useState<FileList | null>(null);
-
-//   // ✅ Tabs: General invoice vs Project invoice
-//   const [invoiceType, setInvoiceType] = useState<InvoiceType>("general");
-
-//   // ✅ Clients dropdown
-//   const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
-//   const [clientsLoading, setClientsLoading] = useState(false);
-
-//   const [lineItems, setLineItems] = useState([
-//     { id: 1, vendor: "", description: "", quantity: "", unitPrice: "", amount: 0 },
-//   ]);
-
-//   const [formData, setFormData] = useState({
-//     requestId: "",
-//     clientName: "",
-//     project: "",
-//     title: "",
-//     comment: "",
-//   });
-
-//   // Load clients whenever modal opens
-//   useEffect(() => {
-//     if (!isOpen) return;
-
-//     let mounted = true;
-//     (async () => {
-//       try {
-//         setClientsLoading(true);
-
-//         const clientsRef = collection(db, "Panels", PANEL_ID, "clients");
-//         const qy = query(clientsRef, orderBy("name"));
-//         const snap = await getDocs(qy);
-
-//         const list = snap.docs.map((d) => ({
-//           id: d.id,
-//           name: (d.data() as any)?.name ?? "",
-//         }));
-
-//         if (mounted) setClients(list.filter((c) => c.name));
-//       } catch (err) {
-//         console.error("Failed to load clients:", err);
-//         if (mounted) setClients([]);
-//       } finally {
-//         if (mounted) setClientsLoading(false);
-//       }
-//     })();
-
-//     return () => {
-//       mounted = false;
-//     };
-//   }, [isOpen]);
-
-//   useEffect(() => {
-//     if (!isOpen) return;
-
-//     if (editingInvoice) {
-//       // ✅ Detect invoiceType safely
-//       const detectedType: InvoiceType =
-//         ((editingInvoice as any).invoiceType as InvoiceType) ||
-//         (editingInvoice.clientName ? "project" : "general");
-
-//       setInvoiceType(detectedType);
-
-//       setFormData({
-//         requestId: editingInvoice.requestId,
-//         clientName: editingInvoice.clientName || "",
-//         project: editingInvoice.project || "",
-//         title: (editingInvoice as any).title ?? "",
-//         comment: editingInvoice.comment || "",
-//       });
-
-//       setLineItems(editingInvoice.lineItems);
-//       setFiles(null);
-//     } else if (!formData.requestId) {
-//       generateNextRequestId();
-//       setInvoiceType("general");
-//       setFormData((prev) => ({ ...prev, clientName: "", project: "", title: "" }));
-//     }
-//     // eslint-disable-next-line react-hooks/exhaustive-deps
-//   }, [isOpen, editingInvoice]);
-
-//   // ✅ When switching tabs, clear the fields that shouldn't apply
-//   useEffect(() => {
-//     if (!isOpen) return;
-
-//     if (invoiceType === "general") {
-//       setFormData((prev) => ({
-//         ...prev,
-//         clientName: "",
-//         project: "",
-//       }));
-//     } else {
-//       setFormData((prev) => ({
-//         ...prev,
-//         title: "",
-//       }));
-//     }
-//   }, [invoiceType, isOpen]);
-
-//   async function generateNextRequestId() {
-//     try {
-//       const nextId = await runTransaction(db, async (transaction) => {
-//         const counterRef = doc(db, "Panels", PANEL_ID, "counters", "invoiceRequest");
-//         const counterDoc = await transaction.get(counterRef);
-
-//         let nextNumber = 1;
-//         if (counterDoc.exists()) {
-//           nextNumber = counterDoc.data().count + 1;
-//         }
-
-//         transaction.set(counterRef, { count: nextNumber }, { merge: true });
-
-//         return `REQ-${String(nextNumber).padStart(5, "0")}`;
-//       });
-
-//       setFormData((prev) => ({ ...prev, requestId: nextId }));
-//     } catch (error) {
-//       console.error("Failed to generate request ID:", error);
-//       setFormData((prev) => ({
-//         ...prev,
-//         requestId: `REQ-${String(Date.now()).slice(-4)}`,
-//       }));
-//     }
-//   }
-
-//   function updateLineItem(id: number, field: string, value: string) {
-//     setLineItems((prev) =>
-//       prev.map((item) => {
-//         if (item.id === id) {
-//           const updated: any = { ...item, [field]: value };
-//           if (field === "quantity" || field === "unitPrice") {
-//             const qty =
-//               parseFloat(field === "quantity" ? value : updated.quantity) || 0;
-//             const price =
-//               parseFloat(field === "unitPrice" ? value : updated.unitPrice) || 0;
-//             updated.amount = qty * price;
-//           }
-//           return updated;
-//         }
-//         return item;
-//       })
-//     );
-//   }
-
-//   function addLineItem() {
-//     const newId = Math.max(...lineItems.map((item) => item.id)) + 1;
-//     setLineItems((prev) => [
-//       ...prev,
-//       { id: newId, vendor: "", description: "", quantity: "", unitPrice: "", amount: 0 },
-//     ]);
-//   }
-
-//   function removeLineItem(id: number) {
-//     if (lineItems.length > 1) {
-//       setLineItems((prev) => prev.filter((item) => item.id !== id));
-//     }
-//   }
-
-//   const totalAmount = lineItems.reduce((sum, item) => sum + item.amount, 0);
-
-//   async function handleSubmit(e: React.FormEvent | null = null) {
-//     if (e) e.preventDefault();
-
-//     if (!userProfile) {
-//       toast({
-//         title: "Error",
-//         description: "User not authenticated",
-//         variant: "destructive",
-//       });
-//       return;
-//     }
-
-//     // ✅ Required fields based on type
-//     if (invoiceType === "project" && !formData.clientName) {
-//       toast({
-//         title: "Error",
-//         description: "Please select a client for Project Invoice",
-//         variant: "destructive",
-//       });
-//       return;
-//     }
-
-//     if (invoiceType === "general" && !formData.title.trim()) {
-//       toast({
-//         title: "Error",
-//         description: "Please enter a Title for General invoice",
-//         variant: "destructive",
-//       });
-//       return;
-//     }
-
-//     if (invoiceType === "project" && !formData.project.trim()) {
-//       toast({
-//         title: "Error",
-//         description: "Please enter a Project for Project Invoice",
-//         variant: "destructive",
-//       });
-//       return;
-//     }
-
-//     // ✅ Existing validation stays
-//     if (lineItems.some((item) => !item.vendor || !item.description)) {
-//       toast({
-//         title: "Error",
-//         description: "Please fill in all line item details",
-//         variant: "destructive",
-//       });
-//       return;
-//     }
-
-//     try {
-//       setLoading(true);
-
-//       // Upload supporting documents
-//       const documentUrls: string[] = [];
-//       if (files && files.length > 0) {
-//         for (let i = 0; i < files.length; i++) {
-//           const file = files[i];
-//           const fileRef = ref(storage, `invoices/${Date.now()}_${file.name}`);
-//           const snapshot = await uploadBytes(fileRef, file);
-//           const downloadUrl = await getDownloadURL(snapshot.ref);
-//           documentUrls.push(downloadUrl);
-//         }
-//       }
-
-//       const clientNameToSave = invoiceType === "project" ? formData.clientName : "";
-//       const projectToSave = invoiceType === "project" ? formData.project : "";
-//       const titleToSave = invoiceType === "general" ? formData.title : "";
-
-//       if (editingInvoice) {
-//         const existingDocuments = editingInvoice.supportingDocuments || [];
-//         const allDocuments = [...existingDocuments, ...documentUrls];
-
-//         await updateDoc(doc(db, "Panels", PANEL_ID, "invoiceRequests", editingInvoice.id), {
-//           clientName: clientNameToSave,
-//           project: projectToSave,
-//           title: titleToSave,
-//           lineItems,
-//           totalAmount,
-//           comment: formData.comment,
-//           supportingDocuments: allDocuments,
-//           status: "pending_operational_admin",
-//           updatedAt: serverTimestamp(),
-//           invoiceType,
-//         });
-//       } else {
-//         await addDoc(collection(db, "Panels", PANEL_ID, "invoiceRequests"), {
-//           requestId: formData.requestId,
-//           clientName: clientNameToSave,
-//           project: projectToSave,
-//           title: titleToSave,
-//           lineItems,
-//           totalAmount,
-//           comment: formData.comment,
-//           supportingDocuments: documentUrls,
-//           status: "pending_operational_admin",
-//           submittedBy: userProfile.id,
-//           submittedAt: serverTimestamp(),
-//           approvalHistory: [],
-//           invoiceType,
-//         });
-//       }
-
-//       toast({
-//         title: "Success",
-//         description: editingInvoice
-//           ? "Invoice request updated successfully"
-//           : "Invoice request submitted successfully",
-//       });
-
-//       if (!editingInvoice) {
-//         setFormData({
-//           requestId: "",
-//           clientName: "",
-//           project: "",
-//           title: "",
-//           comment: "",
-//         });
-//         generateNextRequestId();
-//         setInvoiceType("general");
-//         setLineItems([{ id: 1, vendor: "", description: "", quantity: "", unitPrice: "", amount: 0 }]);
-//       }
-
-//       setFiles(null);
-//       onSuccess();
-//     } catch (error: any) {
-//       console.error("Failed to submit invoice request:", error);
-//       toast({
-//         title: "Error",
-//         description: error.message || "Failed to submit invoice request",
-//         variant: "destructive",
-//       });
-//     } finally {
-//       setLoading(false);
-//     }
-//   }
-
-//   return (
-//     <Dialog open={isOpen} onOpenChange={onClose}>
-//       <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-//         <DialogHeader>
-//           <DialogTitle className="flex items-center space-x-2">
-//             <i
-//               className={`fas ${
-//                 editingInvoice ? "fa-edit text-orange-600" : "fa-file-plus text-blue-600"
-//               }`}
-//             ></i>
-//             <span>{editingInvoice ? "Edit Request Form" : "New Request Form"}</span>
-//           </DialogTitle>
-//           <DialogDescription>
-//             {editingInvoice
-//               ? "Update and resubmit your request with changes"
-//               : "Submit a new operational request with item details"}
-//           </DialogDescription>
-//         </DialogHeader>
-
-//         <form onSubmit={handleSubmit} className="space-y-6">
-//           {/* Request ID */}
-//           <div>
-//             <Label htmlFor="requestId" className="text-sm font-medium text-gray-700">
-//               <i className="fas fa-hashtag mr-1"></i>
-//               Request ID: {formData.requestId}
-//             </Label>
-//           </div>
-
-//           {/* Tabs */}
-//           <div className="flex items-center gap-2">
-//             <Button
-//               type="button"
-//               variant={invoiceType === "general" ? "default" : "outline"}
-//               onClick={() => setInvoiceType("general")}
-//               className={invoiceType === "general" ? "bg-blue-600 hover:bg-blue-700" : ""}
-//               data-testid="tab-general-invoice"
-//             >
-//               General invoice
-//             </Button>
-//             <Button
-//               type="button"
-//               variant={invoiceType === "project" ? "default" : "outline"}
-//               onClick={() => setInvoiceType("project")}
-//               className={invoiceType === "project" ? "bg-blue-600 hover:bg-blue-700" : ""}
-//               data-testid="tab-project-invoice"
-//             >
-//               Project Invoice
-//             </Button>
-//           </div>
-
-//           {/* Client / Project / Title */}
-//           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-//             {invoiceType === "project" ? (
 //               <div>
-//                 <Label htmlFor="clientName">Client Name *</Label>
-//                 <select
-//                   id="clientName"
-//                   value={formData.clientName}
-//                   onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
+//                 <Label>Subject *</Label>
+//                 <Input
+//                   value={subject}
+//                   onChange={(e) => setSubject(e.target.value)}
+//                   placeholder="Enter invoice subject"
 //                   required
-//                   className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-//                   data-testid="select-client-name"
-//                   disabled={clientsLoading}
-//                 >
-//                   <option value="">
-//                     {clientsLoading ? "Loading clients..." : "Select a client"}
+//                 />
+//               </div>
+
+//               <div className="md:col-span-2">
+//                 <Label>Message *</Label>
+//                 <Textarea
+//                   value={message}
+//                   onChange={(e) => setMessage(e.target.value)}
+//                   placeholder="Enter invoice message"
+//                   rows={4}
+//                   required
+//                 />
+//               </div>
+
+//             </div>
+//           )}
+
+//           {invoiceType === "project" && (
+//             <div>
+//               <Label>Estimate No *</Label>
+//               <select
+//                 className="w-full border h-10 px-3"
+//                 value={selectedEstimateId}
+//                 onChange={(e) => handleEstimateSelect(e.target.value)}
+//               >
+//                 <option value="">Select Estimate</option>
+//                 {estimates.map((e) => (
+//                   <option key={e.id} value={e.id}>
+//                     {e.estimateNo}
 //                   </option>
-//                   {clients.map((c) => (
-//                     <option key={c.id} value={c.name}>
-//                       {c.name}
-//                     </option>
-//                   ))}
-//                 </select>
-//               </div>
-//             ) : (
-//               <div />
-//             )}
+//                 ))}
+//               </select>
+//             </div>
+//           )}
 
-//             {invoiceType === "project" ? (
+//           {invoiceType === "project" && (
+//             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+//               {/* Client Name */}
 //               <div>
-//                 <Label htmlFor="project">Project *</Label>
+//                 <Label>Client Name</Label>
 //                 <Input
-//                   id="project"
-//                   value={formData.project}
-//                   onChange={(e) => setFormData({ ...formData, project: e.target.value })}
-//                   placeholder="Enter project name"
-//                   required
-//                   data-testid="input-project"
+//                   value={formData.clientName}
+//                   readOnly
+//                   className="bg-gray-100"
+//                   placeholder="Auto-filled from estimate"
 //                 />
 //               </div>
-//             ) : (
+
+//               {/* Subject */}
 //               <div>
-//                 <Label htmlFor="title">Title *</Label>
+//                 <Label>Subject</Label>
 //                 <Input
-//                   id="title"
 //                   value={formData.title}
-//                   onChange={(e) => setFormData({ ...formData, title: e.target.value })}
-//                   placeholder="Enter invoice title"
-//                   required
-//                   data-testid="input-title"
+//                   readOnly
+//                   className="bg-gray-100"
+//                   placeholder="Auto-filled from estimate"
 //                 />
 //               </div>
-//             )}
-//           </div>
 
-//           {/* Line Items */}
-//           <div>
-//             <div className="flex items-center justify-between mb-4">
-//               <Label className="text-lg font-semibold">Line Items</Label>
-//               <Button
-//                 type="button"
-//                 variant="outline"
-//                 size="sm"
-//                 onClick={addLineItem}
-//                 data-testid="button-add-line-item"
-//               >
-//                 Add New
-//               </Button>
+//               {/* Project */}
+//               <div>
+//                 <Label>Project</Label>
+//                 <Input
+//                   value={formData.project}
+//                   readOnly
+//                   className="bg-gray-100"
+//                   placeholder="Auto-filled from estimate"
+//                 />
+//               </div>
+
+//               {/* Project Code (Manual) */}
+//               <div>
+//                 <Label>Project Code *</Label>
+//                 <Input
+//                   value={formData.projectCode}
+//                   onChange={(e) =>
+//                     setFormData({ ...formData, projectCode: e.target.value })
+//                   }
+//                   placeholder="Enter project code manually"
+//                 />
+//               </div>
 //             </div>
+//           )}
 
-//             <div className="space-y-6">
-//               {lineItems.map((item, index) => (
-//                 <div key={item.id} className="border border-gray-200 rounded-lg p-4 space-y-4">
-//                   <div className="flex items-center justify-between">
-//                     <h4 className="font-medium text-gray-900">Item {index + 1}</h4>
-//                     {lineItems.length > 1 && (
-//                       <Button
+//           {/* <table className="w-full border">
+//             <thead className="bg-gray-100">
+//               <tr>
+//                 <th>Date</th>
+//                 <th>Service</th>
+//                 <th>Description</th>
+//                 <th>Vendor</th>
+//                 <th>Units</th>
+//                 <th>Rate</th>
+//                 <th>Tax</th>
+//                 <th>Total</th>
+//                 <th>Comment</th>
+//                 <th></th>
+//               </tr>
+//             </thead>
+
+//             <tbody>
+//               {lineItems.map((i) => (
+//                 <tr key={i.id}> */}
+
+//           <div className="border rounded-lg overflow-auto">
+//             <table className="w-full text-sm border-collapse">
+//               <thead className="bg-gray-100 text-gray-700">
+//                 <tr className="h-12">
+//                   <th className="px-2 min-w-[130px]">Date</th>
+//                   <th className="px-2 min-w-[150px]">Service</th>
+//                   <th className="px-2 min-w-[220px]">Description</th>
+//                   <th className="px-2 min-w-[160px]">Vendor</th>
+//                   <th className="px-2 w-[90px] text-center">Units</th>
+//                   <th className="px-2 w-[110px] text-center">Rate</th>
+//                   <th className="px-2 w-[90px] text-center">Tax</th>
+//                   <th className="px-2 w-[120px] text-right">Total</th>
+//                   <th className="px-2 min-w-[200px]">Comment</th>
+//                   <th className="w-[50px]"></th>
+//                 </tr>
+//               </thead>
+
+//               <tbody>
+//                 {lineItems.map((i) => (
+//                   <tr key={i.id} className="border-t hover:bg-gray-50 h-14">
+//                     {/* DATE */}
+//                     <td>
+//                       {/* <Input
+//                       type="date"
+//                       value={i.date}
+//                       onChange={(e) =>
+//                         updateLineItem(i.id, "date", e.target.value)
+//                       }
+//                     /> */}
+//                       <Popover>
+//                         <PopoverTrigger asChild>
+//                           <Button
+//                             variant="outline"
+//                             className="w-[180px] justify-start text-left font-normal"
+//                           >
+//                             <CalendarIcon className="mr-2 h-4 w-4" />
+//                             {i.date ? format(new Date(i.date), "PPP") : "Pick date"}
+//                           </Button>
+//                         </PopoverTrigger>
+
+//                         <PopoverContent className="w-auto p-0">
+//                           <Calendar
+//                             mode="single"
+//                             selected={i.date ? new Date(i.date) : undefined}
+//                             onSelect={(date) =>
+//                               updateLineItem(i.id, "date", date?.toISOString() || "")
+//                             }
+//                             initialFocus
+//                           />
+//                         </PopoverContent>
+//                       </Popover>
+//                     </td>
+
+//                     {/* SERVICE */}
+//                     <td>
+//                       {/* <Input
+//                       value={i.service}
+//                       onChange={(e) =>
+//                         updateLineItem(i.id, "service", e.target.value)
+//                       }
+//                     /> */}
+//                       <Input
+//                         className="h-9 text-sm"
+//                         value={i.service}
+//                         onChange={(e) =>
+//                           updateLineItem(i.id, "service", e.target.value)
+//                         }
+//                       />
+//                     </td>
+
+//                     {/* DESCRIPTION */}
+//                     <td>
+//                       {/* <Input
+//                       value={i.description}
+//                       onChange={(e) =>
+//                         updateLineItem(i.id, "description", e.target.value)
+//                       }
+//                     /> */}
+//                       <Input
+//                         className="h-9 text-sm"
+//                         value={i.description}
+//                         onChange={(e) =>
+//                           updateLineItem(i.id, "description", e.target.value)
+//                         }
+//                       />
+//                     </td>
+
+//                     {/* VENDOR */}
+//                     <td>
+//                       {/* <Input
+//                       value={i.vendor}
+//                       onChange={(e) =>
+//                         updateLineItem(i.id, "vendor", e.target.value)
+//                       }
+//                     /> */}
+//                       <Input
+//                         className="h-9 text-sm"
+//                         value={i.vendor}
+//                         onChange={(e) =>
+//                           updateLineItem(i.id, "vendor", e.target.value)
+//                         }
+//                       />
+//                     </td>
+
+//                     {/* UNITS */}
+//                     <td>
+//                       {/* <Input
+//                       type="number"
+//                       step="0.01"
+//                       min="0"
+//                       value={i.units}
+//                       onChange={(e) =>
+//                         updateLineItem(i.id, "units", e.target.value)
+//                       }
+//                     /> */}
+//                       <Input
+//                         type="number"
+//                         step="0.01"
+//                         min="0"
+//                         className="h-9 text-sm text-center"
+//                         value={i.units}
+//                         onChange={(e) =>
+//                           updateLineItem(i.id, "units", e.target.value)
+//                         }
+//                       />
+//                     </td>
+
+//                     {/* RATE */}
+//                     <td>
+//                       {/* <Input
+//                       type="number"
+//                       step="0.01"
+//                       min="0"
+//                       value={i.unitRate}
+//                       onChange={(e) =>
+//                         updateLineItem(i.id, "unitRate", e.target.value)
+//                       }
+//                     /> */}
+//                       <Input
+//                         type="number"
+//                         step="0.01"
+//                         min="0"
+//                         className="h-9 text-sm text-center"
+//                         value={i.unitRate}
+//                         onChange={(e) =>
+//                           updateLineItem(i.id, "unitRate", e.target.value)
+//                         }
+//                       />
+//                     </td>
+
+//                     {/* TAX */}
+//                     <td>
+//                       {/* <Input
+//                       type="number"
+//                       step="0.01"
+//                       min="0"
+//                       value={i.tax}
+//                       onChange={(e) =>
+//                         updateLineItem(i.id, "tax", e.target.value)
+//                       }
+//                     /> */}
+//                       <Input
+//                         type="number"
+//                         step="0.01"
+//                         min="0"
+//                         className="h-9 text-sm text-center"
+//                         value={i.tax}
+//                         onChange={(e) =>
+//                           updateLineItem(i.id, "tax", e.target.value)
+//                         }
+//                       />
+//                     </td>
+
+//                     {/* TOTAL */}
+//                     {/* <td className="font-semibold text-right">
+//                     {Number(i.total || 0).toFixed(2)}
+//                   </td> */}
+//                     <td className="font-semibold text-right pr-3">
+//                       {Number(i.total || 0).toFixed(2)}
+//                     </td>
+
+//                     {/* COMMENT */}
+//                     <td>
+//                       {/* <Input
+//                       value={i.comment}
+//                       onChange={(e) =>
+//                         updateLineItem(i.id, "comment", e.target.value)
+//                       }
+//                     /> */}
+//                       <Input
+//                         className="h-9 text-sm"
+//                         value={i.comment}
+//                         onChange={(e) =>
+//                           updateLineItem(i.id, "comment", e.target.value)
+//                         }
+//                       />
+//                     </td>
+
+//                     {/* DELETE */}
+//                     <td className="text-center">
+//                       <button
 //                         type="button"
-//                         variant="ghost"
-//                         size="sm"
-//                         onClick={() => removeLineItem(item.id)}
+//                         onClick={() => removeLineItem(i.id)}
 //                         className="text-red-600 hover:text-red-800"
-//                         data-testid={`button-remove-item-${item.id}`}
+//                         title="Delete row"
 //                       >
-//                         <i className="fas fa-trash"></i>
-//                       </Button>
-//                     )}
-//                   </div>
-
-//                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-//                     <div>
-//                       <Label htmlFor={`vendor-${item.id}`}>Vendor *</Label>
-//                       <Input
-//                         id={`vendor-${item.id}`}
-//                         value={item.vendor}
-//                         onChange={(e) => updateLineItem(item.id, "vendor", e.target.value)}
-//                         placeholder="Enter vendor name"
-//                         required
-//                         data-testid={`input-vendor-${item.id}`}
-//                       />
-//                     </div>
-//                     <div>
-//                       <Label htmlFor={`description-${item.id}`}>Item Description *</Label>
-//                       <Input
-//                         id={`description-${item.id}`}
-//                         value={item.description}
-//                         onChange={(e) => updateLineItem(item.id, "description", e.target.value)}
-//                         placeholder="Describe the item"
-//                         required
-//                         data-testid={`input-description-${item.id}`}
-//                       />
-//                     </div>
-//                   </div>
-
-//                   <div className="grid grid-cols-3 gap-4">
-//                     <div>
-//                       <Label htmlFor={`quantity-${item.id}`}>Quantity *</Label>
-//                       <Input
-//                         id={`quantity-${item.id}`}
-//                         type="number"
-//                         step="0.01"
-//                         value={item.quantity}
-//                         onChange={(e) => updateLineItem(item.id, "quantity", e.target.value)}
-//                         placeholder="0"
-//                         required
-//                         data-testid={`input-quantity-${item.id}`}
-//                       />
-//                     </div>
-//                     <div>
-//                       <Label htmlFor={`unitPrice-${item.id}`}>Unit Price *</Label>
-//                       <Input
-//                         id={`unitPrice-${item.id}`}
-//                         type="number"
-//                         step="0.01"
-//                         value={item.unitPrice}
-//                         onChange={(e) => updateLineItem(item.id, "unitPrice", e.target.value)}
-//                         placeholder="0.00"
-//                         required
-//                         data-testid={`input-unit-price-${item.id}`}
-//                       />
-//                     </div>
-//                     <div>
-//                       <Label htmlFor={`amount-${item.id}`}>Amount</Label>
-//                       <Input
-//                         id={`amount-${item.id}`}
-//                         type="number"
-//                         value={item.amount.toFixed(2)}
-//                         readOnly
-//                         className="bg-gray-50"
-//                         data-testid={`display-amount-${item.id}`}
-//                       />
-//                     </div>
-//                   </div>
-//                 </div>
-//               ))}
-//             </div>
-
-//             <div className="flex justify-end mt-4">
-//               <div className="bg-gray-50 px-4 py-2 rounded-lg">
-//                 <span className="text-lg font-semibold">
-//                   Total Amount: Rs {totalAmount.toFixed(2)}
-//                 </span>
-//               </div>
-//             </div>
+//                         <Trash2 size={18} />
+//                       </button>
+//                     </td>
+//                   </tr>
+//                 ))}
+//               </tbody>
+//             </table>
 //           </div>
 
-//           {/* Comment */}
-//           <div>
-//             <Label htmlFor="comment">Comment (Optional)</Label>
-//             <Textarea
-//               id="comment"
-//               rows={3}
-//               value={formData.comment}
-//               onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
-//               placeholder="Add any additional comments or notes..."
-//               data-testid="textarea-comment"
-//             />
+//           {/* <Button type="button" onClick={addLineItem}>
+//             Add Row
+//           </Button> */}
+//           <Button
+//             type="button"
+//             onClick={addLineItem}
+//             className="mt-2"
+//           >
+//             + Add Service Row
+//           </Button>
+
+//           {/* <div className="text-right font-bold"> */}
+//           <div className="flex justify-end text-lg font-semibold mt-4">
+//             Total: Rs {totalAmount.toFixed(2)}
 //           </div>
 
-//           {/* Documents */}
-//           <div>
-//             <Label htmlFor="documents">Supporting Documents</Label>
-//             <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed border-border rounded-lg hover:border-ring transition-colors">
-//               <div className="space-y-1 text-center">
-//                 <i className="fas fa-cloud-upload-alt text-3xl text-muted-foreground"></i>
-//                 <div className="flex text-sm text-muted-foreground">
-//                   <label className="relative cursor-pointer rounded-md font-medium text-primary hover:text-primary/80">
-//                     <span>Upload files</span>
-//                     <input
-//                       type="file"
-//                       className="sr-only"
-//                       multiple
-//                       accept=".pdf,.jpg,.jpeg,.png"
-//                       onChange={(e) => setFiles(e.target.files)}
-//                       data-testid="input-documents"
-//                     />
-//                   </label>
-//                   <p className="pl-1">or drag and drop</p>
-//                 </div>
-//                 <p className="text-xs text-muted-foreground">PDF, PNG, JPG up to 10MB each</p>
-//                 {files && files.length > 0 && (
-//                   <p className="text-sm text-green-600">
-//                     <i className="fas fa-check mr-1"></i>
-//                     {files.length} file(s) selected
-//                   </p>
-//                 )}
-//               </div>
-//             </div>
-//           </div>
-
-//           {/* Footer */}
-//           <div className="flex justify-end space-x-3">
-//             <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel">
-//               Cancel
-//             </Button>
-
-//             <Button
-//               type="submit"
-//               disabled={loading}
-//               className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2"
-//               data-testid="button-submit-invoice"
-//             >
-//               {loading ? (
-//                 <>
-//                   <i className="fas fa-spinner fa-spin mr-2"></i>
-//                   {editingInvoice ? "Updating..." : "Submitting..."}
-//                 </>
-//               ) : editingInvoice ? (
-//                 "Update Request"
-//               ) : (
-//                 `Submit Request ${formData.requestId}`
-//               )}
-//             </Button>
-//           </div>
+//           {/* <Button type="submit" disabled={loading}>
+//             {loading ? "Submitting..." : "Submit Invoice"}
+//           </Button> */}
+//           <Button type="submit" disabled={loading}>
+//             {loading
+//               ? "Submitting..."
+//               : editingInvoice
+//                 ? "Update & Resubmit"
+//                 : "Submit Invoice"}
+//           </Button>
 //         </form>
 //       </DialogContent>
 //     </Dialog>
 //   );
 // }
-
-
-
-
-
-
-
-
 
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
+import { Trash2, CalendarIcon } from "lucide-react";
 import {
   collection,
   addDoc,
@@ -1367,16 +760,11 @@ import {
   updateDoc,
   runTransaction,
   getDocs,
-  query,
-  orderBy,
-  getDoc, // ✅ added
 } from "firebase/firestore";
-import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
-import { db, storage } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
 import {
   Dialog,
   DialogContent,
-  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -1385,644 +773,684 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
-import type { InvoiceRequest } from "@shared/schema";
+import { Calendar } from "@/components/ui/calendar";
+import {
+  Popover,
+  PopoverTrigger,
+  PopoverContent,
+} from "@/components/ui/popover";
+import { format } from "date-fns";
 
 const PANEL_ID = "IEDGE-SYSTEM";
 
 type InvoiceType = "general" | "project";
 
-interface InvoiceRequestModalProps {
-  isOpen: boolean;
-  onClose: () => void;
-  onSuccess: () => void;
-  editingInvoice?: InvoiceRequest | null;
-}
+type LineItem = {
+  id: number;
+  date: string;
+  service: string;
+  description: string;
+  vendor: string;
+  units: string;
+  unitRate: string;
+  tax: string;
+  total: number;
+  comment: string;
+};
 
 export default function InvoiceRequestModal({
   isOpen,
   onClose,
   onSuccess,
   editingInvoice = null,
-}: InvoiceRequestModalProps) {
+}: any) {
   const { userProfile } = useAuth();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
-  const [files, setFiles] = useState<FileList | null>(null);
 
-  // ✅ Tabs: General invoice vs Project invoice
+  const [loading, setLoading] = useState(false);
   const [invoiceType, setInvoiceType] = useState<InvoiceType>("general");
 
-  // ✅ Clients dropdown
-  const [clients, setClients] = useState<{ id: string; name: string }[]>([]);
-  const [clientsLoading, setClientsLoading] = useState(false);
-
-  const [lineItems, setLineItems] = useState([
-    { id: 1, vendor: "", description: "", quantity: "", unitPrice: "", amount: 0 },
-  ]);
+  const [estimates, setEstimates] = useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
+  const [selectedEstimateId, setSelectedEstimateId] = useState("");
+  const [subject, setSubject] = useState("");
+  const [message, setMessage] = useState("");
 
   const [formData, setFormData] = useState({
     requestId: "",
     clientName: "",
     project: "",
+    projectCode: "",
     title: "",
     comment: "",
   });
 
-  // ✅ READ ONLY: show next ID without incrementing counter
-  async function fetchPreviewRequestId(): Promise<string> {
-    try {
-      const counterRef = doc(db, "Panels", PANEL_ID, "counters", "invoiceRequest");
-      const snap = await getDoc(counterRef);
-      const current = snap.exists() ? ((snap.data() as any).count ?? 0) : 0;
-      const nextNumber = current + 1;
-      return `REQ-${String(nextNumber).padStart(5, "0")}`;
-    } catch (err) {
-      console.error("Failed to fetch preview request ID:", err);
-      return "REQ-?????";
-    }
+  const [lineItems, setLineItems] = useState<LineItem[]>([
+    {
+      id: 1,
+      date: "",
+      service: "",
+      description: "",
+      vendor: "",
+      units: "",
+      unitRate: "",
+      tax: "",
+      total: 0,
+      comment: "",
+    },
+  ]);
+
+  function getSupplierDisplayName(supplier: any) {
+    return (
+      supplier?.supplierName ||
+      supplier?.vendorName ||
+      supplier?.name ||
+      supplier?.companyName ||
+      supplier?.businessName ||
+      supplier?.title ||
+      ""
+    );
   }
 
-  // ✅ WRITE: increments counter ONLY when submitting a NEW invoice
-  async function reserveNextRequestId(): Promise<string> {
-    const nextId = await runTransaction(db, async (transaction) => {
-      const counterRef = doc(db, "Panels", PANEL_ID, "counters", "invoiceRequest");
-      const counterDoc = await transaction.get(counterRef);
-
-      let nextNumber = 1;
-      if (counterDoc.exists()) {
-        nextNumber = (counterDoc.data() as any).count + 1;
-      }
-
-      transaction.set(counterRef, { count: nextNumber }, { merge: true });
-      return `REQ-${String(nextNumber).padStart(5, "0")}`;
-    });
-
-    return nextId;
+  function getEstimateProjectCode(estimate: any) {
+    return (
+      estimate?.projectCode ||
+      estimate?.projectcode ||
+      estimate?.project_code ||
+      estimate?.code ||
+      ""
+    );
   }
 
-  // Load clients whenever modal opens
+  function getEstimateTitle(estimate: any) {
+    return estimate?.subject || estimate?.title || "";
+  }
+
+  function getEstimateClientName(estimate: any) {
+    return estimate?.client || estimate?.clientName || "";
+  }
+
+  function getEstimateProjectName(estimate: any) {
+    return estimate?.projectOwner || estimate?.project || estimate?.projectName || "";
+  }
+
+  /* ===================== FETCH SUPPLIERS ===================== */
   useEffect(() => {
     if (!isOpen) return;
 
-    let mounted = true;
-    (async () => {
+    const fetchSuppliers = async () => {
       try {
-        setClientsLoading(true);
+        const snap = await getDocs(
+          collection(db, "Panels", PANEL_ID, "suppliers")
+        );
 
-        const clientsRef = collection(db, "Panels", PANEL_ID, "clients");
-        const qy = query(clientsRef, orderBy("name"));
-        const snap = await getDocs(qy);
+        const data = snap.docs
+          .map((d) => ({
+            id: d.id,
+            ...d.data(),
+          }))
+          .sort((a, b) =>
+            getSupplierDisplayName(a).localeCompare(getSupplierDisplayName(b))
+          );
 
-        const list = snap.docs.map((d) => ({
-          id: d.id,
-          name: (d.data() as any)?.name ?? "",
-        }));
-
-        if (mounted) setClients(list.filter((c) => c.name));
-      } catch (err) {
-        console.error("Failed to load clients:", err);
-        if (mounted) setClients([]);
-      } finally {
-        if (mounted) setClientsLoading(false);
+        setSuppliers(data);
+      } catch (error) {
+        console.error("Failed to fetch suppliers:", error);
       }
-    })();
-
-    return () => {
-      mounted = false;
     };
+
+    fetchSuppliers();
   }, [isOpen]);
 
-  // Populate on open (edit vs new). ✅ For new: ONLY preview (no increment)
+  /* ===================== FETCH ESTIMATES ===================== */
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || invoiceType !== "project") return;
 
-    let alive = true;
+    const fetchEstimates = async () => {
+      try {
+        const snap = await getDocs(
+          collection(db, "Panels", PANEL_ID, "estimates")
+        );
 
-    (async () => {
-      if (editingInvoice) {
-        const detectedType: InvoiceType =
-          ((editingInvoice as any).invoiceType as InvoiceType) ||
-          (editingInvoice.clientName ? "project" : "general");
-
-        setInvoiceType(detectedType);
-
-        setFormData({
-          requestId: editingInvoice.requestId,
-          clientName: editingInvoice.clientName || "",
-          project: editingInvoice.project || "",
-          title: (editingInvoice as any).title ?? "",
-          comment: editingInvoice.comment || "",
-        });
-
-        setLineItems(editingInvoice.lineItems);
-        setFiles(null);
-      } else {
-        const previewId = await fetchPreviewRequestId();
-        if (!alive) return;
-
-        setInvoiceType("general");
-        setFormData({
-          requestId: previewId,
-          clientName: "",
-          project: "",
-          title: "",
-          comment: "",
-        });
-        setLineItems([
-          { id: 1, vendor: "", description: "", quantity: "", unitPrice: "", amount: 0 },
-        ]);
-        setFiles(null);
+        setEstimates(
+          snap.docs.map((d) => ({
+            id: d.id,
+            ...d.data(),
+          }))
+        );
+      } catch (error) {
+        console.error("Failed to fetch estimates:", error);
       }
-    })();
-
-    return () => {
-      alive = false;
     };
-  }, [isOpen, editingInvoice]);
 
-  // ✅ When switching tabs, clear the fields that shouldn't apply
+    fetchEstimates();
+  }, [isOpen, invoiceType]);
+
+  /* ===================== RESET WHEN GENERAL ===================== */
   useEffect(() => {
-    if (!isOpen) return;
-
     if (invoiceType === "general") {
+      setSelectedEstimateId("");
       setFormData((prev) => ({
         ...prev,
         clientName: "",
         project: "",
-      }));
-    } else {
-      setFormData((prev) => ({
-        ...prev,
-        title: "",
+        projectCode: "",
       }));
     }
-  }, [invoiceType, isOpen]);
+  }, [invoiceType]);
 
-  function updateLineItem(id: number, field: string, value: string) {
+  /* ===================== ESTIMATE SELECT ===================== */
+  function handleEstimateSelect(id: string) {
+    setSelectedEstimateId(id);
+
+    const est = estimates.find((e) => e.id === id);
+    if (!est) return;
+
+    setFormData((prev) => ({
+      ...prev,
+      clientName: getEstimateClientName(est),
+      title: getEstimateTitle(est),
+      project: getEstimateProjectName(est),
+      projectCode: getEstimateProjectCode(est),
+    }));
+  }
+
+  /* ===================== LINE ITEM LOGIC ===================== */
+  function updateLineItem(id: number, field: keyof LineItem, value: string) {
     setLineItems((prev) =>
       prev.map((item) => {
-        if (item.id === id) {
-          const updated: any = { ...item, [field]: value };
-          if (field === "quantity" || field === "unitPrice") {
-            const qty =
-              parseFloat(field === "quantity" ? value : updated.quantity) || 0;
-            const price =
-              parseFloat(field === "unitPrice" ? value : updated.unitPrice) || 0;
-            updated.amount = qty * price;
-          }
-          return updated;
-        }
-        return item;
+        if (item.id !== id) return item;
+
+        const updated = { ...item, [field]: value };
+
+        const units =
+          updated.units === "" || updated.units === "."
+            ? 0
+            : parseFloat(updated.units);
+
+        const rate =
+          updated.unitRate === "" || updated.unitRate === "."
+            ? 0
+            : parseFloat(updated.unitRate);
+
+        const tax =
+          updated.tax === "" || updated.tax === "."
+            ? 0
+            : parseFloat(updated.tax);
+
+        updated.total = (units || 0) * (rate || 0) + (tax || 0);
+
+        return updated;
       })
     );
   }
 
   function addLineItem() {
-    const newId = Math.max(...lineItems.map((item) => item.id)) + 1;
     setLineItems((prev) => [
       ...prev,
-      { id: newId, vendor: "", description: "", quantity: "", unitPrice: "", amount: 0 },
+      {
+        id: prev.length + 1,
+        date: "",
+        service: "",
+        description: "",
+        vendor: "",
+        units: "",
+        unitRate: "",
+        tax: "",
+        total: 0,
+        comment: "",
+      },
     ]);
   }
 
   function removeLineItem(id: number) {
     if (lineItems.length > 1) {
-      setLineItems((prev) => prev.filter((item) => item.id !== id));
+      setLineItems((prev) => prev.filter((i) => i.id !== id));
     }
   }
 
-  const totalAmount = lineItems.reduce((sum, item) => sum + item.amount, 0);
+  const totalAmount = lineItems.reduce(
+    (sum, item) => sum + Number(item.total || 0),
+    0
+  );
 
-  async function handleSubmit(e: React.FormEvent | null = null) {
-    if (e) e.preventDefault();
-
-    if (!userProfile) {
-      toast({
-        title: "Error",
-        description: "User not authenticated",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    // ✅ Required fields based on type
-    if (invoiceType === "project" && !formData.clientName) {
-      toast({
-        title: "Error",
-        description: "Please select a client for Project Invoice",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (invoiceType === "general" && !formData.title.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter a Title for General invoice",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (invoiceType === "project" && !formData.project.trim()) {
-      toast({
-        title: "Error",
-        description: "Please enter a Project for Project Invoice",
-        variant: "destructive",
-      });
-      return;
-    }
-
-    if (lineItems.some((item) => !item.vendor || !item.description)) {
-      toast({
-        title: "Error",
-        description: "Please fill in all line item details",
-        variant: "destructive",
-      });
-      return;
-    }
+  /* ===================== SUBMIT ===================== */
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!userProfile) return;
 
     try {
       setLoading(true);
 
-      // Upload supporting documents
-      const documentUrls: string[] = [];
-      if (files && files.length > 0) {
-        for (let i = 0; i < files.length; i++) {
-          const file = files[i];
-          const fileRef = ref(storage, `invoices/${Date.now()}_${file.name}`);
-          const snapshot = await uploadBytes(fileRef, file);
-          const downloadUrl = await getDownloadURL(snapshot.ref);
-          documentUrls.push(downloadUrl);
-        }
-      }
-
-      const clientNameToSave = invoiceType === "project" ? formData.clientName : "";
-      const projectToSave = invoiceType === "project" ? formData.project : "";
-      const titleToSave = invoiceType === "general" ? formData.title : "";
-
-      if (editingInvoice) {
-        const existingDocuments = editingInvoice.supportingDocuments || [];
-        const allDocuments = [...existingDocuments, ...documentUrls];
-
-        await updateDoc(doc(db, "Panels", PANEL_ID, "invoiceRequests", editingInvoice.id), {
-          clientName: clientNameToSave,
-          project: projectToSave,
-          title: titleToSave,
-          lineItems,
-          totalAmount,
-          comment: formData.comment,
-          supportingDocuments: allDocuments,
-          status: "pending_operational_admin",
-          updatedAt: serverTimestamp(),
-          invoiceType,
-        });
-      } else {
-        // ✅ Increment ONLY ON SUBMIT (this is the only place we write the counter)
-        const requestIdToSave = await reserveNextRequestId();
+      if (!editingInvoice) {
+        const requestId = await generateRequestId();
 
         await addDoc(collection(db, "Panels", PANEL_ID, "invoiceRequests"), {
-          requestId: requestIdToSave,
-          clientName: clientNameToSave,
-          project: projectToSave,
-          title: titleToSave,
+          requestId,
+          invoiceType,
+          estimateId: selectedEstimateId || "",
+          clientName: invoiceType === "project" ? formData.clientName : "",
+          project: invoiceType === "project" ? formData.project : "",
+          projectCode: invoiceType === "project" ? formData.projectCode : "",
+          title: formData.title,
           lineItems,
           totalAmount,
-          comment: formData.comment,
-          supportingDocuments: documentUrls,
-          status: "pending_operational_admin",
-          submittedBy: userProfile.id,
+          subject,
+          message,
+          status: "pending_main_admin",
           submittedAt: serverTimestamp(),
-          approvalHistory: [],
-          invoiceType,
+          editDate: null,
+          submittedBy: userProfile.id,
         });
 
-        // Keep UI consistent (optional)
-        setFormData((prev) => ({ ...prev, requestId: requestIdToSave }));
+        toast({ title: "Payment request submitted" });
+      } else {
+        await updateDoc(
+          doc(db, "Panels", PANEL_ID, "invoiceRequests", editingInvoice.id),
+          {
+            invoiceType,
+            estimateId: selectedEstimateId || "",
+            clientName: invoiceType === "project" ? formData.clientName : "",
+            project: invoiceType === "project" ? formData.project : "",
+            projectCode: invoiceType === "project" ? formData.projectCode : "",
+            title: formData.title,
+            lineItems,
+            totalAmount,
+            subject,
+            message,
+            status: "pending_main_admin",
+            editDate: serverTimestamp(),
+          }
+        );
+
+        toast({ title: "Payment request resubmitted" });
       }
 
-      toast({
-        title: "Success",
-        description: editingInvoice
-          ? "Invoice request updated successfully"
-          : "Invoice request submitted successfully",
-      });
-
-      if (!editingInvoice) {
-        // ✅ Reset and fetch new preview (NO increment)
-        const previewId = await fetchPreviewRequestId();
-
-        setInvoiceType("general");
-        setFormData({
-          requestId: previewId,
-          clientName: "",
-          project: "",
-          title: "",
-          comment: "",
-        });
-        setLineItems([
-          { id: 1, vendor: "", description: "", quantity: "", unitPrice: "", amount: 0 },
-        ]);
-      }
-
-      setFiles(null);
       onSuccess();
-    } catch (error: any) {
-      console.error("Failed to submit invoice request:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to submit invoice request",
-        variant: "destructive",
-      });
+    } catch (err) {
+      console.error(err);
+      toast({ title: "Error", variant: "destructive" });
     } finally {
       setLoading(false);
     }
   }
 
+  async function generateRequestId() {
+    const counterRef = doc(
+      db,
+      "Panels",
+      PANEL_ID,
+      "counters",
+      "invoiceRequests"
+    );
+
+    return await runTransaction(db, async (transaction) => {
+      const snap = await transaction.get(counterRef);
+
+      let count = 1;
+
+      if (!snap.exists()) {
+        transaction.set(counterRef, { count: 1 });
+      } else {
+        count = (snap.data().count || 0) + 1;
+        transaction.update(counterRef, { count });
+      }
+
+      const year = new Date().getFullYear();
+      return `PR-${year}-${String(count).padStart(4, "0")}`;
+    });
+  }
+
+  /* ===================== EDIT MODE ===================== */
+  useEffect(() => {
+    if (!editingInvoice) return;
+
+    setInvoiceType(editingInvoice.invoiceType || "project");
+    setSelectedEstimateId(editingInvoice.estimateId || "");
+    setSubject(editingInvoice.subject || "");
+    setMessage(editingInvoice.message || "");
+
+    setFormData({
+      requestId: editingInvoice.requestId || "",
+      clientName: editingInvoice.clientName || "",
+      project: editingInvoice.project || "",
+      projectCode: editingInvoice.projectCode || "",
+      title: editingInvoice.title || "",
+      comment: editingInvoice.comment || "",
+    });
+
+    setLineItems(
+      editingInvoice.lineItems?.length
+        ? editingInvoice.lineItems
+        : [
+            {
+              id: 1,
+              date: "",
+              service: "",
+              description: "",
+              vendor: "",
+              units: "",
+              unitRate: "",
+              tax: "",
+              total: 0,
+              comment: "",
+            },
+          ]
+    );
+  }, [editingInvoice]);
+
+  /* ===================== UI ===================== */
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
+      <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
-          <DialogTitle className="flex items-center space-x-2">
-            <i
-              className={`fas ${
-                editingInvoice ? "fa-edit text-orange-600" : "fa-file-plus text-blue-600"
-              }`}
-            ></i>
-            <span>{editingInvoice ? "Edit Request Form" : "New Request Form"}</span>
+          <DialogTitle>
+            {editingInvoice ? "Edit Payment Request" : "New Payment Request"}
           </DialogTitle>
-          <DialogDescription>
-            {editingInvoice
-              ? "Update and resubmit your request with changes"
-              : "Submit a new operational request with item details"}
-          </DialogDescription>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
-          {/* Request ID */}
-          <div>
-            <Label htmlFor="requestId" className="text-sm font-medium text-gray-700">
-              <i className="fas fa-hashtag mr-1"></i>
-              Request ID: {formData.requestId || "Loading..."}
-            </Label>
-          </div>
-
-          {/* Tabs */}
-          <div className="flex items-center gap-2">
+          <div className="flex gap-2">
             <Button
               type="button"
               variant={invoiceType === "general" ? "default" : "outline"}
               onClick={() => setInvoiceType("general")}
-              className={invoiceType === "general" ? "bg-blue-600 hover:bg-blue-700" : ""}
-              data-testid="tab-general-invoice"
             >
-              General invoice
+              General
             </Button>
             <Button
               type="button"
               variant={invoiceType === "project" ? "default" : "outline"}
               onClick={() => setInvoiceType("project")}
-              className={invoiceType === "project" ? "bg-blue-600 hover:bg-blue-700" : ""}
-              data-testid="tab-project-invoice"
             >
-              Project Invoice
+              Project
             </Button>
           </div>
 
-          {/* Client / Project / Title */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            {invoiceType === "project" ? (
+          {invoiceType === "general" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <Label htmlFor="clientName">Client Name *</Label>
-                <select
-                  id="clientName"
-                  value={formData.clientName}
-                  onChange={(e) => setFormData({ ...formData, clientName: e.target.value })}
-                  required
-                  className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
-                  data-testid="select-client-name"
-                  disabled={clientsLoading}
-                >
-                  <option value="">
-                    {clientsLoading ? "Loading clients..." : "Select a client"}
-                  </option>
-                  {clients.map((c) => (
-                    <option key={c.id} value={c.name}>
-                      {c.name}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            ) : (
-              <div />
-            )}
-
-            {invoiceType === "project" ? (
-              <div>
-                <Label htmlFor="project">Project *</Label>
+                <Label>Title *</Label>
                 <Input
-                  id="project"
-                  value={formData.project}
-                  onChange={(e) => setFormData({ ...formData, project: e.target.value })}
-                  placeholder="Enter project name"
-                  required
-                  data-testid="input-project"
-                />
-              </div>
-            ) : (
-              <div>
-                <Label htmlFor="title">Title *</Label>
-                <Input
-                  id="title"
                   value={formData.title}
-                  onChange={(e) => setFormData({ ...formData, title: e.target.value })}
+                  onChange={(e) =>
+                    setFormData({ ...formData, title: e.target.value })
+                  }
                   placeholder="Enter invoice title"
                   required
-                  data-testid="input-title"
                 />
               </div>
-            )}
-          </div>
 
-          {/* Line Items */}
-          <div>
-            <div className="flex items-center justify-between mb-4">
-              <Label className="text-lg font-semibold">Line Items</Label>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                onClick={addLineItem}
-                data-testid="button-add-line-item"
-              >
-                Add New
-              </Button>
+              <div>
+                <Label>Subject *</Label>
+                <Input
+                  value={subject}
+                  onChange={(e) => setSubject(e.target.value)}
+                  placeholder="Enter invoice subject"
+                  required
+                />
+              </div>
+
+              <div className="md:col-span-2">
+                <Label>Message *</Label>
+                <Textarea
+                  value={message}
+                  onChange={(e) => setMessage(e.target.value)}
+                  placeholder="Enter invoice message"
+                  rows={4}
+                  required
+                />
+              </div>
             </div>
+          )}
 
-            <div className="space-y-6">
-              {lineItems.map((item, index) => (
-                <div key={item.id} className="border border-gray-200 rounded-lg p-4 space-y-4">
-                  <div className="flex items-center justify-between">
-                    <h4 className="font-medium text-gray-900">Item {index + 1}</h4>
-                    {lineItems.length > 1 && (
-                      <Button
+          {invoiceType === "project" && (
+            <div>
+              <Label>Estimate No *</Label>
+              <select
+                className="w-full border rounded-md h-10 px-3"
+                value={selectedEstimateId}
+                onChange={(e) => handleEstimateSelect(e.target.value)}
+                required
+              >
+                <option value="">Select Estimate</option>
+                {estimates.map((e) => (
+                  <option key={e.id} value={e.id}>
+                    {e.estimateNo || e.estimateNumber || e.id}
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          {invoiceType === "project" && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div>
+                <Label>Client Name</Label>
+                <Input
+                  value={formData.clientName}
+                  readOnly
+                  className="bg-gray-100"
+                  placeholder="Auto-filled from estimate"
+                />
+              </div>
+
+              <div>
+                <Label>Subject</Label>
+                <Input
+                  value={formData.title}
+                  readOnly
+                  className="bg-gray-100"
+                  placeholder="Auto-filled from estimate"
+                />
+              </div>
+
+              <div>
+                <Label>Project</Label>
+                <Input
+                  value={formData.project}
+                  readOnly
+                  className="bg-gray-100"
+                  placeholder="Auto-filled from estimate"
+                />
+              </div>
+
+              <div>
+                <Label>Project Code *</Label>
+                <Input
+                  value={formData.projectCode}
+                  onChange={(e) =>
+                    setFormData({ ...formData, projectCode: e.target.value })
+                  }
+                  placeholder="Auto-filled from estimate"
+                  required
+                />
+              </div>
+            </div>
+          )}
+
+          <div className="border rounded-lg overflow-auto">
+            <table className="w-full text-sm border-collapse">
+              <thead className="bg-gray-100 text-gray-700">
+                <tr className="h-12">
+                  <th className="px-2 min-w-[130px]">Date</th>
+                  <th className="px-2 min-w-[150px]">Service</th>
+                  <th className="px-2 min-w-[220px]">Description</th>
+                  <th className="px-2 min-w-[180px]">Vendor</th>
+                  <th className="px-2 w-[90px] text-center">Units</th>
+                  <th className="px-2 w-[110px] text-center">Rate</th>
+                  <th className="px-2 w-[90px] text-center">Tax</th>
+                  <th className="px-2 w-[120px] text-right">Total</th>
+                  <th className="px-2 min-w-[200px]">Comment</th>
+                  <th className="w-[50px]"></th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {lineItems.map((item) => (
+                  <tr key={item.id} className="border-t hover:bg-gray-50 h-14">
+                    <td className="px-2 py-2">
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button
+                            type="button"
+                            variant="outline"
+                            className="w-[180px] justify-start text-left font-normal"
+                          >
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {item.date
+                              ? format(new Date(item.date), "PPP")
+                              : "Pick date"}
+                          </Button>
+                        </PopoverTrigger>
+
+                        <PopoverContent className="w-auto p-0">
+                          <Calendar
+                            mode="single"
+                            selected={item.date ? new Date(item.date) : undefined}
+                            onSelect={(date) =>
+                              updateLineItem(
+                                item.id,
+                                "date",
+                                date?.toISOString() || ""
+                              )
+                            }
+                            initialFocus
+                          />
+                        </PopoverContent>
+                      </Popover>
+                    </td>
+
+                    <td className="px-2 py-2">
+                      <Input
+                        className="h-9 text-sm"
+                        value={item.service}
+                        onChange={(e) =>
+                          updateLineItem(item.id, "service", e.target.value)
+                        }
+                      />
+                    </td>
+
+                    <td className="px-2 py-2">
+                      <Input
+                        className="h-9 text-sm"
+                        value={item.description}
+                        onChange={(e) =>
+                          updateLineItem(item.id, "description", e.target.value)
+                        }
+                      />
+                    </td>
+
+                    <td className="px-2 py-2">
+                      <div>
+                        <Input
+                          list={`vendor-options-${item.id}`}
+                          className="h-9 text-sm"
+                          value={item.vendor}
+                          onChange={(e) =>
+                            updateLineItem(item.id, "vendor", e.target.value)
+                          }
+                          placeholder="Enter vendor name"
+                        />
+                        <datalist id={`vendor-options-${item.id}`}>
+                          {suppliers.map((supplier) => {
+                            const supplierName = getSupplierDisplayName(supplier);
+                            if (!supplierName) return null;
+
+                            return (
+                              <option key={supplier.id} value={supplierName}>
+                                {supplierName}
+                              </option>
+                            );
+                          })}
+                        </datalist>
+                      </div>
+                    </td>
+
+                    <td className="px-2 py-2">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="h-9 text-sm text-center"
+                        value={item.units}
+                        onChange={(e) =>
+                          updateLineItem(item.id, "units", e.target.value)
+                        }
+                      />
+                    </td>
+
+                    <td className="px-2 py-2">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="h-9 text-sm text-center"
+                        value={item.unitRate}
+                        onChange={(e) =>
+                          updateLineItem(item.id, "unitRate", e.target.value)
+                        }
+                      />
+                    </td>
+
+                    <td className="px-2 py-2">
+                      <Input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        className="h-9 text-sm text-center"
+                        value={item.tax}
+                        onChange={(e) =>
+                          updateLineItem(item.id, "tax", e.target.value)
+                        }
+                      />
+                    </td>
+
+                    <td className="font-semibold text-right pr-3">
+                      {Number(item.total || 0).toFixed(2)}
+                    </td>
+
+                    <td className="px-2 py-2">
+                      <Input
+                        className="h-9 text-sm"
+                        value={item.comment}
+                        onChange={(e) =>
+                          updateLineItem(item.id, "comment", e.target.value)
+                        }
+                      />
+                    </td>
+
+                    <td className="text-center px-2 py-2">
+                      <button
                         type="button"
-                        variant="ghost"
-                        size="sm"
                         onClick={() => removeLineItem(item.id)}
                         className="text-red-600 hover:text-red-800"
-                        data-testid={`button-remove-item-${item.id}`}
+                        title="Delete row"
                       >
-                        <i className="fas fa-trash"></i>
-                      </Button>
-                    )}
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <div>
-                      <Label htmlFor={`vendor-${item.id}`}>Vendor *</Label>
-                      <Input
-                        id={`vendor-${item.id}`}
-                        value={item.vendor}
-                        onChange={(e) => updateLineItem(item.id, "vendor", e.target.value)}
-                        placeholder="Enter vendor name"
-                        required
-                        data-testid={`input-vendor-${item.id}`}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor={`description-${item.id}`}>Item Description *</Label>
-                      <Input
-                        id={`description-${item.id}`}
-                        value={item.description}
-                        onChange={(e) => updateLineItem(item.id, "description", e.target.value)}
-                        placeholder="Describe the item"
-                        required
-                        data-testid={`input-description-${item.id}`}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-4">
-                    <div>
-                      <Label htmlFor={`quantity-${item.id}`}>Quantity *</Label>
-                      <Input
-                        id={`quantity-${item.id}`}
-                        type="number"
-                        step="0.01"
-                        value={item.quantity}
-                        onChange={(e) => updateLineItem(item.id, "quantity", e.target.value)}
-                        placeholder="0"
-                        required
-                        data-testid={`input-quantity-${item.id}`}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor={`unitPrice-${item.id}`}>Unit Price *</Label>
-                      <Input
-                        id={`unitPrice-${item.id}`}
-                        type="number"
-                        step="0.01"
-                        value={item.unitPrice}
-                        onChange={(e) => updateLineItem(item.id, "unitPrice", e.target.value)}
-                        placeholder="0.00"
-                        required
-                        data-testid={`input-unit-price-${item.id}`}
-                      />
-                    </div>
-                    <div>
-                      <Label htmlFor={`amount-${item.id}`}>Amount</Label>
-                      <Input
-                        id={`amount-${item.id}`}
-                        type="number"
-                        value={item.amount.toFixed(2)}
-                        readOnly
-                        className="bg-gray-50"
-                        data-testid={`display-amount-${item.id}`}
-                      />
-                    </div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            <div className="flex justify-end mt-4">
-              <div className="bg-gray-50 px-4 py-2 rounded-lg">
-                <span className="text-lg font-semibold">
-                  Total Amount: Rs {totalAmount.toFixed(2)}
-                </span>
-              </div>
-            </div>
+                        <Trash2 size={18} />
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
 
-          {/* Comment */}
-          <div>
-            <Label htmlFor="comment">Comment (Optional)</Label>
-            <Textarea
-              id="comment"
-              rows={3}
-              value={formData.comment}
-              onChange={(e) => setFormData({ ...formData, comment: e.target.value })}
-              placeholder="Add any additional comments or notes..."
-              data-testid="textarea-comment"
-            />
+          <Button type="button" onClick={addLineItem} className="mt-2">
+            + Add Service Row
+          </Button>
+
+          <div className="flex justify-end text-lg font-semibold mt-4">
+            Total: Rs {totalAmount.toFixed(2)}
           </div>
 
-          {/* Documents */}
-          <div>
-            <Label htmlFor="documents">Supporting Documents</Label>
-            <div className="mt-1 flex justify-center px-6 pt-5 pb-6 border-2 border-dashed border-border rounded-lg hover:border-ring transition-colors">
-              <div className="space-y-1 text-center">
-                <i className="fas fa-cloud-upload-alt text-3xl text-muted-foreground"></i>
-                <div className="flex text-sm text-muted-foreground">
-                  <label className="relative cursor-pointer rounded-md font-medium text-primary hover:text-primary/80">
-                    <span>Upload files</span>
-                    <input
-                      type="file"
-                      className="sr-only"
-                      multiple
-                      accept=".pdf,.jpg,.jpeg,.png"
-                      onChange={(e) => setFiles(e.target.files)}
-                      data-testid="input-documents"
-                    />
-                  </label>
-                  <p className="pl-1">or drag and drop</p>
-                </div>
-                <p className="text-xs text-muted-foreground">PDF, PNG, JPG up to 10MB each</p>
-                {files && files.length > 0 && (
-                  <p className="text-sm text-green-600">
-                    <i className="fas fa-check mr-1"></i>
-                    {files.length} file(s) selected
-                  </p>
-                )}
-              </div>
-            </div>
-          </div>
-
-          {/* Footer */}
-          <div className="flex justify-end space-x-3">
-            <Button type="button" variant="outline" onClick={onClose} data-testid="button-cancel">
-              Cancel
-            </Button>
-
-            <Button
-              type="submit"
-              disabled={loading}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-8 py-2"
-              data-testid="button-submit-invoice"
-            >
-              {loading ? (
-                <>
-                  <i className="fas fa-spinner fa-spin mr-2"></i>
-                  {editingInvoice ? "Updating..." : "Submitting..."}
-                </>
-              ) : editingInvoice ? (
-                "Update Request"
-              ) : (
-                `Submit Request ${formData.requestId}`
-              )}
-            </Button>
-          </div>
+          <Button type="submit" disabled={loading}>
+            {loading
+              ? "Submitting..."
+              : editingInvoice
+              ? "Update & Resubmit"
+              : "Submit Invoice"}
+          </Button>
         </form>
       </DialogContent>
     </Dialog>

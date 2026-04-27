@@ -1,3 +1,197 @@
+// import { useState, useEffect } from "react";
+// import {
+//   collection,
+//   query,
+//   orderBy,
+//   onSnapshot,
+//   doc,
+//   addDoc,
+//   updateDoc,
+//   deleteDoc,
+//   serverTimestamp,
+// } from "firebase/firestore";
+// import { db } from "@/lib/firebase";
+// import {
+//   MeetingUpdate,
+//   normalizeMeetingUpdate,
+//   InsertMeetingUpdate,
+// } from "@shared/schema";
+// import { useAuth } from "@/contexts/AuthContext";
+// import { createNotification } from "@/hooks/useNotifications";
+
+// export function useMeetingUpdates(recordId?: string) {
+//   const { userProfile, currentUser } = useAuth();
+//   const actorId = currentUser?.uid || userProfile?.id || "";
+//   const [meetingUpdates, setMeetingUpdates] = useState<MeetingUpdate[]>([]);
+//   const [loading, setLoading] = useState(true);
+
+//   useEffect(() => {
+//     if (!recordId) {
+//       setMeetingUpdates([]);
+//       setLoading(false);
+//       return;
+//     }
+
+//     const q = query(
+//       collection(
+//         db,
+//         "Panels",
+//         "IEDGE-SYSTEM",
+//         "salesRecords",
+//         recordId,
+//         "meetingUpdates",
+//       ),
+//       orderBy("meetingDate", "desc"),
+//     );
+
+//     const unsubscribe = onSnapshot(
+//       q,
+//       (snapshot) => {
+//         const meetingUpdateList: MeetingUpdate[] = [];
+//         snapshot.forEach((docSnap) => {
+//           const data = docSnap.data();
+//           meetingUpdateList.push(
+//             normalizeMeetingUpdate({
+//               id: docSnap.id,
+//               ...data,
+//             }),
+//           );
+//         });
+
+//         setMeetingUpdates(meetingUpdateList);
+//         setLoading(false);
+//       },
+//       (error) => {
+//         console.error("Error fetching meeting updates:", error);
+//         setLoading(false);
+//       },
+//     );
+
+//     return () => unsubscribe();
+//   }, [recordId]);
+
+//   const createMeetingUpdate = async (
+//     meetingUpdateData: InsertMeetingUpdate,
+//     recipientId?: string,
+//   ) => {
+//     if (!recordId || !userProfile) return null;
+
+//     try {
+//       const meetingUpdateDoc = await addDoc(
+//         collection(
+//           db,
+//           "Panels",
+//           "IEDGE-SYSTEM",
+//           "salesRecords",
+//           recordId,
+//           "meetingUpdates",
+//         ),
+//         {
+//           ...meetingUpdateData,
+//           createdById: actorId,
+//           createdByName: userProfile.displayName,
+//           createdAt: serverTimestamp(),
+//           updatedAt: serverTimestamp(),
+//         },
+//       );
+
+//       if (recipientId && recipientId !== actorId) {
+//         await createNotification({
+//           recipientId,
+//           type: "meeting_update",
+//           recordId,
+//           meetingUpdateId: meetingUpdateDoc.id,
+//           message: `${userProfile.displayName} created a new meeting update for ${meetingUpdateData.meetingDate}`,
+//           createdById: actorId,
+//           createdByName: userProfile.displayName,
+//         });
+//       }
+
+//       return meetingUpdateDoc.id;
+//     } catch (error) {
+//       console.error("Error creating meeting update:", error);
+//       throw error;
+//     }
+//   };
+
+//   const updateMeetingUpdate = async (
+//     meetingUpdateId: string,
+//     updates: Partial<MeetingUpdate>,
+//     recipientId?: string,
+//   ) => {
+//     if (!recordId || !userProfile) return;
+
+//     try {
+//       await updateDoc(
+//         doc(
+//           db,
+//           "Panels",
+//           "IEDGE-SYSTEM",
+//           "salesRecords",
+//           recordId,
+//           "meetingUpdates",
+//           meetingUpdateId,
+//         ),
+//         {
+//           ...updates,
+//           updatedAt: serverTimestamp(),
+//         },
+//       );
+
+//       if (recipientId && recipientId !== actorId) {
+//         await createNotification({
+//           recipientId,
+//           type: "meeting_update",
+//           recordId,
+//           meetingUpdateId,
+//           message: `${userProfile.displayName} updated a meeting record`,
+//           createdById: actorId,
+//           createdByName: userProfile.displayName,
+//         });
+//       }
+//     } catch (error) {
+//       console.error("Error updating meeting update:", error);
+//       throw error;
+//     }
+//   };
+
+//   const deleteMeetingUpdate = async (meetingUpdateId: string) => {
+//     if (!recordId) return;
+
+//     try {
+//       await deleteDoc(
+//         doc(
+//           db,
+//           "Panels",
+//           "IEDGE-SYSTEM",
+//           "salesRecords",
+//           recordId,
+//           "meetingUpdates",
+//           meetingUpdateId,
+//         ),
+//       );
+//     } catch (error) {
+//       console.error("Error deleting meeting update:", error);
+//       throw error;
+//     }
+//   };
+
+//   const getMeetingUpdateById = (
+//     meetingUpdateId: string,
+//   ): MeetingUpdate | undefined => {
+//     return meetingUpdates.find((update) => update.id === meetingUpdateId);
+//   };
+
+//   return {
+//     meetingUpdates,
+//     loading,
+//     createMeetingUpdate,
+//     updateMeetingUpdate,
+//     deleteMeetingUpdate,
+//     getMeetingUpdateById,
+//   };
+// }
+
 import { useState, useEffect } from "react";
 import {
   collection,
@@ -19,6 +213,23 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { createNotification } from "@/hooks/useNotifications";
 
+type RecipientInput = string | string[] | undefined;
+
+function normalizeRecipientIds(recipientIds: RecipientInput, actorId: string) {
+  const values = Array.isArray(recipientIds)
+    ? recipientIds
+    : recipientIds
+      ? [recipientIds]
+      : [];
+  return Array.from(
+    new Set(
+      values
+        .map((value) => String(value || "").trim())
+        .filter((value) => !!value && value !== actorId),
+    ),
+  );
+}
+
 export function useMeetingUpdates(recordId?: string) {
   const { userProfile, currentUser } = useAuth();
   const actorId = currentUser?.uid || userProfile?.id || "";
@@ -33,14 +244,7 @@ export function useMeetingUpdates(recordId?: string) {
     }
 
     const q = query(
-      collection(
-        db,
-        "Panels",
-        "IEDGE-SYSTEM",
-        "salesRecords",
-        recordId,
-        "meetingUpdates",
-      ),
+      collection(db, `salesRecords/${recordId}/meetingUpdates`),
       orderBy("meetingDate", "desc"),
     );
 
@@ -48,11 +252,11 @@ export function useMeetingUpdates(recordId?: string) {
       q,
       (snapshot) => {
         const meetingUpdateList: MeetingUpdate[] = [];
-        snapshot.forEach((docSnap) => {
-          const data = docSnap.data();
+        snapshot.forEach((meetingDoc) => {
+          const data = meetingDoc.data();
           meetingUpdateList.push(
             normalizeMeetingUpdate({
-              id: docSnap.id,
+              id: meetingDoc.id,
               ...data,
             }),
           );
@@ -72,20 +276,13 @@ export function useMeetingUpdates(recordId?: string) {
 
   const createMeetingUpdate = async (
     meetingUpdateData: InsertMeetingUpdate,
-    recipientId?: string,
+    recipientIds?: RecipientInput,
   ) => {
-    if (!recordId || !userProfile) return null;
+    if (!recordId || !userProfile || !actorId) return null;
 
     try {
       const meetingUpdateDoc = await addDoc(
-        collection(
-          db,
-          "Panels",
-          "IEDGE-SYSTEM",
-          "salesRecords",
-          recordId,
-          "meetingUpdates",
-        ),
+        collection(db, `salesRecords/${recordId}/meetingUpdates`),
         {
           ...meetingUpdateData,
           createdById: actorId,
@@ -95,7 +292,8 @@ export function useMeetingUpdates(recordId?: string) {
         },
       );
 
-      if (recipientId && recipientId !== actorId) {
+      const normalizedRecipients = normalizeRecipientIds(recipientIds, actorId);
+      for (const recipientId of normalizedRecipients) {
         await createNotification({
           recipientId,
           type: "meeting_update",
@@ -117,28 +315,21 @@ export function useMeetingUpdates(recordId?: string) {
   const updateMeetingUpdate = async (
     meetingUpdateId: string,
     updates: Partial<MeetingUpdate>,
-    recipientId?: string,
+    recipientIds?: RecipientInput,
   ) => {
-    if (!recordId || !userProfile) return;
+    if (!recordId || !userProfile || !actorId) return;
 
     try {
       await updateDoc(
-        doc(
-          db,
-          "Panels",
-          "IEDGE-SYSTEM",
-          "salesRecords",
-          recordId,
-          "meetingUpdates",
-          meetingUpdateId,
-        ),
+        doc(db, `salesRecords/${recordId}/meetingUpdates`, meetingUpdateId),
         {
           ...updates,
           updatedAt: serverTimestamp(),
         },
       );
 
-      if (recipientId && recipientId !== actorId) {
+      const normalizedRecipients = normalizeRecipientIds(recipientIds, actorId);
+      for (const recipientId of normalizedRecipients) {
         await createNotification({
           recipientId,
           type: "meeting_update",
@@ -160,15 +351,7 @@ export function useMeetingUpdates(recordId?: string) {
 
     try {
       await deleteDoc(
-        doc(
-          db,
-          "Panels",
-          "IEDGE-SYSTEM",
-          "salesRecords",
-          recordId,
-          "meetingUpdates",
-          meetingUpdateId,
-        ),
+        doc(db, `salesRecords/${recordId}/meetingUpdates`, meetingUpdateId),
       );
     } catch (error) {
       console.error("Error deleting meeting update:", error);

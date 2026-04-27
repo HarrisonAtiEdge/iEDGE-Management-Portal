@@ -16,6 +16,10 @@
 //   sourceEstimateNo?: string;
 //   heading?: string;
 //   // ✅ also supports: poNumber?: string; (stored in invoice data)
+//   selectedPercentage?: number;
+//   selectedPercentageSubtotal?: number;
+//   selectedPercentageTax?: number;
+//   selectedPercentageTotal?: number;
 // };
 
 // type Company = { name: string; logo: string };
@@ -245,7 +249,6 @@
 //   const withLogo = args.withLogo ?? (invoice as any)?.withLogo ?? true;
 //   const logoSrc = withLogo && selectedCompany ? selectedCompany.logo : null;
 
-//   // logo
 //   if (logoSrc) {
 //     const img = new Image();
 //     img.crossOrigin = "anonymous";
@@ -308,7 +311,6 @@
 //       y += 12;
 //     });
 
-//     // ✅ Right-side meta block (dynamic Y) + PO Number
 //     const rightX = pageWidth - 180;
 //     let metaY = 100;
 
@@ -341,14 +343,12 @@
 //       metaY += 15;
 //     }
 
-//     // ✅ PO Number
 //     const po = String((invoice as any).poNumber || "").trim();
 //     if (po) {
 //       pdf.text(`PO Number: ${po}`, rightX, metaY);
 //       metaY += 15;
 //     }
 
-//     // Project owner
 //     pdf.setFont("helvetica", "bold");
 //     pdf.text("PROJECT OWNER", margin, 175);
 //     pdf.setFont("helvetica", "normal");
@@ -371,7 +371,6 @@
 //     const FOOTER_GAP = 110;
 //     const footerSafeY = pageHeight - FOOTER_GAP;
 
-//     // SERVICE TABLE
 //     const serviceRows = ((invoice.services || []) as any[]).map(
 //       (s: ServiceItem) => {
 //         const units = Number(s.units || 0);
@@ -422,10 +421,83 @@
 //       finalY = 80;
 //     }
 
-//     // TOTALS (Tax line includes WHT)
-//     const whtTotal = Number((invoice as any)?.whtTotal ?? 0);
-//     const displayTax = Number(invoice.tax ?? 0) + whtTotal;
+//     const selectedPercentage = Number(
+//       (invoice as any)?.selectedPercentage ?? 100,
+//     );
+//     const hasPartialPayment =
+//       Number.isFinite(selectedPercentage) &&
+//       selectedPercentage > 0 &&
+//       selectedPercentage < 100;
 
+//     const actualSubtotal = Number(invoice.subtotal ?? 0);
+//     const actualTax = Number(invoice.tax ?? 0);
+//     const whtTotal = Number((invoice as any)?.whtTotal ?? 0);
+//     const actualTaxPlusWht = actualTax + whtTotal;
+//     const actualTotal = Number(invoice.total ?? 0);
+
+//     const partialSubtotal = Number(
+//       (invoice as any)?.selectedPercentageSubtotal ?? 0,
+//     );
+
+//     // ✅ Partial TAX must be selected % of (actual TAX + actual WHT)
+//     const partialTax = Number(
+//       (actualTaxPlusWht * (selectedPercentage / 100)).toFixed(2),
+//     );
+
+//     // ✅ Partial TOTAL should remain based on saved selected total if available,
+//     // otherwise calculate from subtotal + tax+wht
+//     const partialTotal = Number(
+//       (
+//         (invoice as any)?.selectedPercentageTotal ??
+//         partialSubtotal + partialTax
+//       ).toFixed(2),
+//     );
+
+//     const displayTax = actualTaxPlusWht;
+
+//     // Partial payment block on left side of the main totals block
+//     if (hasPartialPayment) {
+//       // ✅ Move this block well towards the left side of the page
+//       const partialBlockLabelX = margin + 10;
+//       const partialBlockValueX = 255;
+
+//       pdf.setFont("helvetica", "bold");
+//       pdf.setFontSize(10);
+//       pdf.text(
+//         `Advance Payment – ${selectedPercentage}%`,
+//         partialBlockLabelX,
+//         finalY - 18,
+//         { align: "left" },
+//       );
+
+//       pdf.setFont("helvetica", "bold");
+//       pdf.setFontSize(10);
+//       pdf.text("SUBTOTAL", partialBlockLabelX, finalY, { align: "left" });
+//       pdf.text("TAX", partialBlockLabelX, finalY + 15, { align: "left" });
+//       pdf.text("TOTAL", partialBlockLabelX, finalY + 32, { align: "left" });
+
+//       pdf.setFont("helvetica", "normal");
+//       pdf.setFontSize(10);
+//       pdf.text(formatMoney(partialSubtotal), partialBlockValueX, finalY, {
+//         align: "right",
+//       });
+//       pdf.text(formatMoney(partialTax), partialBlockValueX, finalY + 15, {
+//         align: "right",
+//       });
+
+//       pdf.setFont("helvetica", "bold");
+//       pdf.setFontSize(13);
+//       pdf.text(
+//         `PKR ${formatMoney(partialTotal)}`,
+//         partialBlockValueX,
+//         finalY + 32,
+//         {
+//           align: "right",
+//         },
+//       );
+//     }
+
+//     // Existing total block stays in same place
 //     pdf.setFont("helvetica", "bold");
 //     pdf.setFontSize(10);
 //     pdf.text("SUBTOTAL", pageWidth - 200, finalY, { align: "left" });
@@ -453,7 +525,6 @@
 //     );
 //     pdf.setFontSize(10);
 
-//     // SUMMARY CALCS
 //     const services = (invoice.services || []) as any[];
 //     const taxType = String((invoice as any)?.taxType || "").trim();
 
@@ -473,7 +544,6 @@
 //       return base + (base * pct) / 100;
 //     };
 
-//     // TAX SUMMARY
 //     const map = new Map<
 //       string,
 //       { label: string; pct: number; tax: number; net: number }
@@ -522,7 +592,6 @@
 //     const totalTax = Array.from(map.values()).reduce((a, b) => a + b.tax, 0);
 //     const totalNet = Array.from(map.values()).reduce((a, b) => a + b.net, 0);
 
-//     // WHT SUMMARY
 //     const whtMap = new Map<
 //       string,
 //       { label: string; pct: number; wht: number; base: number }
@@ -559,7 +628,6 @@
 //       0,
 //     );
 
-//     // ONE TABLE: TAX SUMMARY + WHT rows
 //     let afterTotalsY = finalY + 45;
 
 //     if (taxRows.length > 0 || whtRows.length > 0) {
@@ -603,7 +671,6 @@
 //       afterTotalsY = (pdf as any).lastAutoTable.finalY + 30;
 //     }
 
-//     // MESSAGE
 //     if (invoice.message) {
 //       let noteY = Math.max(
 //         afterTotalsY,
@@ -636,7 +703,6 @@
 //       });
 //     }
 
-//     // footer
 //     const footerY = pdf.internal.pageSize.getHeight() - 70;
 //     pdf.setFontSize(8);
 //     pdf.setTextColor(100);
@@ -653,10 +719,8 @@
 //     );
 //   };
 
-//   // page 1
 //   drawPage1();
 
-//   // T&C pages
 //   addTermsAndConditionsPages(pdf, {
 //     title: (invoice as any).termsConditionTitle || "",
 //     text:
@@ -665,7 +729,6 @@
 //       "",
 //   });
 
-//   // page numbers
 //   addPageNumbers(pdf);
 
 //   return pdf.output("blob");
@@ -1054,8 +1117,15 @@ export async function buildEstimateInvoicePdfBlob(
           | undefined;
         const rateNum = Number(String(s.rate ?? 0).replace(/,/g, "")) || 0;
 
-        const amount =
+        const baseAmount =
           rateMode === "percent" ? units * (rateNum / 100) : units * rateNum;
+
+        const taxPercent = Number(s.taxPercent ?? 0);
+
+        const amount =
+          invoice.taxType === "exclusive" && taxPercent > 0
+            ? baseAmount + (baseAmount * taxPercent) / 100
+            : baseAmount;
 
         const rateDisplay =
           rateMode === "percent"
