@@ -1949,7 +1949,9 @@
 //             <label className="block text-sm font-medium text-gray-600 mb-1">
 //               Project Code
 //             </label>
-//             <select
+
+//             <input
+//               list="project-code-options"
 //               className={fieldClass(
 //                 "w-full rounded-lg border border-gray-300 p-2 text-sm",
 //                 submitAttempted && !String(projectCode || "").trim(),
@@ -1977,16 +1979,20 @@
 //                   }
 //                 }
 //               }}
-//             >
-//               <option value="">Select Project Code</option>
+//               placeholder="Search or select Project Code"
+//             />
+
+//             <datalist id="project-code-options">
 //               {projectCodeOptions.map((item) => (
-//                 <option key={item.id} value={item.projectCode}>
-//                   {[item.projectCode, item.projectName, item.client]
+//                 <option
+//                   key={item.id}
+//                   value={item.projectCode}
+//                   label={[item.projectCode, item.projectName, item.client]
 //                     .filter(Boolean)
 //                     .join(" • ")}
-//                 </option>
+//                 />
 //               ))}
-//             </select>
+//             </datalist>
 
 //             {selectedProjectCodeOption ? (
 //               <p className="mt-2 text-xs text-gray-500">
@@ -3133,15 +3139,6 @@
 //   );
 // }
 
-
-
-
-
-
-
-
-
-
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { db } from "../../lib/firebase";
 import {
@@ -3650,6 +3647,8 @@ export default function EstimateForm({
   const [termsConditionTitle, setTermsConditionTitle] = useState<string>("");
   const [termsConditionText, setTermsConditionText] = useState<string>("");
 
+  const [perPaxCost, setPerPaxCost] = useState(false);
+  const [numberOfPax, setNumberOfPax] = useState("");
   const [status, setStatus] = useState<
     | "RFQ Sent"
     | "Approved"
@@ -4038,6 +4037,9 @@ export default function EstimateForm({
 
     setUsdRate(String((existingEstimate as any)?.usdRate ?? ""));
     setEuroRate(String((existingEstimate as any)?.euroRate ?? ""));
+
+    setPerPaxCost(Boolean((existingEstimate as any)?.perPaxCost ?? false));
+    setNumberOfPax(String((existingEstimate as any)?.numberOfPax ?? ""));
 
     const savedId =
       (existingEstimate as any)?.termsConditionId ||
@@ -4675,7 +4677,8 @@ export default function EstimateForm({
     setLinkedSalesRecordId("");
     setUsdRate("");
     setEuroRate("");
-
+    setPerPaxCost(false);
+    setNumberOfPax("");
     setServices([
       {
         rowId: makeRowId(),
@@ -4751,6 +4754,10 @@ export default function EstimateForm({
       requiredFields.push({ value: usdRate, name: `${currency1Code} Rate` });
       requiredFields.push({ value: currency2Code, name: "Currency 2" });
       requiredFields.push({ value: euroRate, name: `${currency2Code} Rate` });
+    }
+
+    if (perPaxCost) {
+      requiredFields.push({ value: numberOfPax, name: "Number of Pax" });
     }
 
     const missing = requiredFields.filter((f) => !String(f.value ?? "").trim());
@@ -4859,6 +4866,10 @@ export default function EstimateForm({
 
         usdRate: addCurrencies ? String(usdRate || "").trim() : "",
         euroRate: addCurrencies ? String(euroRate || "").trim() : "",
+
+        perPaxCost,
+        numberOfPax: perPaxCost ? String(numberOfPax || "").trim() : "",
+
         whtTotal,
       } as any),
     };
@@ -5040,12 +5051,23 @@ export default function EstimateForm({
   const invalidEuro =
     submitAttempted && addCurrencies && !String(euroRate || "").trim();
 
+  const invalidPerPax =
+    submitAttempted && perPaxCost && !String(numberOfPax || "").trim();
+
+  const paxCount = parseIntLoose(numberOfPax);
+  const perPaxAmount =
+    perPaxCost && paxCount > 0 ? liveTotals.liveTotal / paxCount : 0;
+
   const c1Totals = addCurrencies
     ? {
         subtotal: convert(liveTotals.liveSubtotal, usdRate),
         tax: convert(liveTotals.liveTax, usdRate),
         wht: convert(liveTotals.liveWht, usdRate),
         total: convert(liveTotals.liveTotal, usdRate),
+        perPax:
+          perPaxCost && paxCount > 0
+            ? convert(liveTotals.liveTotal, usdRate) / paxCount
+            : 0,
       }
     : null;
 
@@ -5055,6 +5077,10 @@ export default function EstimateForm({
         tax: convert(liveTotals.liveTax, euroRate),
         wht: convert(liveTotals.liveWht, euroRate),
         total: convert(liveTotals.liveTotal, euroRate),
+        perPax:
+          perPaxCost && paxCount > 0
+            ? convert(liveTotals.liveTotal, euroRate) / paxCount
+            : 0,
       }
     : null;
 
@@ -5476,6 +5502,43 @@ export default function EstimateForm({
                 <p className="text-xs text-gray-500">
                   Rates are PKR per 1 unit of the selected currency.
                 </p>
+              </div>
+            ) : null}
+          </div>
+          {/* ✅ Per Pax Cost */}
+          <div className="mt-2">
+            <label className="flex items-center gap-2 text-sm font-medium text-gray-600">
+              <input
+                type="checkbox"
+                checked={perPaxCost}
+                onChange={(e) => {
+                  setPerPaxCost(e.target.checked);
+                  if (!e.target.checked) setNumberOfPax("");
+                }}
+                className="accent-black"
+              />
+              Per Pax Cost
+            </label>
+
+            {perPaxCost ? (
+              <div className="mt-2">
+                <label className="block text-xs font-medium text-gray-600 mb-1">
+                  Number of Pax
+                </label>
+                <input
+                  inputMode="numeric"
+                  value={numberOfPax}
+                  onChange={(e) =>
+                    setNumberOfPax(
+                      String(e.target.value || "").replace(/[^\d]/g, ""),
+                    )
+                  }
+                  className={fieldClass(
+                    "w-full rounded-lg border border-gray-300 p-2 text-sm",
+                    invalidPerPax,
+                  )}
+                  placeholder="Enter number of pax"
+                />
               </div>
             ) : null}
           </div>
@@ -6034,6 +6097,16 @@ export default function EstimateForm({
                   {formatMoney(liveTotals.liveTotal)}
                 </span>
               </div>
+              {perPaxCost && paxCount > 0 ? (
+                <div className="flex justify-between mt-2 text-sm text-gray-700">
+                  <span className="font-medium">
+                    Per pax cost inclusive of taxes
+                  </span>
+                  <span className="tabular-nums text-right">
+                    {formatMoney(perPaxAmount)}
+                  </span>
+                </div>
+              ) : null}
 
               {addCurrencies && (
                 <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -6070,6 +6143,16 @@ export default function EstimateForm({
                         {formatWithSymbol(c1.symbol, c1Totals?.total)}
                       </span>
                     </div>
+                    {perPaxCost && paxCount > 0 ? (
+                      <div className="flex justify-between mt-2 text-sm text-gray-700">
+                        <span className="font-medium">
+                          Per pax cost inclusive of taxes
+                        </span>
+                        <span className="tabular-nums">
+                          {formatWithSymbol(c1.symbol, c1Totals?.perPax)}
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
 
                   {/* Currency 2 */}
@@ -6105,6 +6188,16 @@ export default function EstimateForm({
                         {formatWithSymbol(c2.symbol, c2Totals?.total)}
                       </span>
                     </div>
+                    {perPaxCost && paxCount > 0 ? (
+                      <div className="flex justify-between mt-2 text-sm text-gray-700">
+                        <span className="font-medium">
+                          Per pax cost inclusive of taxes
+                        </span>
+                        <span className="tabular-nums">
+                          {formatWithSymbol(c2.symbol, c2Totals?.perPax)}
+                        </span>
+                      </div>
+                    ) : null}
                   </div>
                 </div>
               )}

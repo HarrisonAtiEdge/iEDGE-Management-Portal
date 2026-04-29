@@ -82,7 +82,7 @@ const getSidebarIcon = (icon?: string): LucideIcon | null => {
 const AVAILABLE_TABS = [
   { path: "/dashboard", label: "Dashboard", icon: "LayoutDashboard" },
   { path: "/sales-dashboard", label: "Sales Dashboard", icon: "LineChart" },
-  { path: "/sales", label: "Sales", icon: "BarChart3" },
+  { path: "/project", label: "Project", icon: "BarChart3" },
   { path: "/clients", label: "Clients", icon: "Users" },
   { path: "/records", label: "Records", icon: "Archive" },
   { path: "/online-accounts", label: "Online Accounts", icon: "CreditCard" },

@@ -339,7 +339,7 @@ function AuthenticatedApp() {
           </ProtectedRoute>
         </Route>
 
-        <Route path="/sales">
+        <Route path="/project">
           <ProtectedRoute>
             <Sales />
           </ProtectedRoute>
