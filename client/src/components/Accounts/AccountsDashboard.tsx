@@ -1,4 +1,3 @@
-
 // import { useEffect, useState } from "react"
 // import { collection, getDocs } from "firebase/firestore"
 // import { db } from "@/lib/firebase"
@@ -73,7 +72,6 @@
 
 //   })
 
-
 //   // ACCOUNT FILTERS
 
 //   const iedgePayments = filteredPayments.filter(
@@ -104,7 +102,6 @@
 //     (sum,i)=>sum + (i.balance ?? i.total),0
 //   )
 
-
 //   // GRAPH DATA
 
 //   const barData = [
@@ -118,14 +115,12 @@
 //     }
 //   ]
 
-
 //   const pieData = [
 //     {name:"Received",value:totalReceived},
 //     {name:"Pending",value:totalPending}
 //   ]
 
 //   const COLORS=["#4f46e5","#ef4444"]
-
 
 //   // EXPORT EXCEL
 
@@ -147,7 +142,6 @@
 //     )
 
 //   }
-
 
 //   // EXPORT PDF
 
@@ -178,7 +172,6 @@
 //     doc.save("Accounts_Report.pdf")
 //   }
 
-
 //   return(
 
 //   <div className="p-8 bg-gray-50 min-h-screen">
@@ -186,7 +179,6 @@
 //   <h1 className="text-2xl font-bold mb-6">
 //   Accounts Dashboard
 //   </h1>
-
 
 // {/* DATE FILTER */}
 
@@ -222,7 +214,6 @@
 
 // </div>
 
-
 // {/* SUMMARY CARDS */}
 
 // <div className="grid grid-cols-4 gap-4 mb-8">
@@ -236,7 +227,6 @@
 // </div>
 // </div>
 
-
 // <div className="bg-white p-5 rounded shadow">
 // <div className="text-gray-500 text-sm">
 // Total Pending
@@ -246,7 +236,6 @@
 // </div>
 // </div>
 
-
 // <div className="bg-white p-5 rounded shadow">
 // <div className="text-gray-500 text-sm">
 // iEDGE Total
@@ -255,7 +244,6 @@
 // Rs {iedgeTotal}
 // </div>
 // </div>
-
 
 // <div className="bg-white p-5 rounded shadow">
 // <div className="text-gray-500 text-sm">
@@ -267,7 +255,6 @@
 // </div>
 
 // </div>
-
 
 // {/* GRAPHS */}
 
@@ -296,8 +283,6 @@
 // </ResponsiveContainer>
 
 // </div>
-
-
 
 // <div className="bg-white p-6 rounded shadow">
 
@@ -330,7 +315,6 @@
 
 // </div>
 
-
 // {/* TRANSACTIONS */}
 
 // <div className="bg-white p-6 rounded shadow">
@@ -353,7 +337,6 @@
 // </tr>
 
 // </thead>
-
 
 // <tbody>
 
@@ -398,7 +381,6 @@
 // </table>
 
 // </div>
-
 
 // </div>
 
@@ -1146,7 +1128,6 @@
 //   );
 // }
 
-
 import { useEffect, useMemo, useState } from "react";
 import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
@@ -1228,7 +1209,9 @@ export default function AccountsDashboard() {
   const [editModalOpen, setEditModalOpen] = useState(false);
 
   const [accountLoading, setAccountLoading] = useState(false);
-  const [editingAccount, setEditingAccount] = useState<PaymentAccount | null>(null);
+  const [editingAccount, setEditingAccount] = useState<PaymentAccount | null>(
+    null,
+  );
   const [formData, setFormData] = useState<AccountFormData>(emptyForm);
 
   useEffect(() => {
@@ -1239,11 +1222,11 @@ export default function AccountsDashboard() {
   const fetchData = async () => {
     try {
       const paySnap = await getDocs(
-        collection(db, "Panels", "IEDGE-SYSTEM", "payments")
+        collection(db, "Panels", "IEDGE-SYSTEM", "payments"),
       );
 
       const invSnap = await getDocs(
-        collection(db, "Panels", "IEDGE-SYSTEM", "estimateInvoices")
+        collection(db, "Panels", "IEDGE-SYSTEM", "estimateInvoices"),
       );
 
       const payData: any[] = [];
@@ -1259,8 +1242,7 @@ export default function AccountsDashboard() {
 
       payData.sort(
         (a, b) =>
-          new Date(b.paymentDate).getTime() -
-          new Date(a.paymentDate).getTime()
+          new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime(),
       );
 
       setPayments(payData);
@@ -1496,17 +1478,17 @@ export default function AccountsDashboard() {
 
   const totalReceived = filteredPayments.reduce(
     (sum, p) => sum + Number(p.amount || 0),
-    0
+    0,
   );
 
   const totalPending = invoices.reduce(
     (sum, i) => sum + Number(i.balance ?? i.total ?? 0),
-    0
+    0,
   );
 
   const activeAccountsCount = useMemo(
     () => accounts.filter((a) => a.isActive !== false).length,
-    [accounts]
+    [accounts],
   );
 
   const totalAccountsCount = accounts.length;
@@ -1537,7 +1519,7 @@ export default function AccountsDashboard() {
       filteredPayments.map((p) => ({
         ...p,
         depositTo: getAccountLabel(p.depositTo),
-      }))
+      })),
     );
 
     const workbook = XLSX.utils.book_new();
@@ -1565,7 +1547,7 @@ export default function AccountsDashboard() {
 
   function renderAccountForm(
     onSubmit: (e: React.FormEvent) => Promise<void>,
-    submitLabel: string
+    submitLabel: string,
   ) {
     return (
       <form onSubmit={onSubmit} className="space-y-6">
@@ -1746,7 +1728,7 @@ export default function AccountsDashboard() {
 
   return (
     <div className="min-h-screen bg-slate-50 p-6 md:p-8">
-      <div className="mx-auto max-w-7xl space-y-8">
+      <div className="mx-auto space-y-8">
         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
           <div>
             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
@@ -1806,7 +1788,9 @@ export default function AccountsDashboard() {
                                   : "bg-rose-50 text-rose-700"
                               }`}
                             >
-                              {account.isActive !== false ? "Active" : "Inactive"}
+                              {account.isActive !== false
+                                ? "Active"
+                                : "Inactive"}
                             </span>
                           </div>
 
@@ -1847,20 +1831,27 @@ export default function AccountsDashboard() {
                             </div>
 
                             <div className="flex justify-between gap-3">
-                              <span className="text-slate-400">Opening Balance</span>
+                              <span className="text-slate-400">
+                                Opening Balance
+                              </span>
                               <span className="text-right font-semibold text-slate-900">
-                                Rs {Number(account.openingBalance || 0).toLocaleString()}
+                                Rs{" "}
+                                {Number(
+                                  account.openingBalance || 0,
+                                ).toLocaleString()}
                               </span>
                             </div>
 
                             <div className="flex justify-between gap-3">
-                              <span className="text-slate-400">Current Balance</span>
+                              <span className="text-slate-400">
+                                Current Balance
+                              </span>
                               <span className="text-right font-semibold text-slate-900">
                                 Rs{" "}
                                 {Number(
                                   (account as any).currentBalance ??
                                     (account as any).balance ??
-                                    0
+                                    0,
                                 ).toLocaleString()}
                               </span>
                             </div>
@@ -1888,7 +1879,9 @@ export default function AccountsDashboard() {
                               className="flex-1 rounded-xl border-slate-200"
                               onClick={() => toggleAccountStatus(account)}
                             >
-                              {account.isActive !== false ? "Deactivate" : "Activate"}
+                              {account.isActive !== false
+                                ? "Deactivate"
+                                : "Activate"}
                             </Button>
                           </div>
                         </div>
@@ -2066,13 +2059,17 @@ export default function AccountsDashboard() {
                 {filteredPayments.length > 0 ? (
                   filteredPayments.map((p) => (
                     <tr key={p.id} className="border-b border-slate-100">
-                      <td className="px-3 py-3 text-slate-700">{p.paymentDate}</td>
+                      <td className="px-3 py-3 text-slate-700">
+                        {p.paymentDate}
+                      </td>
                       <td className="px-3 py-3 text-slate-700">{p.client}</td>
                       <td className="px-3 py-3 text-slate-700">{p.method}</td>
                       <td className="px-3 py-3 text-slate-700">
                         {getAccountLabel(p.depositTo)}
                       </td>
-                      <td className="px-3 py-3 text-slate-700">{p.reference}</td>
+                      <td className="px-3 py-3 text-slate-700">
+                        {p.reference}
+                      </td>
                       <td className="px-3 py-3 text-right font-semibold text-slate-900">
                         Rs {Number(p.amount || 0).toLocaleString()}
                       </td>

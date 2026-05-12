@@ -15,7 +15,7 @@ export default function Home() {
   return (
     <div className="space-y-6">
       <div>
-        <h2 className="text-xl font-semibold">Travel</h2>
+        <h2 className="text-xl font-semibold  mb-3">Travel Settings</h2>
         <p className="text-sm text-muted-foreground">
           Choose a module to manage travel operations.
         </p>

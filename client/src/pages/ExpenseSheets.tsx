@@ -1,1727 +1,11 @@
-
-// import { useEffect, useState } from "react";
-// import { useAuth } from "@/contexts/AuthContext";
-// import {
-//   doc,
-//   updateDoc,
-//   serverTimestamp,
-//   collection,
-//   getDocs,
-// } from "firebase/firestore";
-// import { db } from "@/lib/firebase";
-// import { useFirestoreQuery } from "@/hooks/useFirestore";
-// import { Card, CardContent } from "@/components/ui/card";
-// import { Button } from "@/components/ui/button";
-// import { Badge } from "@/components/ui/badge";
-// import { ExpenseSheet } from "@shared/schema";
-// import { useToast } from "@/hooks/use-toast";
-// import ExpenseSheetModal from "@/components/ExpenseSheetModal";
-// import ExpenseDetailsModal from "@/components/ExpenseDetailsModal";
-// import RejectionModal from "@/components/RejectionModal";
-
-// interface ReimbursementExpenseRow {
-//   id: string;
-//   recordId: string;
-//   clientName: string;
-//   projectName: string;
-//   salesPerson: string;
-//   amount: number;
-//   fuelKm: number;
-//   details: string;
-//   submittedDate: any;
-//   approvalStatus: string;
-//   paymentStatus: string;
-//   approvedBy: string;
-//   paidBy: string;
-//   billUrl: string;
-// }
-
-// export default function ExpenseSheets() {
-//   const PANEL_ID = "IEDGE-SYSTEM";
-
-//   const { userProfile } = useAuth();
-//   const { toast } = useToast();
-
-//   const [activeSubTab, setActiveSubTab] = useState<
-//     "budget_expense" | "reimbursement_expense"
-//   >("budget_expense");
-
-//   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
-//   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-//   const [selectedExpense, setSelectedExpense] = useState<ExpenseSheet | null>(
-//     null
-//   );
-//   const [isRejectionModalOpen, setIsRejectionModalOpen] = useState(false);
-//   const [rejectionLoading, setRejectionLoading] = useState(false);
-
-//   const [reimbursementExpenses, setReimbursementExpenses] = useState<
-//     ReimbursementExpenseRow[]
-//   >([]);
-//   const [reimbursementLoading, setReimbursementLoading] = useState(false);
-
-//   const { data: expenseSheets, loading } = useFirestoreQuery<ExpenseSheet>(
-//     `Panels/${PANEL_ID}/expenseSheets`
-//   );
-
-//   function canCreateExpenseSheets(): boolean {
-//     return userProfile?.role === "operation";
-//   }
-
-//   async function fetchReimbursementExpenses() {
-//     try {
-//       setReimbursementLoading(true);
-
-//       const salesRecordsSnap = await getDocs(
-//         collection(db, "Panels", PANEL_ID, "salesRecords")
-//       );
-
-//       const allRows: ReimbursementExpenseRow[] = [];
-
-//       for (const salesRecordDoc of salesRecordsSnap.docs) {
-//         const salesRecordData: any = salesRecordDoc.data();
-//         const recordId = salesRecordDoc.id;
-
-//         const meetingUpdatesSnap = await getDocs(
-//           collection(
-//             db,
-//             "Panels",
-//             PANEL_ID,
-//             "salesRecords",
-//             recordId,
-//             "meetingUpdates"
-//           )
-//         );
-
-//         meetingUpdatesSnap.docs.forEach((meetingDoc) => {
-//           const meetingData: any = meetingDoc.data();
-//           const reimbursement = meetingData?.reimbursement;
-
-//           if (!reimbursement?.enabled) return;
-
-//           allRows.push({
-//             id: meetingDoc.id,
-//             recordId,
-//             clientName: salesRecordData?.client || "Unknown",
-//             projectName: salesRecordData?.projectName || "N/A",
-//             salesPerson:
-//               reimbursement?.approvalSubmittedByName ||
-//               reimbursement?.personName ||
-//               "Unknown",
-//             amount: Number(reimbursement?.amount || 0),
-//             fuelKm: Number(reimbursement?.kms || 0),
-//             details: reimbursement?.detail || "N/A",
-//             submittedDate:
-//               reimbursement?.meetingDate ||
-//               reimbursement?.createdAt ||
-//               reimbursement?.date ||
-//               null,
-//             approvalStatus: String(
-//               reimbursement?.approvalStatus || "pending_admin_approval"
-//             ),
-//             paymentStatus: String(reimbursement?.paymentStatus || "pending"),
-//             approvedBy: reimbursement?.approvedBy || "",
-//             paidBy: reimbursement?.paidBy || "",
-//             billUrl: reimbursement?.billUrl || "",
-//           });
-//         });
-//       }
-
-//       allRows.sort((a, b) => {
-//         const aTime = getSortableTime(a.submittedDate);
-//         const bTime = getSortableTime(b.submittedDate);
-//         return bTime - aTime;
-//       });
-
-//       setReimbursementExpenses(allRows);
-//     } catch (error: any) {
-//       console.error("Failed to fetch reimbursement expenses:", error);
-//       toast({
-//         title: "Error",
-//         description:
-//           error?.message || "Failed to load reimbursement expenses",
-//         variant: "destructive",
-//       });
-//     } finally {
-//       setReimbursementLoading(false);
-//     }
-//   }
-
-//   useEffect(() => {
-//     fetchReimbursementExpenses();
-//   }, []);
-
-//   async function handleApprove(expense: ExpenseSheet) {
-//     if (!userProfile) return;
-
-//     try {
-//       let newStatus = expense.status;
-//       let currentApprover = "";
-
-//       switch (userProfile.role) {
-//         case "operational_admin":
-//           if (expense.status === "pending_operational_admin") {
-//             newStatus = "pending_main_admin";
-//           }
-//           break;
-//         case "main_admin":
-//           if (expense.status === "pending_main_admin") {
-//             newStatus = "approved";
-//           }
-//           break;
-//         case "finance":
-//         case "financial_admin":
-//           if (expense.status === "approved") {
-//             newStatus = "acknowledged";
-//           }
-//           break;
-//       }
-
-//       const updateData: any = {
-//         status: newStatus,
-//         currentApprover,
-//         approvalHistory: [
-//           ...(expense.approvalHistory || []),
-//           {
-//             approver: userProfile.displayName,
-//             action: "approved",
-//             timestamp: new Date(),
-//             notes: "",
-//           },
-//         ],
-//         updatedAt: serverTimestamp(),
-//       };
-
-//       if (newStatus === "acknowledged") {
-//         updateData.acknowledgedBy = userProfile.displayName;
-//         updateData.acknowledgedAt = serverTimestamp();
-//       }
-
-//       await updateDoc(
-//         doc(db, "Panels", PANEL_ID, "expenseSheets", expense.id),
-//         updateData
-//       );
-
-//       toast({
-//         title: "Success",
-//         description: "Expense sheet approved successfully",
-//       });
-//     } catch (error: any) {
-//       console.error("Failed to approve expense sheet:", error);
-//       toast({
-//         title: "Error",
-//         description: error.message || "Failed to approve expense sheet",
-//         variant: "destructive",
-//       });
-//     }
-//   }
-
-//   async function handleReject(expense: ExpenseSheet, rejectionComment: string) {
-//     if (!userProfile) return;
-
-//     try {
-//       setRejectionLoading(true);
-
-//       await updateDoc(doc(db, "Panels", PANEL_ID, "expenseSheets", expense.id), {
-//         status: "pending_operational_admin",
-//         approvalHistory: [
-//           ...(expense.approvalHistory || []),
-//           {
-//             approver: userProfile.displayName,
-//             action: "rejected",
-//             timestamp: new Date(),
-//             notes: rejectionComment,
-//           },
-//         ],
-//         updatedAt: serverTimestamp(),
-//       });
-
-//       toast({
-//         title: "Success",
-//         description: "Expense sheet rejected with comments",
-//       });
-
-//       setIsRejectionModalOpen(false);
-//       setSelectedExpense(null);
-//     } catch (error: any) {
-//       console.error("Failed to reject expense sheet:", error);
-//       toast({
-//         title: "Error",
-//         description: error.message || "Failed to reject expense sheet",
-//         variant: "destructive",
-//       });
-//     } finally {
-//       setRejectionLoading(false);
-//     }
-//   }
-
-//   function canApprove(expense: ExpenseSheet): boolean {
-//     if (!userProfile) return false;
-
-//     switch (userProfile.role) {
-//       case "operational_admin":
-//         return expense.status === "pending_operational_admin";
-//       case "main_admin":
-//         return expense.status === "pending_main_admin";
-//       case "finance":
-//       case "financial_admin":
-//         return expense.status === "approved";
-//       default:
-//         return false;
-//     }
-//   }
-
-//   function canEdit(expense: ExpenseSheet): boolean {
-//     if (!userProfile) return false;
-
-//     return (
-//       userProfile.role === "operation" &&
-//       expense.status === "pending_operational_admin"
-//     );
-//   }
-
-//   function getCurrentStep(status: string): string {
-//     switch (status) {
-//       case "pending_operational_admin":
-//         return "Operational Admin Review";
-//       case "pending_main_admin":
-//         return "Main Admin Approval";
-//       case "approved":
-//         return "Finance Acknowledgment";
-//       case "acknowledged":
-//         return "Acknowledged";
-//       case "rejected":
-//         return "Rejected";
-//       default:
-//         return "Unknown";
-//     }
-//   }
-
-//   function getStatusBadgeColor(status: string): string {
-//     switch (status) {
-//       case "acknowledged":
-//       case "paid":
-//         return "bg-green-100 text-green-800";
-//       case "rejected":
-//         return "bg-red-100 text-red-800";
-//       case "pending_operational_admin":
-//       case "pending_main_admin":
-//       case "approved":
-//       case "pending":
-//       case "pending_admin_approval":
-//         return "bg-yellow-100 text-yellow-800";
-//       default:
-//         return "bg-blue-100 text-blue-800";
-//     }
-//   }
-
-//   function getSortableTime(date: any) {
-//     if (!date) return 0;
-
-//     try {
-//       if (date?.toDate) return date.toDate().getTime();
-//       if (date?.seconds) return date.seconds * 1000;
-
-//       const parsed = new Date(date);
-//       if (!isNaN(parsed.getTime())) return parsed.getTime();
-
-//       return 0;
-//     } catch {
-//       return 0;
-//     }
-//   }
-
-//   function formatDate(date: any) {
-//     if (!date) return "N/A";
-
-//     try {
-//       if (date?.toDate) return date.toDate().toLocaleDateString();
-
-//       if (date?.seconds) {
-//         return new Date(date.seconds * 1000).toLocaleDateString();
-//       }
-
-//       const parsed = new Date(date);
-//       if (!isNaN(parsed.getTime())) {
-//         return parsed.toLocaleDateString();
-//       }
-
-//       return "Invalid";
-//     } catch {
-//       return "Invalid";
-//     }
-//   }
-
-//   function formatReimbursementStatusLabel(value?: string) {
-//     const raw = String(value || "").trim();
-//     if (!raw) return "Pending";
-
-//     return raw
-//       .replace(/_/g, " ")
-//       .split(" ")
-//       .filter(Boolean)
-//       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-//       .join(" ");
-//   }
-
-//   if (loading || reimbursementLoading) {
-//     return (
-//       <div className="flex items-center justify-center h-64">
-//         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-//       </div>
-//     );
-//   }
-
-//   return (
-//     <div>
-//       <div className="mb-8">
-//         <div className="flex justify-between items-start">
-//           <div>
-//             <h2
-//               className="text-3xl font-bold text-foreground mb-2"
-//               data-testid="text-expenses-title"
-//             >
-//               Expense Sheets
-//             </h2>
-//             <p className="text-muted-foreground">
-//               Manage budget expenses and reimbursement expenses separately.
-//             </p>
-//           </div>
-
-//           {activeSubTab === "budget_expense" && canCreateExpenseSheets() && (
-//             <Button
-//               onClick={() => {
-//                 setSelectedExpense(null);
-//                 setIsExpenseModalOpen(true);
-//               }}
-//               className="bg-green-600 hover:bg-green-700 text-white"
-//               data-testid="button-create-expense-sheet"
-//             >
-//               <i className="fas fa-plus mr-2"></i>
-//               Create New Expense Sheet
-//             </Button>
-//           )}
-//         </div>
-//       </div>
-
-//       <div className="mb-6 flex gap-3">
-//         <Button
-//           type="button"
-//           variant={activeSubTab === "budget_expense" ? "default" : "outline"}
-//           onClick={() => setActiveSubTab("budget_expense")}
-//         >
-//           Budget Expense
-//         </Button>
-
-//         <Button
-//           type="button"
-//           variant={
-//             activeSubTab === "reimbursement_expense" ? "default" : "outline"
-//           }
-//           onClick={() => setActiveSubTab("reimbursement_expense")}
-//         >
-//           Reimbursement Expense
-//         </Button>
-//       </div>
-
-//       {activeSubTab === "budget_expense" && (
-//         <Card>
-//           <CardContent className="p-0">
-//             <div className="overflow-x-auto">
-//               <table className="w-full">
-//                 <thead className="bg-muted border-b border-border">
-//                   <tr>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Client
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Linked Request
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Total Amount
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Current Step
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Status
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Actions
-//                     </th>
-//                   </tr>
-//                 </thead>
-//                 <tbody className="divide-y divide-border">
-//                   {expenseSheets.length === 0 ? (
-//                     <tr>
-//                       <td
-//                         colSpan={6}
-//                         className="px-6 py-8 text-center text-muted-foreground"
-//                       >
-//                         No budget expenses found
-//                       </td>
-//                     </tr>
-//                   ) : (
-//                     expenseSheets.map((expense) => (
-//                       <tr
-//                         key={expense.id}
-//                         className="hover:bg-muted/50 transition-colors"
-//                       >
-//                         <td
-//                           className="px-6 py-4 text-sm font-medium text-foreground"
-//                           data-testid={`text-expense-client-${expense.id}`}
-//                         >
-//                           {expense.clientName}
-//                         </td>
-//                         <td className="px-6 py-4 text-sm text-primary">
-//                           {expense.linkedRequestId || "Independent"}
-//                         </td>
-//                         <td className="px-6 py-4 text-sm text-foreground">
-//                           ${expense.totalAmount.toLocaleString()}
-//                         </td>
-//                         <td className="px-6 py-4 text-sm text-muted-foreground">
-//                           {getCurrentStep(expense.status)}
-//                         </td>
-//                         <td className="px-6 py-4">
-//                           <Badge className={getStatusBadgeColor(expense.status)}>
-//                             {expense.status.replace(/_/g, " ")}
-//                           </Badge>
-//                         </td>
-//                         <td className="px-6 py-4">
-//                           <div className="flex space-x-2">
-//                             <Button
-//                               variant="ghost"
-//                               size="sm"
-//                               className="text-gray-600 hover:text-gray-700"
-//                               onClick={() => {
-//                                 setSelectedExpense(expense);
-//                                 setIsDetailsModalOpen(true);
-//                               }}
-//                               data-testid={`button-view-details-${expense.id}`}
-//                             >
-//                               <i className="fas fa-eye mr-1"></i>View Details
-//                             </Button>
-
-//                             {expense.expenseDocuments &&
-//                               expense.expenseDocuments.length > 0 && (
-//                                 <Button
-//                                   variant="ghost"
-//                                   size="sm"
-//                                   className="text-primary hover:text-primary/80"
-//                                   onClick={() => {
-//                                     expense.expenseDocuments?.forEach(
-//                                       (url, index) => {
-//                                         setTimeout(
-//                                           () => window.open(url, "_blank"),
-//                                           index * 100
-//                                         );
-//                                       }
-//                                     );
-//                                   }}
-//                                   data-testid={`button-view-documents-${expense.id}`}
-//                                 >
-//                                   <i className="fas fa-file mr-1"></i>Documents
-//                                 </Button>
-//                               )}
-
-//                             {canEdit(expense) && (
-//                               <Button
-//                                 variant="ghost"
-//                                 size="sm"
-//                                 className="text-blue-600 hover:text-blue-700"
-//                                 onClick={() => {
-//                                   setSelectedExpense(expense);
-//                                   setIsExpenseModalOpen(true);
-//                                 }}
-//                                 data-testid={`button-edit-expense-${expense.id}`}
-//                               >
-//                                 <i className="fas fa-edit mr-1"></i>Edit &
-//                                 Resubmit
-//                               </Button>
-//                             )}
-
-//                             {canApprove(expense) && (
-//                               <>
-//                                 <Button
-//                                   variant="ghost"
-//                                   size="sm"
-//                                   className="text-green-600 hover:text-green-700"
-//                                   onClick={() => handleApprove(expense)}
-//                                   data-testid={`button-approve-expense-${expense.id}`}
-//                                 >
-//                                   <i className="fas fa-check mr-1"></i>
-//                                   {expense.status === "approved"
-//                                     ? "Acknowledge"
-//                                     : "Approve"}
-//                                 </Button>
-//                                 <Button
-//                                   variant="ghost"
-//                                   size="sm"
-//                                   className="text-red-600 hover:text-red-700"
-//                                   onClick={() => {
-//                                     setSelectedExpense(expense);
-//                                     setIsRejectionModalOpen(true);
-//                                   }}
-//                                   data-testid={`button-reject-expense-${expense.id}`}
-//                                 >
-//                                   <i className="fas fa-times mr-1"></i>Reject
-//                                 </Button>
-//                               </>
-//                             )}
-//                           </div>
-//                         </td>
-//                       </tr>
-//                     ))
-//                   )}
-//                 </tbody>
-//               </table>
-//             </div>
-//           </CardContent>
-//         </Card>
-//       )}
-
-//       {activeSubTab === "reimbursement_expense" && (
-//         <Card>
-//           <CardContent className="p-0">
-//             <div className="overflow-x-auto">
-//               <table className="w-full">
-//                 <thead className="bg-muted border-b border-border">
-//                   <tr>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Client
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Project
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Sales Person
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Amount
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Fuel KM
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Details
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Date
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Approval Status
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Payment Status
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Bill
-//                     </th>
-//                   </tr>
-//                 </thead>
-//                 <tbody className="divide-y divide-border">
-//                   {reimbursementExpenses.length === 0 ? (
-//                     <tr>
-//                       <td
-//                         colSpan={10}
-//                         className="px-6 py-8 text-center text-muted-foreground"
-//                       >
-//                         No reimbursement expenses found
-//                       </td>
-//                     </tr>
-//                   ) : (
-//                     reimbursementExpenses.map((expense) => (
-//                       <tr
-//                         key={`${expense.recordId}-${expense.id}`}
-//                         className="hover:bg-muted/50 transition-colors"
-//                       >
-//                         <td className="px-6 py-4 text-sm font-medium text-foreground">
-//                           {expense.clientName}
-//                         </td>
-//                         <td className="px-6 py-4 text-sm text-foreground">
-//                           {expense.projectName}
-//                         </td>
-//                         <td className="px-6 py-4 text-sm text-foreground">
-//                           {expense.salesPerson}
-//                         </td>
-//                         <td className="px-6 py-4 text-sm text-foreground">
-//                           Rs {expense.amount.toLocaleString()}
-//                         </td>
-//                         <td className="px-6 py-4 text-sm text-foreground">
-//                           {expense.fuelKm}
-//                         </td>
-//                         <td className="px-6 py-4 text-sm text-foreground">
-//                           {expense.details}
-//                         </td>
-//                         <td className="px-6 py-4 text-sm text-muted-foreground">
-//                           {formatDate(expense.submittedDate)}
-//                         </td>
-//                         <td className="px-6 py-4">
-//                           <div className="flex flex-col gap-1">
-//                             <Badge
-//                               className={getStatusBadgeColor(
-//                                 expense.approvalStatus
-//                               )}
-//                             >
-//                               {formatReimbursementStatusLabel(
-//                                 expense.approvalStatus
-//                               )}
-//                             </Badge>
-//                             {expense.approvedBy && (
-//                               <span className="text-xs text-muted-foreground">
-//                                 by {expense.approvedBy}
-//                               </span>
-//                             )}
-//                           </div>
-//                         </td>
-//                         <td className="px-6 py-4">
-//                           <div className="flex flex-col gap-1">
-//                             <Badge
-//                               className={getStatusBadgeColor(
-//                                 expense.paymentStatus
-//                               )}
-//                             >
-//                               {formatReimbursementStatusLabel(
-//                                 expense.paymentStatus
-//                               )}
-//                             </Badge>
-//                             {expense.paidBy && (
-//                               <span className="text-xs text-muted-foreground">
-//                                 by {expense.paidBy}
-//                               </span>
-//                             )}
-//                           </div>
-//                         </td>
-//                         <td className="px-6 py-4 text-sm">
-//                           {expense.billUrl ? (
-//                             <a
-//                               href={expense.billUrl}
-//                               target="_blank"
-//                               rel="noreferrer"
-//                               className="text-primary underline"
-//                             >
-//                               View Bill
-//                             </a>
-//                           ) : (
-//                             <span className="text-muted-foreground">
-//                               No Bill
-//                             </span>
-//                           )}
-//                         </td>
-//                       </tr>
-//                     ))
-//                   )}
-//                 </tbody>
-//               </table>
-//             </div>
-//           </CardContent>
-//         </Card>
-//       )}
-
-//       <ExpenseSheetModal
-//         isOpen={isExpenseModalOpen}
-//         onClose={() => {
-//           setIsExpenseModalOpen(false);
-//           setSelectedExpense(null);
-//         }}
-//         onSuccess={() => {
-//           setIsExpenseModalOpen(false);
-//           setSelectedExpense(null);
-//         }}
-//         editingExpense={selectedExpense}
-//       />
-
-//       <ExpenseDetailsModal
-//         isOpen={isDetailsModalOpen}
-//         onClose={() => {
-//           setIsDetailsModalOpen(false);
-//           setSelectedExpense(null);
-//         }}
-//         expense={selectedExpense}
-//       />
-
-//       <RejectionModal
-//         isOpen={isRejectionModalOpen}
-//         onClose={() => {
-//           setIsRejectionModalOpen(false);
-//           setSelectedExpense(null);
-//         }}
-//         onConfirm={(comment) =>
-//           selectedExpense && handleReject(selectedExpense, comment)
-//         }
-//         itemType="expense sheet"
-//         loading={rejectionLoading}
-//       />
-//     </div>
-//   );
-// }
-
-
-// import { useEffect, useMemo, useState } from "react";
-// import { useAuth } from "@/contexts/AuthContext";
-// import {
-//   doc,
-//   updateDoc,
-//   serverTimestamp,
-//   collection,
-//   getDocs,
-// } from "firebase/firestore";
-// import { db } from "@/lib/firebase";
-// import { useFirestoreQuery } from "@/hooks/useFirestore";
-// import { Card, CardContent } from "@/components/ui/card";
-// import { Button } from "@/components/ui/button";
-// import { Badge } from "@/components/ui/badge";
-// import { ExpenseSheet } from "@shared/schema";
-// import { useToast } from "@/hooks/use-toast";
-// import ExpenseSheetModal from "@/components/ExpenseSheetModal";
-// import ExpenseDetailsModal from "@/components/ExpenseDetailsModal";
-// import RejectionModal from "@/components/RejectionModal";
-
-// interface ReimbursementExpenseRow {
-//   id: string;
-//   recordId: string;
-//   clientName: string;
-//   projectName: string;
-//   salesPerson: string;
-//   amount: number;
-//   fuelKm: number;
-//   details: string;
-//   submittedDate: any;
-//   approvalStatus: string;
-//   paymentStatus: string;
-//   approvedBy: string;
-//   paidBy: string;
-//   billUrl: string;
-// }
-
-// interface ReimbursementPersonGroup {
-//   salesPerson: string;
-//   totalAmount: number;
-//   pendingAmount: number;
-//   paidAmount: number;
-//   pendingCount: number;
-//   paidCount: number;
-//   items: ReimbursementExpenseRow[];
-// }
-
-// export default function ExpenseSheets() {
-//   const PANEL_ID = "IEDGE-SYSTEM";
-
-//   const { userProfile } = useAuth();
-//   const { toast } = useToast();
-
-//   const [activeSubTab, setActiveSubTab] = useState<
-//     "budget_expense" | "reimbursement_expense"
-//   >("budget_expense");
-
-//   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
-//   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-//   const [selectedExpense, setSelectedExpense] = useState<ExpenseSheet | null>(
-//     null
-//   );
-//   const [isRejectionModalOpen, setIsRejectionModalOpen] = useState(false);
-//   const [rejectionLoading, setRejectionLoading] = useState(false);
-
-//   const [reimbursementExpenses, setReimbursementExpenses] = useState<
-//     ReimbursementExpenseRow[]
-//   >([]);
-//   const [reimbursementLoading, setReimbursementLoading] = useState(false);
-//   const [selectedPersonFilter, setSelectedPersonFilter] = useState("all");
-
-//   const { data: expenseSheets, loading } = useFirestoreQuery<ExpenseSheet>(
-//     `Panels/${PANEL_ID}/expenseSheets`
-//   );
-
-//   function canCreateExpenseSheets(): boolean {
-//     return userProfile?.role === "operation";
-//   }
-
-//   async function fetchReimbursementExpenses() {
-//     try {
-//       setReimbursementLoading(true);
-
-//       const salesRecordsSnap = await getDocs(
-//         collection(db, "Panels", PANEL_ID, "salesRecords")
-//       );
-
-//       const reimbursementPromises = salesRecordsSnap.docs.map(
-//         async (salesRecordDoc) => {
-//           const salesRecordData: any = salesRecordDoc.data();
-//           const recordId = salesRecordDoc.id;
-
-//           try {
-//             const meetingUpdatesSnap = await getDocs(
-//               collection(
-//                 db,
-//                 "Panels",
-//                 PANEL_ID,
-//                 "salesRecords",
-//                 recordId,
-//                 "meetingUpdates"
-//               )
-//             );
-
-//             const rows: ReimbursementExpenseRow[] = [];
-
-//             meetingUpdatesSnap.docs.forEach((meetingDoc) => {
-//               const meetingData: any = meetingDoc.data();
-//               const reimbursement = meetingData?.reimbursement;
-
-//               if (!reimbursement?.enabled) return;
-
-//               rows.push({
-//                 id: meetingDoc.id,
-//                 recordId,
-//                 clientName: salesRecordData?.client || "Unknown",
-//                 projectName: salesRecordData?.projectName || "N/A",
-//                 salesPerson:
-//                   reimbursement?.approvalSubmittedByName ||
-//                   reimbursement?.personName ||
-//                   "Unknown",
-//                 amount: Number(reimbursement?.amount || 0),
-//                 fuelKm: Number(reimbursement?.kms || 0),
-//                 details: reimbursement?.detail || "N/A",
-//                 submittedDate:
-//                   reimbursement?.meetingDate ||
-//                   reimbursement?.createdAt ||
-//                   reimbursement?.date ||
-//                   null,
-//                 approvalStatus: String(
-//                   reimbursement?.approvalStatus || "pending_admin_approval"
-//                 ),
-//                 paymentStatus: String(reimbursement?.paymentStatus || "pending"),
-//                 approvedBy: reimbursement?.approvedBy || "",
-//                 paidBy: reimbursement?.paidBy || "",
-//                 billUrl: reimbursement?.billUrl || "",
-//               });
-//             });
-
-//             return rows;
-//           } catch (error) {
-//             console.error(
-//               `Failed to fetch meeting updates for sales record ${recordId}:`,
-//               error
-//             );
-//             return [];
-//           }
-//         }
-//       );
-
-//       const results = await Promise.all(reimbursementPromises);
-//       const allRows = results.flat();
-
-//       allRows.sort((a, b) => {
-//         const aTime = getSortableTime(a.submittedDate);
-//         const bTime = getSortableTime(b.submittedDate);
-//         return bTime - aTime;
-//       });
-
-//       setReimbursementExpenses(allRows);
-//     } catch (error: any) {
-//       console.error("Failed to fetch reimbursement expenses:", error);
-//       toast({
-//         title: "Error",
-//         description:
-//           error?.message || "Failed to load reimbursement expenses",
-//         variant: "destructive",
-//       });
-//     } finally {
-//       setReimbursementLoading(false);
-//     }
-//   }
-
-//   useEffect(() => {
-//     fetchReimbursementExpenses();
-//   }, []);
-
-//   async function handleApprove(expense: ExpenseSheet) {
-//     if (!userProfile) return;
-
-//     try {
-//       let newStatus = expense.status;
-//       let currentApprover = "";
-
-//       switch (userProfile.role) {
-//         case "operational_admin":
-//           if (expense.status === "pending_operational_admin") {
-//             newStatus = "pending_main_admin";
-//           }
-//           break;
-//         case "main_admin":
-//           if (expense.status === "pending_main_admin") {
-//             newStatus = "approved";
-//           }
-//           break;
-//         case "finance":
-//         case "financial_admin":
-//           if (expense.status === "approved") {
-//             newStatus = "acknowledged";
-//           }
-//           break;
-//       }
-
-//       const updateData: any = {
-//         status: newStatus,
-//         currentApprover,
-//         approvalHistory: [
-//           ...(expense.approvalHistory || []),
-//           {
-//             approver: userProfile.displayName,
-//             action: "approved",
-//             timestamp: new Date(),
-//             notes: "",
-//           },
-//         ],
-//         updatedAt: serverTimestamp(),
-//       };
-
-//       if (newStatus === "acknowledged") {
-//         updateData.acknowledgedBy = userProfile.displayName;
-//         updateData.acknowledgedAt = serverTimestamp();
-//       }
-
-//       await updateDoc(
-//         doc(db, "Panels", PANEL_ID, "expenseSheets", expense.id),
-//         updateData
-//       );
-
-//       toast({
-//         title: "Success",
-//         description: "Expense sheet approved successfully",
-//       });
-//     } catch (error: any) {
-//       console.error("Failed to approve expense sheet:", error);
-//       toast({
-//         title: "Error",
-//         description: error.message || "Failed to approve expense sheet",
-//         variant: "destructive",
-//       });
-//     }
-//   }
-
-//   async function handleReject(expense: ExpenseSheet, rejectionComment: string) {
-//     if (!userProfile) return;
-
-//     try {
-//       setRejectionLoading(true);
-
-//       await updateDoc(doc(db, "Panels", PANEL_ID, "expenseSheets", expense.id), {
-//         status: "pending_operational_admin",
-//         approvalHistory: [
-//           ...(expense.approvalHistory || []),
-//           {
-//             approver: userProfile.displayName,
-//             action: "rejected",
-//             timestamp: new Date(),
-//             notes: rejectionComment,
-//           },
-//         ],
-//         updatedAt: serverTimestamp(),
-//       });
-
-//       toast({
-//         title: "Success",
-//         description: "Expense sheet rejected with comments",
-//       });
-
-//       setIsRejectionModalOpen(false);
-//       setSelectedExpense(null);
-//     } catch (error: any) {
-//       console.error("Failed to reject expense sheet:", error);
-//       toast({
-//         title: "Error",
-//         description: error.message || "Failed to reject expense sheet",
-//         variant: "destructive",
-//       });
-//     } finally {
-//       setRejectionLoading(false);
-//     }
-//   }
-
-//   function canApprove(expense: ExpenseSheet): boolean {
-//     if (!userProfile) return false;
-
-//     switch (userProfile.role) {
-//       case "operational_admin":
-//         return expense.status === "pending_operational_admin";
-//       case "main_admin":
-//         return expense.status === "pending_main_admin";
-//       case "finance":
-//       case "financial_admin":
-//         return expense.status === "approved";
-//       default:
-//         return false;
-//     }
-//   }
-
-//   function canEdit(expense: ExpenseSheet): boolean {
-//     if (!userProfile) return false;
-
-//     return (
-//       userProfile.role === "operation" &&
-//       expense.status === "pending_operational_admin"
-//     );
-//   }
-
-//   function getCurrentStep(status: string): string {
-//     switch (status) {
-//       case "pending_operational_admin":
-//         return "Operational Admin Review";
-//       case "pending_main_admin":
-//         return "Main Admin Approval";
-//       case "approved":
-//         return "Finance Acknowledgment";
-//       case "acknowledged":
-//         return "Acknowledged";
-//       case "rejected":
-//         return "Rejected";
-//       default:
-//         return "Unknown";
-//     }
-//   }
-
-//   function getStatusBadgeColor(status: string): string {
-//     switch (status) {
-//       case "acknowledged":
-//       case "paid":
-//         return "bg-green-100 text-green-800";
-//       case "rejected":
-//         return "bg-red-100 text-red-800";
-//       case "pending_operational_admin":
-//       case "pending_main_admin":
-//       case "approved":
-//       case "pending":
-//       case "pending_admin_approval":
-//         return "bg-yellow-100 text-yellow-800";
-//       default:
-//         return "bg-blue-100 text-blue-800";
-//     }
-//   }
-
-//   function getSortableTime(date: any) {
-//     if (!date) return 0;
-
-//     try {
-//       if (date?.toDate) return date.toDate().getTime();
-//       if (date?.seconds) return date.seconds * 1000;
-
-//       const parsed = new Date(date);
-//       if (!isNaN(parsed.getTime())) return parsed.getTime();
-
-//       return 0;
-//     } catch {
-//       return 0;
-//     }
-//   }
-
-//   function formatDate(date: any) {
-//     if (!date) return "N/A";
-
-//     try {
-//       if (date?.toDate) return date.toDate().toLocaleDateString();
-
-//       if (date?.seconds) {
-//         return new Date(date.seconds * 1000).toLocaleDateString();
-//       }
-
-//       const parsed = new Date(date);
-//       if (!isNaN(parsed.getTime())) {
-//         return parsed.toLocaleDateString();
-//       }
-
-//       return "Invalid";
-//     } catch {
-//       return "Invalid";
-//     }
-//   }
-
-//   function formatReimbursementStatusLabel(value?: string) {
-//     const raw = String(value || "").trim();
-//     if (!raw) return "Pending";
-
-//     return raw
-//       .replace(/_/g, " ")
-//       .split(" ")
-//       .filter(Boolean)
-//       .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-//       .join(" ");
-//   }
-
-//   function renderReimbursementItem(expense: ReimbursementExpenseRow) {
-//     return (
-//       <div
-//         key={`${expense.recordId}-${expense.id}`}
-//         className="rounded-lg border p-4"
-//       >
-//         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-5 gap-4">
-//           <div>
-//             <p className="text-xs text-muted-foreground">Client</p>
-//             <p className="text-sm font-medium">{expense.clientName}</p>
-//           </div>
-
-//           <div>
-//             <p className="text-xs text-muted-foreground">Project</p>
-//             <p className="text-sm font-medium">{expense.projectName}</p>
-//           </div>
-
-//           <div>
-//             <p className="text-xs text-muted-foreground">Amount / KM</p>
-//             <p className="text-sm font-medium">
-//               Rs {expense.amount.toLocaleString()}
-//             </p>
-//             <p className="text-xs text-muted-foreground">{expense.fuelKm} KM</p>
-//           </div>
-
-//           <div>
-//             <p className="text-xs text-muted-foreground">Date</p>
-//             <p className="text-sm font-medium">
-//               {formatDate(expense.submittedDate)}
-//             </p>
-//           </div>
-
-//           <div>
-//             <p className="text-xs text-muted-foreground">Bill</p>
-//             {expense.billUrl ? (
-//               <a
-//                 href={expense.billUrl}
-//                 target="_blank"
-//                 rel="noreferrer"
-//                 className="text-sm text-primary underline"
-//               >
-//                 View Bill
-//               </a>
-//             ) : (
-//               <span className="text-sm text-muted-foreground">No Bill</span>
-//             )}
-//           </div>
-//         </div>
-
-//         <div className="mt-4 flex flex-wrap items-start gap-3">
-//           <Badge className={getStatusBadgeColor(expense.approvalStatus)}>
-//             Approval: {formatReimbursementStatusLabel(expense.approvalStatus)}
-//           </Badge>
-
-//           <Badge className={getStatusBadgeColor(expense.paymentStatus)}>
-//             Payment: {formatReimbursementStatusLabel(expense.paymentStatus)}
-//           </Badge>
-
-//           {expense.approvedBy && (
-//             <span className="text-xs text-muted-foreground">
-//               Approved by {expense.approvedBy}
-//             </span>
-//           )}
-
-//           {expense.paidBy && (
-//             <span className="text-xs text-muted-foreground">
-//               Paid by {expense.paidBy}
-//             </span>
-//           )}
-//         </div>
-
-//         <div className="mt-3">
-//           <p className="text-xs text-muted-foreground">Details</p>
-//           <p className="text-sm text-foreground">{expense.details}</p>
-//         </div>
-//       </div>
-//     );
-//   }
-
-//   const reimbursementPeople = useMemo(() => {
-//     return Array.from(
-//       new Set(
-//         reimbursementExpenses.map(
-//           (expense) => (expense.salesPerson || "Unknown").trim() || "Unknown"
-//         )
-//       )
-//     ).sort((a, b) => a.localeCompare(b));
-//   }, [reimbursementExpenses]);
-
-//   const overallReimbursementAmount = useMemo(() => {
-//     return reimbursementExpenses.reduce((sum, item) => sum + (item.amount || 0), 0);
-//   }, [reimbursementExpenses]);
-
-//   const overallPendingAmount = useMemo(() => {
-//     return reimbursementExpenses
-//       .filter((item) => String(item.paymentStatus).toLowerCase() !== "paid")
-//       .reduce((sum, item) => sum + (item.amount || 0), 0);
-//   }, [reimbursementExpenses]);
-
-//   const overallPaidAmount = useMemo(() => {
-//     return reimbursementExpenses
-//       .filter((item) => String(item.paymentStatus).toLowerCase() === "paid")
-//       .reduce((sum, item) => sum + (item.amount || 0), 0);
-//   }, [reimbursementExpenses]);
-
-//   const groupedReimbursementExpenses = useMemo<ReimbursementPersonGroup[]>(() => {
-//     const groupedMap = new Map<string, ReimbursementExpenseRow[]>();
-
-//     reimbursementExpenses.forEach((expense) => {
-//       const key = (expense.salesPerson || "Unknown").trim() || "Unknown";
-
-//       if (selectedPersonFilter !== "all" && key !== selectedPersonFilter) return;
-
-//       const existing = groupedMap.get(key) || [];
-//       existing.push(expense);
-//       groupedMap.set(key, existing);
-//     });
-
-//     const groups: ReimbursementPersonGroup[] = Array.from(groupedMap.entries()).map(
-//       ([salesPerson, items]) => {
-//         const sortedItems = [...items].sort(
-//           (a, b) => getSortableTime(b.submittedDate) - getSortableTime(a.submittedDate)
-//         );
-
-//         const paidItems = sortedItems.filter(
-//           (item) => String(item.paymentStatus).toLowerCase() === "paid"
-//         );
-//         const pendingItems = sortedItems.filter(
-//           (item) => String(item.paymentStatus).toLowerCase() !== "paid"
-//         );
-
-//         return {
-//           salesPerson,
-//           totalAmount: sortedItems.reduce((sum, item) => sum + (item.amount || 0), 0),
-//           pendingAmount: pendingItems.reduce((sum, item) => sum + (item.amount || 0), 0),
-//           paidAmount: paidItems.reduce((sum, item) => sum + (item.amount || 0), 0),
-//           pendingCount: pendingItems.length,
-//           paidCount: paidItems.length,
-//           items: sortedItems,
-//         };
-//       }
-//     );
-
-//     return groups.sort((a, b) => b.totalAmount - a.totalAmount);
-//   }, [reimbursementExpenses, selectedPersonFilter]);
-
-//   if (loading || reimbursementLoading) {
-//     return (
-//       <div className="flex items-center justify-center h-64">
-//         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
-//       </div>
-//     );
-//   }
-
-//   return (
-//     <div>
-//       <div className="mb-8">
-//         <div className="flex justify-between items-start">
-//           <div>
-//             <h2
-//               className="text-3xl font-bold text-foreground mb-2"
-//               data-testid="text-expenses-title"
-//             >
-//               Expense Sheets
-//             </h2>
-//             <p className="text-muted-foreground">
-//               Manage budget expenses and reimbursement expenses separately.
-//             </p>
-//           </div>
-
-//           {activeSubTab === "budget_expense" && canCreateExpenseSheets() && (
-//             <Button
-//               onClick={() => {
-//                 setSelectedExpense(null);
-//                 setIsExpenseModalOpen(true);
-//               }}
-//               className="bg-green-600 hover:bg-green-700 text-white"
-//               data-testid="button-create-expense-sheet"
-//             >
-//               <i className="fas fa-plus mr-2"></i>
-//               Create New Expense Sheet
-//             </Button>
-//           )}
-//         </div>
-//       </div>
-
-//       <div className="mb-6 flex gap-3">
-//         <Button
-//           type="button"
-//           variant={activeSubTab === "budget_expense" ? "default" : "outline"}
-//           onClick={() => setActiveSubTab("budget_expense")}
-//         >
-//           Budget Expense
-//         </Button>
-
-//         <Button
-//           type="button"
-//           variant={
-//             activeSubTab === "reimbursement_expense" ? "default" : "outline"
-//           }
-//           onClick={() => setActiveSubTab("reimbursement_expense")}
-//         >
-//           Reimbursement Expense
-//         </Button>
-//       </div>
-
-//       {activeSubTab === "budget_expense" && (
-//         <Card>
-//           <CardContent className="p-0">
-//             <div className="overflow-x-auto">
-//               <table className="w-full">
-//                 <thead className="bg-muted border-b border-border">
-//                   <tr>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Client
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Linked Request
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Total Amount
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Current Step
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Status
-//                     </th>
-//                     <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-//                       Actions
-//                     </th>
-//                   </tr>
-//                 </thead>
-//                 <tbody className="divide-y divide-border">
-//                   {expenseSheets.length === 0 ? (
-//                     <tr>
-//                       <td
-//                         colSpan={6}
-//                         className="px-6 py-8 text-center text-muted-foreground"
-//                       >
-//                         No budget expenses found
-//                       </td>
-//                     </tr>
-//                   ) : (
-//                     expenseSheets.map((expense) => (
-//                       <tr
-//                         key={expense.id}
-//                         className="hover:bg-muted/50 transition-colors"
-//                       >
-//                         <td
-//                           className="px-6 py-4 text-sm font-medium text-foreground"
-//                           data-testid={`text-expense-client-${expense.id}`}
-//                         >
-//                           {expense.clientName}
-//                         </td>
-//                         <td className="px-6 py-4 text-sm text-primary">
-//                           {expense.linkedRequestId || "Independent"}
-//                         </td>
-//                         <td className="px-6 py-4 text-sm text-foreground">
-//                           ${expense.totalAmount.toLocaleString()}
-//                         </td>
-//                         <td className="px-6 py-4 text-sm text-muted-foreground">
-//                           {getCurrentStep(expense.status)}
-//                         </td>
-//                         <td className="px-6 py-4">
-//                           <Badge className={getStatusBadgeColor(expense.status)}>
-//                             {expense.status.replace(/_/g, " ")}
-//                           </Badge>
-//                         </td>
-//                         <td className="px-6 py-4">
-//                           <div className="flex space-x-2">
-//                             <Button
-//                               variant="ghost"
-//                               size="sm"
-//                               className="text-gray-600 hover:text-gray-700"
-//                               onClick={() => {
-//                                 setSelectedExpense(expense);
-//                                 setIsDetailsModalOpen(true);
-//                               }}
-//                               data-testid={`button-view-details-${expense.id}`}
-//                             >
-//                               <i className="fas fa-eye mr-1"></i>View Details
-//                             </Button>
-
-//                             {expense.expenseDocuments &&
-//                               expense.expenseDocuments.length > 0 && (
-//                                 <Button
-//                                   variant="ghost"
-//                                   size="sm"
-//                                   className="text-primary hover:text-primary/80"
-//                                   onClick={() => {
-//                                     expense.expenseDocuments?.forEach(
-//                                       (url, index) => {
-//                                         setTimeout(
-//                                           () => window.open(url, "_blank"),
-//                                           index * 100
-//                                         );
-//                                       }
-//                                     );
-//                                   }}
-//                                   data-testid={`button-view-documents-${expense.id}`}
-//                                 >
-//                                   <i className="fas fa-file mr-1"></i>Documents
-//                                 </Button>
-//                               )}
-
-//                             {canEdit(expense) && (
-//                               <Button
-//                                 variant="ghost"
-//                                 size="sm"
-//                                 className="text-blue-600 hover:text-blue-700"
-//                                 onClick={() => {
-//                                   setSelectedExpense(expense);
-//                                   setIsExpenseModalOpen(true);
-//                                 }}
-//                                 data-testid={`button-edit-expense-${expense.id}`}
-//                               >
-//                                 <i className="fas fa-edit mr-1"></i>Edit &
-//                                 Resubmit
-//                               </Button>
-//                             )}
-
-//                             {canApprove(expense) && (
-//                               <>
-//                                 <Button
-//                                   variant="ghost"
-//                                   size="sm"
-//                                   className="text-green-600 hover:text-green-700"
-//                                   onClick={() => handleApprove(expense)}
-//                                   data-testid={`button-approve-expense-${expense.id}`}
-//                                 >
-//                                   <i className="fas fa-check mr-1"></i>
-//                                   {expense.status === "approved"
-//                                     ? "Acknowledge"
-//                                     : "Approve"}
-//                                 </Button>
-//                                 <Button
-//                                   variant="ghost"
-//                                   size="sm"
-//                                   className="text-red-600 hover:text-red-700"
-//                                   onClick={() => {
-//                                     setSelectedExpense(expense);
-//                                     setIsRejectionModalOpen(true);
-//                                   }}
-//                                   data-testid={`button-reject-expense-${expense.id}`}
-//                                 >
-//                                   <i className="fas fa-times mr-1"></i>Reject
-//                                 </Button>
-//                               </>
-//                             )}
-//                           </div>
-//                         </td>
-//                       </tr>
-//                     ))
-//                   )}
-//                 </tbody>
-//               </table>
-//             </div>
-//           </CardContent>
-//         </Card>
-//       )}
-
-//       {activeSubTab === "reimbursement_expense" && (
-//         <div className="space-y-5">
-//           <Card>
-//             <CardContent className="p-5">
-//               <div className="flex flex-col lg:flex-row lg:items-end lg:justify-between gap-4">
-//                 <div className="w-full lg:max-w-xs">
-//                   <label className="block text-sm font-medium mb-2">
-//                     Filter by Person
-//                   </label>
-//                   <select
-//                     value={selectedPersonFilter}
-//                     onChange={(e) => setSelectedPersonFilter(e.target.value)}
-//                     className="w-full h-10 rounded-md border border-input bg-background px-3 py-2 text-sm"
-//                   >
-//                     <option value="all">All Persons</option>
-//                     {reimbursementPeople.map((person) => (
-//                       <option key={person} value={person}>
-//                         {person}
-//                       </option>
-//                     ))}
-//                   </select>
-//                 </div>
-
-//                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full lg:w-auto">
-//                   <div className="rounded-lg border p-4 bg-muted/30">
-//                     <div className="text-xs text-muted-foreground">
-//                       Overall Reimbursements
-//                     </div>
-//                     <div className="text-lg font-semibold">
-//                       Rs {overallReimbursementAmount.toLocaleString()}
-//                     </div>
-//                   </div>
-
-//                   <div className="rounded-lg border p-4 bg-yellow-50">
-//                     <div className="text-xs text-muted-foreground">
-//                       Overall Pending
-//                     </div>
-//                     <div className="text-lg font-semibold">
-//                       Rs {overallPendingAmount.toLocaleString()}
-//                     </div>
-//                   </div>
-
-//                   <div className="rounded-lg border p-4 bg-green-50">
-//                     <div className="text-xs text-muted-foreground">
-//                       Overall Paid
-//                     </div>
-//                     <div className="text-lg font-semibold">
-//                       Rs {overallPaidAmount.toLocaleString()}
-//                     </div>
-//                   </div>
-//                 </div>
-//               </div>
-//             </CardContent>
-//           </Card>
-
-//           {groupedReimbursementExpenses.length === 0 ? (
-//             <Card>
-//               <CardContent className="py-8 text-center text-muted-foreground">
-//                 No reimbursement expenses found
-//               </CardContent>
-//             </Card>
-//           ) : (
-//             groupedReimbursementExpenses.map((group) => {
-//               const pendingItems = group.items.filter(
-//                 (item) => String(item.paymentStatus).toLowerCase() !== "paid"
-//               );
-//               const paidItems = group.items.filter(
-//                 (item) => String(item.paymentStatus).toLowerCase() === "paid"
-//               );
-
-//               return (
-//                 <Card key={group.salesPerson}>
-//                   <CardContent className="p-5 space-y-5">
-//                     <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
-//                       <div>
-//                         <h3 className="text-xl font-semibold text-foreground">
-//                           {group.salesPerson}
-//                         </h3>
-//                         <p className="text-sm text-muted-foreground mt-1">
-//                           Total Claims: {group.items.length}
-//                         </p>
-//                       </div>
-
-//                       <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full md:w-auto">
-//                         <div className="rounded-lg border p-3 bg-muted/30">
-//                           <div className="text-xs text-muted-foreground">
-//                             Total Amount
-//                           </div>
-//                           <div className="text-base font-semibold">
-//                             Rs {group.totalAmount.toLocaleString()}
-//                           </div>
-//                         </div>
-
-//                         <div className="rounded-lg border p-3 bg-yellow-50">
-//                           <div className="text-xs text-muted-foreground">
-//                             Pending
-//                           </div>
-//                           <div className="text-base font-semibold">
-//                             {group.pendingCount} claim(s)
-//                           </div>
-//                           <div className="text-sm">
-//                             Rs {group.pendingAmount.toLocaleString()}
-//                           </div>
-//                         </div>
-
-//                         <div className="rounded-lg border p-3 bg-green-50">
-//                           <div className="text-xs text-muted-foreground">
-//                             Paid
-//                           </div>
-//                           <div className="text-base font-semibold">
-//                             {group.paidCount} claim(s)
-//                           </div>
-//                           <div className="text-sm">
-//                             Rs {group.paidAmount.toLocaleString()}
-//                           </div>
-//                         </div>
-//                       </div>
-//                     </div>
-
-//                     <div>
-//                       <div className="flex items-center gap-2 mb-3">
-//                         <h4 className="font-medium text-foreground">
-//                           Pending Reimbursements
-//                         </h4>
-//                         <Badge className="bg-yellow-100 text-yellow-800">
-//                           {pendingItems.length}
-//                         </Badge>
-//                       </div>
-
-//                       {pendingItems.length === 0 ? (
-//                         <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-//                           No pending reimbursements
-//                         </div>
-//                       ) : (
-//                         <div className="space-y-3">
-//                           {pendingItems.map(renderReimbursementItem)}
-//                         </div>
-//                       )}
-//                     </div>
-
-//                     <div>
-//                       <div className="flex items-center gap-2 mb-3">
-//                         <h4 className="font-medium text-foreground">
-//                           Paid Reimbursements
-//                         </h4>
-//                         <Badge className="bg-green-100 text-green-800">
-//                           {paidItems.length}
-//                         </Badge>
-//                       </div>
-
-//                       {paidItems.length === 0 ? (
-//                         <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-//                           No paid reimbursements
-//                         </div>
-//                       ) : (
-//                         <div className="space-y-3">
-//                           {paidItems.map(renderReimbursementItem)}
-//                         </div>
-//                       )}
-//                     </div>
-//                   </CardContent>
-//                 </Card>
-//               );
-//             })
-//           )}
-//         </div>
-//       )}
-
-//       <ExpenseSheetModal
-//         isOpen={isExpenseModalOpen}
-//         onClose={() => {
-//           setIsExpenseModalOpen(false);
-//           setSelectedExpense(null);
-//         }}
-//         onSuccess={() => {
-//           setIsExpenseModalOpen(false);
-//           setSelectedExpense(null);
-//         }}
-//         editingExpense={selectedExpense}
-//       />
-
-//       <ExpenseDetailsModal
-//         isOpen={isDetailsModalOpen}
-//         onClose={() => {
-//           setIsDetailsModalOpen(false);
-//           setSelectedExpense(null);
-//         }}
-//         expense={selectedExpense}
-//       />
-
-//       <RejectionModal
-//         isOpen={isRejectionModalOpen}
-//         onClose={() => {
-//           setIsRejectionModalOpen(false);
-//           setSelectedExpense(null);
-//         }}
-//         onConfirm={(comment) =>
-//           selectedExpense && handleReject(selectedExpense, comment)
-//         }
-//         itemType="expense sheet"
-//         loading={rejectionLoading}
-//       />
-//     </div>
-//   );
-// }
-
 import { useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
-  doc,
-  updateDoc,
-  serverTimestamp,
   collection,
+  doc,
   getDocs,
+  serverTimestamp,
+  updateDoc,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useFirestoreQuery } from "@/hooks/useFirestore";
@@ -1732,14 +16,40 @@ import { ExpenseSheet } from "@shared/schema";
 import { useToast } from "@/hooks/use-toast";
 import ExpenseSheetModal from "@/components/ExpenseSheetModal";
 import ExpenseDetailsModal from "@/components/ExpenseDetailsModal";
-import RejectionModal from "@/components/RejectionModal";
 import {
   BriefcaseBusiness,
   CalendarDays,
-  CircleDollarSign,
+  Eye,
+  FileText,
   Filter,
+  Plus,
+  ReceiptText,
+  Search,
   UserRound,
+  WalletMinimal,
 } from "lucide-react";
+
+type BudgetExpenseRecord = ExpenseSheet & {
+  id: string;
+  expenseId?: string;
+  requestId?: string;
+  linkedRequestId?: string;
+  invoiceRequestId?: string;
+  clientName?: string;
+  project?: string;
+  projectName?: string;
+  projectCode?: string;
+  totalAmount?: number;
+  amount?: number;
+  status?: string;
+  paymentStatus?: string;
+  submittedAt?: any;
+  createdAt?: any;
+  submittedBy?: string;
+  submittedByName?: string;
+  expenseItems?: Array<any>;
+  expenseDocuments?: string[];
+};
 
 interface ReimbursementExpenseRow {
   id: string;
@@ -1748,6 +58,8 @@ interface ReimbursementExpenseRow {
   projectName: string;
   salesPerson: string;
   amount: number;
+  claimAmount: number;
+  approvedAmount: number;
   fuelKm: number;
   details: string;
   submittedDate: any;
@@ -1761,11 +73,217 @@ interface ReimbursementExpenseRow {
 interface ReimbursementPersonGroup {
   salesPerson: string;
   totalAmount: number;
+  totalClaimAmount: number;
+  totalApprovedAmount: number;
   pendingAmount: number;
   paidAmount: number;
   pendingCount: number;
   paidCount: number;
   items: ReimbursementExpenseRow[];
+}
+
+const PAGE_SIZE_OPTIONS = [10, 25, 50, 100];
+const FINAL_EXPENSE_STATUSES = new Set([
+  "submitted",
+  "expense_submitted",
+  "acknowledged",
+  "approved",
+  "paid",
+  "payment_released",
+]);
+const OLD_APPROVAL_STATUSES = new Set([
+  "pending",
+  "pending_operational_admin",
+  "pending_main_admin",
+  "pending_admin_approval",
+  "pending_finance",
+]);
+
+function safeNumber(value: unknown): number {
+  if (typeof value === "number" && Number.isFinite(value)) return value;
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/,/g, ""));
+    return Number.isFinite(parsed) ? parsed : 0;
+  }
+  return 0;
+}
+
+function formatPKR(value: unknown): string {
+  return safeNumber(value).toLocaleString("en-PK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function getSortableTime(value: any): number {
+  if (!value) return 0;
+  if (value instanceof Date) return value.getTime();
+  if (typeof value?.toDate === "function") return value.toDate().getTime();
+  if (typeof value?.seconds === "number") return value.seconds * 1000;
+
+  const parsed = new Date(value).getTime();
+  return Number.isNaN(parsed) ? 0 : parsed;
+}
+
+function toDate(value: any): Date | null {
+  const time = getSortableTime(value);
+  return time ? new Date(time) : null;
+}
+
+function formatDate(value: any): string {
+  const date = toDate(value);
+  if (!date) return "N/A";
+  return date.toLocaleDateString("en-PK", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
+
+function getDateInputValue(value: any): string {
+  const date = toDate(value);
+  if (!date) return "";
+
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function normalizeText(value: unknown): string {
+  return String(value || "")
+    .toLowerCase()
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function humanizeStatus(status: string): string {
+  if (!status) return "Submitted";
+  return status
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (char) => char.toUpperCase());
+}
+
+function getBudgetExpenseDisplayStatus(expense: BudgetExpenseRecord): string {
+  const rawStatus = normalizeText(expense.status);
+  const rawPaymentStatus = normalizeText(expense.paymentStatus);
+
+  if (rawPaymentStatus === "paid" || rawStatus === "paid") return "Paid";
+  if (rawStatus === "rejected" || rawPaymentStatus === "rejected")
+    return "Rejected";
+
+  // Approval has been removed from Budget Expense. Old pending approval statuses are shown as submitted.
+  if (
+    !rawStatus ||
+    OLD_APPROVAL_STATUSES.has(rawStatus) ||
+    FINAL_EXPENSE_STATUSES.has(rawStatus)
+  ) {
+    return "Submitted";
+  }
+
+  return humanizeStatus(String(expense.status || "submitted"));
+}
+
+function getBudgetExpenseStatusFilterValue(
+  expense: BudgetExpenseRecord,
+): string {
+  return normalizeText(getBudgetExpenseDisplayStatus(expense));
+}
+
+function getStatusBadgeClass(displayStatus: string): string {
+  const status = normalizeText(displayStatus);
+
+  if (status === "paid")
+    return "border-emerald-200 bg-emerald-50 text-emerald-700";
+  if (status === "rejected") return "border-rose-200 bg-rose-50 text-rose-700";
+  if (status === "submitted") return "border-blue-200 bg-blue-50 text-blue-700";
+
+  return "border-slate-200 bg-slate-50 text-slate-700";
+}
+
+function getClientName(expense: BudgetExpenseRecord): string {
+  return expense.clientName || "N/A";
+}
+
+function getProjectName(expense: BudgetExpenseRecord): string {
+  return expense.projectName || expense.project || "General Expense";
+}
+
+function getExpenseAmount(expense: BudgetExpenseRecord): number {
+  return safeNumber(expense.totalAmount || expense.amount);
+}
+
+function getSubmittedDate(expense: BudgetExpenseRecord): any {
+  return expense.submittedAt || expense.createdAt;
+}
+
+function getExpenseReference(expense: BudgetExpenseRecord): string {
+  return (
+    expense.expenseId ||
+    expense.linkedRequestId ||
+    expense.requestId ||
+    expense.invoiceRequestId ||
+    expense.id ||
+    "N/A"
+  );
+}
+
+function getReimbursementPayableAmount(row: ReimbursementExpenseRow): number {
+  return row.approvedAmount > 0 ? row.approvedAmount : row.claimAmount;
+}
+
+function getReimbursementRowKey(row: ReimbursementExpenseRow): string {
+  return `${row.recordId}-${row.id}`;
+}
+
+function isReimbursementApproved(row: ReimbursementExpenseRow): boolean {
+  const approvalStatus = normalizeText(row.approvalStatus);
+  return (
+    approvalStatus === "approved" ||
+    approvalStatus === "paid" ||
+    row.approvedAmount > 0
+  );
+}
+
+function buildReimbursementGroups(
+  rows: ReimbursementExpenseRow[],
+): ReimbursementPersonGroup[] {
+  const map = new Map<string, ReimbursementPersonGroup>();
+
+  rows.forEach((row) => {
+    const key = row.salesPerson || "Unknown";
+    const current = map.get(key) || {
+      salesPerson: key,
+      totalAmount: 0,
+      totalClaimAmount: 0,
+      totalApprovedAmount: 0,
+      pendingAmount: 0,
+      paidAmount: 0,
+      pendingCount: 0,
+      paidCount: 0,
+      items: [],
+    };
+
+    const isPaid = normalizeText(row.paymentStatus) === "paid";
+    const payableAmount = getReimbursementPayableAmount(row);
+
+    current.totalAmount += payableAmount;
+    current.totalClaimAmount += row.claimAmount;
+    current.totalApprovedAmount += row.approvedAmount;
+    current.items.push(row);
+
+    if (isPaid) {
+      current.paidAmount += payableAmount;
+      current.paidCount += 1;
+    } else {
+      current.pendingAmount += payableAmount;
+      current.pendingCount += 1;
+    }
+
+    map.set(key, current);
+  });
+
+  return Array.from(map.values()).sort((a, b) => b.totalAmount - a.totalAmount);
 }
 
 export default function ExpenseSheets() {
@@ -1780,30 +298,51 @@ export default function ExpenseSheets() {
 
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-  const [selectedExpense, setSelectedExpense] = useState<ExpenseSheet | null>(
-    null
-  );
-  const [isRejectionModalOpen, setIsRejectionModalOpen] = useState(false);
-  const [rejectionLoading, setRejectionLoading] = useState(false);
+  const [selectedExpense, setSelectedExpense] =
+    useState<BudgetExpenseRecord | null>(null);
+
+  const [budgetSearchTerm, setBudgetSearchTerm] = useState("");
+  const [budgetStatusFilter, setBudgetStatusFilter] = useState("all");
+  const [budgetProjectFilter, setBudgetProjectFilter] = useState("all");
+  const [budgetDateFromFilter, setBudgetDateFromFilter] = useState("");
+  const [budgetDateToFilter, setBudgetDateToFilter] = useState("");
+  const [budgetPage, setBudgetPage] = useState(1);
+  const [budgetPageSize, setBudgetPageSize] = useState(10);
 
   const [reimbursementExpenses, setReimbursementExpenses] = useState<
     ReimbursementExpenseRow[]
   >([]);
   const [reimbursementLoading, setReimbursementLoading] = useState(false);
-
   const [selectedPersonFilter, setSelectedPersonFilter] = useState("all");
   const [selectedProjectFilter, setSelectedProjectFilter] = useState("all");
   const [selectedPaymentStatusFilter, setSelectedPaymentStatusFilter] =
     useState("all");
   const [dateFromFilter, setDateFromFilter] = useState("");
   const [dateToFilter, setDateToFilter] = useState("");
+  const [approvedAmountDrafts, setApprovedAmountDrafts] = useState<
+    Record<string, string>
+  >({});
+  const [savingApprovedAmountKey, setSavingApprovedAmountKey] = useState<
+    string | null
+  >(null);
 
-  const { data: expenseSheets, loading } = useFirestoreQuery<ExpenseSheet>(
-    `Panels/${PANEL_ID}/expenseSheets`
-  );
+  const { data: expenseSheets, loading } =
+    useFirestoreQuery<BudgetExpenseRecord>(`Panels/${PANEL_ID}/expenseSheets`);
+
+  const ExpenseSheetModalComponent = ExpenseSheetModal as any;
+  const ExpenseDetailsModalComponent = ExpenseDetailsModal as any;
 
   function canCreateExpenseSheets(): boolean {
     return userProfile?.role === "operation";
+  }
+
+  function canManageReimbursementApproval(): boolean {
+    return [
+      "operational_admin",
+      "main_admin",
+      "finance",
+      "financial_admin",
+    ].includes(String(userProfile?.role || ""));
   }
 
   async function fetchReimbursementExpenses() {
@@ -1811,7 +350,7 @@ export default function ExpenseSheets() {
       setReimbursementLoading(true);
 
       const salesRecordsSnap = await getDocs(
-        collection(db, "Panels", PANEL_ID, "salesRecords")
+        collection(db, "Panels", PANEL_ID, "salesRecords"),
       );
 
       const reimbursementPromises = salesRecordsSnap.docs.map(
@@ -1827,8 +366,8 @@ export default function ExpenseSheets() {
                 PANEL_ID,
                 "salesRecords",
                 recordId,
-                "meetingUpdates"
-              )
+                "meetingUpdates",
+              ),
             );
 
             const rows: ReimbursementExpenseRow[] = [];
@@ -1839,6 +378,24 @@ export default function ExpenseSheets() {
 
               if (!reimbursement?.enabled) return;
 
+              const approvalStatus = String(
+                reimbursement?.approvalStatus || "submitted",
+              );
+              const claimAmount = safeNumber(
+                reimbursement?.claimAmount ??
+                  reimbursement?.claimedAmount ??
+                  reimbursement?.amount,
+              );
+              const storedApprovedAmount = safeNumber(
+                reimbursement?.approvedAmount ??
+                  reimbursement?.approvedClaimAmount ??
+                  reimbursement?.finalAmount,
+              );
+              const approvedAmount =
+                storedApprovedAmount > 0 ? storedApprovedAmount : 0;
+              const payableAmount =
+                approvedAmount > 0 ? approvedAmount : claimAmount;
+
               rows.push({
                 id: meetingDoc.id,
                 recordId,
@@ -1848,18 +405,20 @@ export default function ExpenseSheets() {
                   reimbursement?.approvalSubmittedByName ||
                   reimbursement?.personName ||
                   "Unknown",
-                amount: Number(reimbursement?.amount || 0),
-                fuelKm: Number(reimbursement?.kms || 0),
+                amount: payableAmount,
+                claimAmount,
+                approvedAmount,
+                fuelKm: safeNumber(reimbursement?.kms),
                 details: reimbursement?.detail || "N/A",
                 submittedDate:
                   reimbursement?.meetingDate ||
                   reimbursement?.createdAt ||
                   reimbursement?.date ||
                   null,
-                approvalStatus: String(
-                  reimbursement?.approvalStatus || "pending_admin_approval"
+                approvalStatus,
+                paymentStatus: String(
+                  reimbursement?.paymentStatus || "pending",
                 ),
-                paymentStatus: String(reimbursement?.paymentStatus || "pending"),
                 approvedBy: reimbursement?.approvedBy || "",
                 paidBy: reimbursement?.paidBy || "",
                 billUrl: reimbursement?.billUrl || "",
@@ -1870,29 +429,26 @@ export default function ExpenseSheets() {
           } catch (error) {
             console.error(
               `Failed to fetch meeting updates for sales record ${recordId}:`,
-              error
+              error,
             );
             return [];
           }
-        }
+        },
       );
 
       const results = await Promise.all(reimbursementPromises);
       const allRows = results.flat();
 
-      allRows.sort((a, b) => {
-        const aTime = getSortableTime(a.submittedDate);
-        const bTime = getSortableTime(b.submittedDate);
-        return bTime - aTime;
-      });
-
+      allRows.sort(
+        (a, b) =>
+          getSortableTime(b.submittedDate) - getSortableTime(a.submittedDate),
+      );
       setReimbursementExpenses(allRows);
     } catch (error: any) {
       console.error("Failed to fetch reimbursement expenses:", error);
       toast({
         title: "Error",
-        description:
-          error?.message || "Failed to load reimbursement expenses",
+        description: error?.message || "Failed to load reimbursement expenses",
         variant: "destructive",
       });
     } finally {
@@ -1902,385 +458,268 @@ export default function ExpenseSheets() {
 
   useEffect(() => {
     fetchReimbursementExpenses();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function handleApprove(expense: ExpenseSheet) {
-    if (!userProfile) return;
+  async function handleSaveApprovedAmount(row: ReimbursementExpenseRow) {
+    if (!canManageReimbursementApproval()) return;
 
-    try {
-      let newStatus = expense.status;
-      let currentApprover = "";
+    const rowKey = getReimbursementRowKey(row);
+    const rawValue =
+      approvedAmountDrafts[rowKey] ??
+      String(row.approvedAmount || row.claimAmount || "");
+    const approvedAmount = safeNumber(rawValue);
 
-      switch (userProfile.role) {
-        case "operational_admin":
-          if (expense.status === "pending_operational_admin") {
-            newStatus = "pending_main_admin";
-          }
-          break;
-        case "main_admin":
-          if (expense.status === "pending_main_admin") {
-            newStatus = "approved";
-          }
-          break;
-        case "finance":
-        case "financial_admin":
-          if (expense.status === "approved") {
-            newStatus = "acknowledged";
-          }
-          break;
-      }
-
-      const updateData: any = {
-        status: newStatus,
-        currentApprover,
-        approvalHistory: [
-          ...(expense.approvalHistory || []),
-          {
-            approver: userProfile.displayName,
-            action: "approved",
-            timestamp: new Date(),
-            notes: "",
-          },
-        ],
-        updatedAt: serverTimestamp(),
-      };
-
-      if (newStatus === "acknowledged") {
-        updateData.acknowledgedBy = userProfile.displayName;
-        updateData.acknowledgedAt = serverTimestamp();
-      }
-
-      await updateDoc(
-        doc(db, "Panels", PANEL_ID, "expenseSheets", expense.id),
-        updateData
-      );
-
+    if (approvedAmount <= 0) {
       toast({
-        title: "Success",
-        description: "Expense sheet approved successfully",
-      });
-    } catch (error: any) {
-      console.error("Failed to approve expense sheet:", error);
-      toast({
-        title: "Error",
-        description: error.message || "Failed to approve expense sheet",
+        title: "Invalid approved amount",
+        description: "Approved Amount must be greater than zero.",
         variant: "destructive",
       });
+      return;
     }
-  }
 
-  async function handleReject(expense: ExpenseSheet, rejectionComment: string) {
-    if (!userProfile) return;
+    if (row.claimAmount > 0 && approvedAmount > row.claimAmount) {
+      toast({
+        title: "Invalid approved amount",
+        description: "Approved Amount cannot be greater than the Claim Amount.",
+        variant: "destructive",
+      });
+      return;
+    }
 
     try {
-      setRejectionLoading(true);
+      setSavingApprovedAmountKey(rowKey);
 
-      await updateDoc(doc(db, "Panels", PANEL_ID, "expenseSheets", expense.id), {
-        status: "pending_operational_admin",
-        approvalHistory: [
-          ...(expense.approvalHistory || []),
-          {
-            approver: userProfile.displayName,
-            action: "rejected",
-            timestamp: new Date(),
-            notes: rejectionComment,
-          },
-        ],
-        updatedAt: serverTimestamp(),
-      });
+      await updateDoc(
+        doc(
+          db,
+          "Panels",
+          PANEL_ID,
+          "salesRecords",
+          row.recordId,
+          "meetingUpdates",
+          row.id,
+        ),
+        {
+          "reimbursement.claimAmount": row.claimAmount,
+          "reimbursement.approvedAmount": approvedAmount,
+          "reimbursement.approvalStatus": "approved",
+          "reimbursement.approvedBy":
+            userProfile?.displayName || userProfile?.email || "",
+          "reimbursement.approvedById":
+            (userProfile as any)?.uid || (userProfile as any)?.id || "",
+          "reimbursement.approvedAt": serverTimestamp(),
+          "reimbursement.updatedAt": serverTimestamp(),
+        },
+      );
+
+      setReimbursementExpenses((currentRows) =>
+        currentRows.map((currentRow) =>
+          getReimbursementRowKey(currentRow) === rowKey
+            ? {
+                ...currentRow,
+                amount: approvedAmount,
+                approvedAmount,
+                approvalStatus: "approved",
+                approvedBy:
+                  userProfile?.displayName || userProfile?.email || "",
+              }
+            : currentRow,
+        ),
+      );
+
+      setApprovedAmountDrafts((currentDrafts) => ({
+        ...currentDrafts,
+        [rowKey]: String(approvedAmount),
+      }));
 
       toast({
-        title: "Success",
-        description: "Expense sheet rejected with comments",
+        title: "Approved Amount saved",
+        description: "The reimbursement claim has been updated successfully.",
       });
-
-      setIsRejectionModalOpen(false);
-      setSelectedExpense(null);
     } catch (error: any) {
-      console.error("Failed to reject expense sheet:", error);
+      console.error("Failed to save approved reimbursement amount:", error);
       toast({
         title: "Error",
-        description: error.message || "Failed to reject expense sheet",
+        description: error?.message || "Failed to save approved amount",
         variant: "destructive",
       });
     } finally {
-      setRejectionLoading(false);
+      setSavingApprovedAmountKey(null);
     }
   }
 
-  function canApprove(expense: ExpenseSheet): boolean {
-    if (!userProfile) return false;
+  const budgetExpenses = useMemo(() => {
+    return Array.isArray(expenseSheets) ? expenseSheets : [];
+  }, [expenseSheets]);
 
-    switch (userProfile.role) {
-      case "operational_admin":
-        return expense.status === "pending_operational_admin";
-      case "main_admin":
-        return expense.status === "pending_main_admin";
-      case "finance":
-      case "financial_admin":
-        return expense.status === "approved";
-      default:
-        return false;
-    }
-  }
-
-  function canEdit(expense: ExpenseSheet): boolean {
-    if (!userProfile) return false;
-
-    return (
-      userProfile.role === "operation" &&
-      expense.status === "pending_operational_admin"
-    );
-  }
-
-  function getCurrentStep(status: string): string {
-    switch (status) {
-      case "pending_operational_admin":
-        return "Operational Admin Review";
-      case "pending_main_admin":
-        return "Main Admin Approval";
-      case "approved":
-        return "Finance Acknowledgment";
-      case "acknowledged":
-        return "Acknowledged";
-      case "rejected":
-        return "Rejected";
-      default:
-        return "Unknown";
-    }
-  }
-
-  function getStatusBadgeColor(status: string): string {
-    switch (status) {
-      case "acknowledged":
-      case "paid":
-        return "bg-green-100 text-green-800";
-      case "rejected":
-        return "bg-red-100 text-red-800";
-      case "pending_operational_admin":
-      case "pending_main_admin":
-      case "approved":
-      case "pending":
-      case "pending_admin_approval":
-        return "bg-yellow-100 text-yellow-800";
-      default:
-        return "bg-blue-100 text-blue-800";
-    }
-  }
-
-  function getSortableTime(date: any) {
-    if (!date) return 0;
-
-    try {
-      if (date?.toDate) return date.toDate().getTime();
-      if (date?.seconds) return date.seconds * 1000;
-
-      const parsed = new Date(date);
-      if (!isNaN(parsed.getTime())) return parsed.getTime();
-
-      return 0;
-    } catch {
-      return 0;
-    }
-  }
-
-  function formatDate(date: any) {
-    if (!date) return "N/A";
-
-    try {
-      if (date?.toDate) return date.toDate().toLocaleDateString();
-
-      if (date?.seconds) {
-        return new Date(date.seconds * 1000).toLocaleDateString();
-      }
-
-      const parsed = new Date(date);
-      if (!isNaN(parsed.getTime())) {
-        return parsed.toLocaleDateString();
-      }
-
-      return "Invalid";
-    } catch {
-      return "Invalid";
-    }
-  }
-
-  function formatReimbursementStatusLabel(value?: string) {
-    const raw = String(value || "").trim();
-    if (!raw) return "Pending";
-
-    return raw
-      .replace(/_/g, " ")
-      .split(" ")
-      .filter(Boolean)
-      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-      .join(" ");
-  }
-
-  function resetAdvancedReimbursementFilters() {
-    setSelectedProjectFilter("all");
-    setSelectedPaymentStatusFilter("all");
-    setDateFromFilter("");
-    setDateToFilter("");
-  }
-
-  function renderReimbursementItem(expense: ReimbursementExpenseRow) {
-    return (
-      <div
-        key={`${expense.recordId}-${expense.id}`}
-        className="rounded-xl border border-border/70 bg-background p-4 shadow-sm"
-      >
-        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-5">
-          <div>
-            <p className="text-xs text-muted-foreground">Client</p>
-            <p className="text-sm font-medium">{expense.clientName}</p>
-          </div>
-
-          <div>
-            <p className="text-xs text-muted-foreground">Project</p>
-            <p className="text-sm font-medium">{expense.projectName}</p>
-          </div>
-
-          <div>
-            <p className="text-xs text-muted-foreground">Amount / KM</p>
-            <p className="text-sm font-medium">
-              Rs {expense.amount.toLocaleString()}
-            </p>
-            <p className="text-xs text-muted-foreground">{expense.fuelKm} KM</p>
-          </div>
-
-          <div>
-            <p className="text-xs text-muted-foreground">Date</p>
-            <p className="text-sm font-medium">
-              {formatDate(expense.submittedDate)}
-            </p>
-          </div>
-
-          <div>
-            <p className="text-xs text-muted-foreground">Bill</p>
-            {expense.billUrl ? (
-              <a
-                href={expense.billUrl}
-                target="_blank"
-                rel="noreferrer"
-                className="text-sm text-primary underline"
-              >
-                View Bill
-              </a>
-            ) : (
-              <span className="text-sm text-muted-foreground">No Bill</span>
-            )}
-          </div>
-        </div>
-
-        <div className="mt-4 flex flex-wrap items-start gap-3">
-          <Badge className={getStatusBadgeColor(expense.approvalStatus)}>
-            Approval: {formatReimbursementStatusLabel(expense.approvalStatus)}
-          </Badge>
-
-          <Badge className={getStatusBadgeColor(expense.paymentStatus)}>
-            Payment: {formatReimbursementStatusLabel(expense.paymentStatus)}
-          </Badge>
-
-          {expense.approvedBy && (
-            <span className="text-xs text-muted-foreground">
-              Approved by {expense.approvedBy}
-            </span>
-          )}
-
-          {expense.paidBy && (
-            <span className="text-xs text-muted-foreground">
-              Paid by {expense.paidBy}
-            </span>
-          )}
-        </div>
-
-        <div className="mt-3">
-          <p className="text-xs text-muted-foreground">Details</p>
-          <p className="text-sm text-foreground">{expense.details}</p>
-        </div>
-      </div>
-    );
-  }
-
-  const reimbursementPeople = useMemo(() => {
+  const budgetProjectOptions = useMemo(() => {
     return Array.from(
       new Set(
-        reimbursementExpenses.map(
-          (expense) => (expense.salesPerson || "Unknown").trim() || "Unknown"
-        )
-      )
-    ).sort((a, b) => a.localeCompare(b));
+        budgetExpenses
+          .map((expense) => getProjectName(expense))
+          .filter(Boolean),
+      ),
+    ).sort();
+  }, [budgetExpenses]);
+
+  const budgetStatusOptions = useMemo(() => {
+    return Array.from(
+      new Set(
+        budgetExpenses
+          .map((expense) => getBudgetExpenseDisplayStatus(expense))
+          .filter(Boolean),
+      ),
+    ).sort();
+  }, [budgetExpenses]);
+
+  const filteredBudgetExpenses = useMemo(() => {
+    const search = normalizeText(budgetSearchTerm);
+    const fromDate = budgetDateFromFilter
+      ? new Date(`${budgetDateFromFilter}T00:00:00`)
+      : null;
+    const untilDate = budgetDateToFilter
+      ? new Date(`${budgetDateToFilter}T23:59:59`)
+      : null;
+
+    return budgetExpenses
+      .filter((expense) => {
+        const submittedDate = toDate(getSubmittedDate(expense));
+        const haystack = normalizeText(
+          [
+            getExpenseReference(expense),
+            getClientName(expense),
+            getProjectName(expense),
+            expense.projectCode,
+            expense.submittedBy,
+            expense.submittedByName,
+            getExpenseAmount(expense),
+            getBudgetExpenseDisplayStatus(expense),
+          ].join(" "),
+        );
+
+        const matchesSearch = !search || haystack.includes(search);
+        const matchesStatus =
+          budgetStatusFilter === "all" ||
+          getBudgetExpenseStatusFilterValue(expense) ===
+            normalizeText(budgetStatusFilter);
+        const matchesProject =
+          budgetProjectFilter === "all" ||
+          getProjectName(expense) === budgetProjectFilter;
+        const matchesFromDate =
+          !fromDate || (submittedDate && submittedDate >= fromDate);
+        const matchesToDate =
+          !untilDate || (submittedDate && submittedDate <= untilDate);
+
+        return (
+          matchesSearch &&
+          matchesStatus &&
+          matchesProject &&
+          matchesFromDate &&
+          matchesToDate
+        );
+      })
+      .sort(
+        (a, b) =>
+          getSortableTime(getSubmittedDate(b)) -
+          getSortableTime(getSubmittedDate(a)),
+      );
+  }, [
+    budgetExpenses,
+    budgetSearchTerm,
+    budgetStatusFilter,
+    budgetProjectFilter,
+    budgetDateFromFilter,
+    budgetDateToFilter,
+  ]);
+
+  const budgetStats = useMemo(() => {
+    const totalAmount = budgetExpenses.reduce(
+      (sum, expense) => sum + getExpenseAmount(expense),
+      0,
+    );
+    const submittedCount = budgetExpenses.filter(
+      (expense) => getBudgetExpenseStatusFilterValue(expense) === "submitted",
+    ).length;
+    const paidCount = budgetExpenses.filter(
+      (expense) => getBudgetExpenseStatusFilterValue(expense) === "paid",
+    ).length;
+
+    return {
+      totalRecords: budgetExpenses.length,
+      totalAmount,
+      submittedCount,
+      paidCount,
+    };
+  }, [budgetExpenses]);
+
+  const budgetTotalPages = Math.max(
+    1,
+    Math.ceil(filteredBudgetExpenses.length / budgetPageSize),
+  );
+  const safeBudgetPage = Math.min(budgetPage, budgetTotalPages);
+  const budgetStartIndex = (safeBudgetPage - 1) * budgetPageSize;
+  const paginatedBudgetExpenses = filteredBudgetExpenses.slice(
+    budgetStartIndex,
+    budgetStartIndex + budgetPageSize,
+  );
+
+  useEffect(() => {
+    setBudgetPage(1);
+  }, [
+    budgetSearchTerm,
+    budgetStatusFilter,
+    budgetProjectFilter,
+    budgetDateFromFilter,
+    budgetDateToFilter,
+    budgetPageSize,
+  ]);
+
+  const peopleOptions = useMemo(() => {
+    return Array.from(
+      new Set(reimbursementExpenses.map((expense) => expense.salesPerson)),
+    ).sort();
   }, [reimbursementExpenses]);
 
-  const reimbursementProjects = useMemo(() => {
-    if (selectedPersonFilter === "all") return [];
-
+  const projectOptions = useMemo(() => {
     return Array.from(
-      new Set(
-        reimbursementExpenses
-          .filter(
-            (expense) =>
-              ((expense.salesPerson || "Unknown").trim() || "Unknown") ===
-              selectedPersonFilter
-          )
-          .map((expense) => (expense.projectName || "N/A").trim() || "N/A")
-      )
-    ).sort((a, b) => a.localeCompare(b));
-  }, [reimbursementExpenses, selectedPersonFilter]);
+      new Set(reimbursementExpenses.map((expense) => expense.projectName)),
+    ).sort();
+  }, [reimbursementExpenses]);
 
   const filteredReimbursementExpenses = useMemo(() => {
+    const fromDate = dateFromFilter
+      ? new Date(`${dateFromFilter}T00:00:00`)
+      : null;
+    const untilDate = dateToFilter
+      ? new Date(`${dateToFilter}T23:59:59`)
+      : null;
+
     return reimbursementExpenses.filter((expense) => {
-      const person = (expense.salesPerson || "Unknown").trim() || "Unknown";
+      const submittedDate = toDate(expense.submittedDate);
+      const matchesPerson =
+        selectedPersonFilter === "all" ||
+        expense.salesPerson === selectedPersonFilter;
+      const matchesProject =
+        selectedProjectFilter === "all" ||
+        expense.projectName === selectedProjectFilter;
+      const matchesPaymentStatus =
+        selectedPaymentStatusFilter === "all" ||
+        normalizeText(expense.paymentStatus) ===
+          normalizeText(selectedPaymentStatusFilter);
+      const matchesFromDate =
+        !fromDate || (submittedDate && submittedDate >= fromDate);
+      const matchesToDate =
+        !untilDate || (submittedDate && submittedDate <= untilDate);
 
-      if (
-        selectedPersonFilter !== "all" &&
-        person !== selectedPersonFilter
-      ) {
-        return false;
-      }
-
-      if (selectedPersonFilter !== "all") {
-        if (
-          selectedProjectFilter !== "all" &&
-          (expense.projectName || "N/A").trim() !== selectedProjectFilter
-        ) {
-          return false;
-        }
-
-        const paymentStatus = String(expense.paymentStatus || "pending")
-          .trim()
-          .toLowerCase();
-
-        if (
-          selectedPaymentStatusFilter !== "all" &&
-          paymentStatus !== selectedPaymentStatusFilter
-        ) {
-          return false;
-        }
-
-        const expenseTime = getSortableTime(expense.submittedDate);
-
-        if (dateFromFilter) {
-          const start = new Date(dateFromFilter);
-          start.setHours(0, 0, 0, 0);
-
-          if (!expenseTime || expenseTime < start.getTime()) {
-            return false;
-          }
-        }
-
-        if (dateToFilter) {
-          const end = new Date(dateToFilter);
-          end.setHours(23, 59, 59, 999);
-
-          if (!expenseTime || expenseTime > end.getTime()) {
-            return false;
-          }
-        }
-      }
-
-      return true;
+      return (
+        matchesPerson &&
+        matchesProject &&
+        matchesPaymentStatus &&
+        matchesFromDate &&
+        matchesToDate
+      );
     });
   }, [
     reimbursementExpenses,
@@ -2291,628 +730,710 @@ export default function ExpenseSheets() {
     dateToFilter,
   ]);
 
-  const overallReimbursementAmount = useMemo(() => {
-    return filteredReimbursementExpenses.reduce(
-      (sum, item) => sum + (item.amount || 0),
-      0
-    );
-  }, [filteredReimbursementExpenses]);
+  const reimbursementGroups = useMemo(
+    () => buildReimbursementGroups(filteredReimbursementExpenses),
+    [filteredReimbursementExpenses],
+  );
 
-  const overallPendingAmount = useMemo(() => {
-    return filteredReimbursementExpenses
-      .filter((item) => String(item.paymentStatus).toLowerCase() !== "paid")
-      .reduce((sum, item) => sum + (item.amount || 0), 0);
-  }, [filteredReimbursementExpenses]);
-
-  const overallPaidAmount = useMemo(() => {
-    return filteredReimbursementExpenses
-      .filter((item) => String(item.paymentStatus).toLowerCase() === "paid")
-      .reduce((sum, item) => sum + (item.amount || 0), 0);
-  }, [filteredReimbursementExpenses]);
-
-  const groupedReimbursementExpenses = useMemo<ReimbursementPersonGroup[]>(() => {
-    const groupedMap = new Map<string, ReimbursementExpenseRow[]>();
-
-    filteredReimbursementExpenses.forEach((expense) => {
-      const key = (expense.salesPerson || "Unknown").trim() || "Unknown";
-      const existing = groupedMap.get(key) || [];
-      existing.push(expense);
-      groupedMap.set(key, existing);
-    });
-
-    const groups: ReimbursementPersonGroup[] = Array.from(groupedMap.entries()).map(
-      ([salesPerson, items]) => {
-        const sortedItems = [...items].sort(
-          (a, b) => getSortableTime(b.submittedDate) - getSortableTime(a.submittedDate)
-        );
-
-        const paidItems = sortedItems.filter(
-          (item) => String(item.paymentStatus).toLowerCase() === "paid"
-        );
-        const pendingItems = sortedItems.filter(
-          (item) => String(item.paymentStatus).toLowerCase() !== "paid"
-        );
-
-        return {
-          salesPerson,
-          totalAmount: sortedItems.reduce((sum, item) => sum + (item.amount || 0), 0),
-          pendingAmount: pendingItems.reduce((sum, item) => sum + (item.amount || 0), 0),
-          paidAmount: paidItems.reduce((sum, item) => sum + (item.amount || 0), 0),
-          pendingCount: pendingItems.length,
-          paidCount: paidItems.length,
-          items: sortedItems,
-        };
-      }
-    );
-
-    return groups.sort((a, b) => b.totalAmount - a.totalAmount);
-  }, [filteredReimbursementExpenses]);
-
-  if (loading || reimbursementLoading) {
+  if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="flex h-64 items-center justify-center">
+        <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="mb-8">
-        <div className="flex justify-between items-start">
-          <div>
-            <h2
-              className="text-3xl font-bold text-foreground mb-2"
-              data-testid="text-expenses-title"
-            >
-              Expense Sheets
-            </h2>
-            <p className="text-muted-foreground">
-              Manage budget expenses and reimbursement expenses separately.
-            </p>
-          </div>
-
-          {activeSubTab === "budget_expense" && canCreateExpenseSheets() && (
-            <Button
-              onClick={() => {
-                setSelectedExpense(null);
-                setIsExpenseModalOpen(true);
-              }}
-              className="bg-green-600 hover:bg-green-700 text-white"
-              data-testid="button-create-expense-sheet"
-            >
-              <i className="fas fa-plus mr-2"></i>
-              Create New Expense Sheet
-            </Button>
-          )}
+    <div className="space-y-6 bg-slate-50/60 p-4 md:p-6">
+      <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+        <div>
+          <p className="text-sm font-medium text-slate-500">
+            Finance Operations
+          </p>
+          <h2 className="text-3xl font-bold tracking-tight text-slate-950">
+            Budget Expense
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">
+            Submitted expenses are final. No operational, main admin, or finance
+            approval step is required.
+          </p>
         </div>
+
+        {canCreateExpenseSheets() && (
+          <Button
+            onClick={() => {
+              setSelectedExpense(null);
+              setIsExpenseModalOpen(true);
+            }}
+            className="rounded-xl shadow-sm"
+            data-testid="button-new-expense-sheet"
+          >
+            <Plus className="mr-2 h-4 w-4" />
+            New Expense
+          </Button>
+        )}
       </div>
 
-      <div className="mb-6 flex gap-3">
-        <Button
+      <div className="inline-flex rounded-2xl border border-slate-200 bg-white p-1 shadow-sm">
+        <button
           type="button"
-          variant={activeSubTab === "budget_expense" ? "default" : "outline"}
           onClick={() => setActiveSubTab("budget_expense")}
+          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            activeSubTab === "budget_expense"
+              ? "bg-slate-950 text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-100"
+          }`}
         >
           Budget Expense
-        </Button>
-
-        <Button
+        </button>
+        <button
           type="button"
-          variant={
-            activeSubTab === "reimbursement_expense" ? "default" : "outline"
-          }
           onClick={() => setActiveSubTab("reimbursement_expense")}
+          className={`rounded-xl px-4 py-2 text-sm font-semibold transition ${
+            activeSubTab === "reimbursement_expense"
+              ? "bg-slate-950 text-white shadow-sm"
+              : "text-slate-600 hover:bg-slate-100"
+          }`}
         >
           Reimbursement Expense
-        </Button>
+        </button>
       </div>
 
       {activeSubTab === "budget_expense" && (
-        <Card>
-          <CardContent className="p-0">
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-muted border-b border-border">
-                  <tr>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-                      Client
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-                      Linked Request
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-                      Total Amount
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-                      Current Step
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-                      Status
-                    </th>
-                    <th className="px-6 py-4 text-left text-sm font-medium text-muted-foreground">
-                      Actions
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-border">
-                  {expenseSheets.length === 0 ? (
-                    <tr>
-                      <td
-                        colSpan={6}
-                        className="px-6 py-8 text-center text-muted-foreground"
-                      >
-                        No budget expenses found
-                      </td>
-                    </tr>
-                  ) : (
-                    expenseSheets.map((expense) => (
-                      <tr
-                        key={expense.id}
-                        className="hover:bg-muted/50 transition-colors"
-                      >
-                        <td
-                          className="px-6 py-4 text-sm font-medium text-foreground"
-                          data-testid={`text-expense-client-${expense.id}`}
-                        >
-                          {expense.clientName}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-primary">
-                          {expense.linkedRequestId || "Independent"}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-foreground">
-                          ${expense.totalAmount.toLocaleString()}
-                        </td>
-                        <td className="px-6 py-4 text-sm text-muted-foreground">
-                          {getCurrentStep(expense.status)}
-                        </td>
-                        <td className="px-6 py-4">
-                          <Badge className={getStatusBadgeColor(expense.status)}>
-                            {expense.status.replace(/_/g, " ")}
-                          </Badge>
-                        </td>
-                        <td className="px-6 py-4">
-                          <div className="flex space-x-2">
-                            <Button
-                              variant="ghost"
-                              size="sm"
-                              className="text-gray-600 hover:text-gray-700"
-                              onClick={() => {
-                                setSelectedExpense(expense);
-                                setIsDetailsModalOpen(true);
-                              }}
-                              data-testid={`button-view-details-${expense.id}`}
-                            >
-                              <i className="fas fa-eye mr-1"></i>View Details
-                            </Button>
-
-                            {expense.expenseDocuments &&
-                              expense.expenseDocuments.length > 0 && (
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-primary hover:text-primary/80"
-                                  onClick={() => {
-                                    expense.expenseDocuments?.forEach(
-                                      (url, index) => {
-                                        setTimeout(
-                                          () => window.open(url, "_blank"),
-                                          index * 100
-                                        );
-                                      }
-                                    );
-                                  }}
-                                  data-testid={`button-view-documents-${expense.id}`}
-                                >
-                                  <i className="fas fa-file mr-1"></i>Documents
-                                </Button>
-                              )}
-
-                            {canEdit(expense) && (
-                              <Button
-                                variant="ghost"
-                                size="sm"
-                                className="text-blue-600 hover:text-blue-700"
-                                onClick={() => {
-                                  setSelectedExpense(expense);
-                                  setIsExpenseModalOpen(true);
-                                }}
-                                data-testid={`button-edit-expense-${expense.id}`}
-                              >
-                                <i className="fas fa-edit mr-1"></i>Edit &
-                                Resubmit
-                              </Button>
-                            )}
-
-                            {canApprove(expense) && (
-                              <>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-green-600 hover:text-green-700"
-                                  onClick={() => handleApprove(expense)}
-                                  data-testid={`button-approve-expense-${expense.id}`}
-                                >
-                                  <i className="fas fa-check mr-1"></i>
-                                  {expense.status === "approved"
-                                    ? "Acknowledge"
-                                    : "Approve"}
-                                </Button>
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-red-600 hover:text-red-700"
-                                  onClick={() => {
-                                    setSelectedExpense(expense);
-                                    setIsRejectionModalOpen(true);
-                                  }}
-                                  data-testid={`button-reject-expense-${expense.id}`}
-                                >
-                                  <i className="fas fa-times mr-1"></i>Reject
-                                </Button>
-                              </>
-                            )}
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
-            </div>
-          </CardContent>
-        </Card>
-      )}
-
-      {activeSubTab === "reimbursement_expense" && (
         <div className="space-y-5">
-          <Card className="border-border/70 shadow-sm">
+          <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+            <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
+              <CardContent className="flex items-center gap-4 p-5">
+                <div className="rounded-2xl bg-slate-100 p-3">
+                  <ReceiptText className="h-5 w-5 text-slate-700" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Total Records
+                  </p>
+                  <p className="text-2xl font-bold text-slate-950">
+                    {budgetStats.totalRecords}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
+              <CardContent className="flex items-center gap-4 p-5">
+                <div className="rounded-2xl bg-slate-100 p-3">
+                  <WalletMinimal className="h-5 w-5 text-slate-700" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Total Value
+                  </p>
+                  <p className="text-2xl font-bold text-slate-950">
+                    Rs {formatPKR(budgetStats.totalAmount)}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
+              <CardContent className="flex items-center gap-4 p-5">
+                <div className="rounded-2xl bg-blue-50 p-3">
+                  <FileText className="h-5 w-5 text-blue-700" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Submitted
+                  </p>
+                  <p className="text-2xl font-bold text-slate-950">
+                    {budgetStats.submittedCount}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
+              <CardContent className="flex items-center gap-4 p-5">
+                <div className="rounded-2xl bg-emerald-50 p-3">
+                  <WalletMinimal className="h-5 w-5 text-emerald-700" />
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                    Paid
+                  </p>
+                  <p className="text-2xl font-bold text-slate-950">
+                    {budgetStats.paidCount}
+                  </p>
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+
+          <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
             <CardContent className="p-5">
-              <div className="flex flex-col gap-4">
-                <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <div className="flex items-center gap-2">
-                      <div className="rounded-lg border bg-muted/40 p-2">
-                        <Filter className="h-4 w-4 text-muted-foreground" />
-                      </div>
-                      <div>
-                        <h3 className="text-sm font-semibold text-foreground">
-                          Reimbursement Filters
-                        </h3>
-                        <p className="text-xs text-muted-foreground">
-                          Start by selecting a person. More filters will appear
-                          automatically.
-                        </p>
-                      </div>
-                    </div>
-                  </div>
+              <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <Filter className="h-4 w-4" />
+                Filters
+              </div>
 
-                  {(selectedPersonFilter !== "all" ||
-                    selectedProjectFilter !== "all" ||
-                    selectedPaymentStatusFilter !== "all" ||
-                    dateFromFilter ||
-                    dateToFilter) && (
-                    <Button
-                      type="button"
-                      variant="outline"
-                      size="sm"
-                      onClick={() => {
-                        setSelectedPersonFilter("all");
-                        resetAdvancedReimbursementFilters();
-                      }}
-                      className="gap-2 self-start"
-                    >
-                      <Filter className="h-4 w-4" />
-                      Clear Filters
-                    </Button>
-                  )}
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-6">
+                <div className="relative md:col-span-2">
+                  <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                  <input
+                    value={budgetSearchTerm}
+                    onChange={(event) =>
+                      setBudgetSearchTerm(event.target.value)
+                    }
+                    placeholder="Search request, client, project..."
+                    className="h-10 w-full rounded-xl border border-slate-200 bg-white pl-9 pr-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                  />
                 </div>
 
-                <div className="grid grid-cols-1 gap-3 lg:grid-cols-12">
-                  <div className="lg:col-span-4">
-                    <label className="mb-2 block text-xs font-medium text-muted-foreground">
-                      Person
-                    </label>
-                    <div className="relative">
-                      <UserRound className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                      <select
-                        value={selectedPersonFilter}
-                        onChange={(e) => {
-                          setSelectedPersonFilter(e.target.value);
-                          resetAdvancedReimbursementFilters();
-                        }}
-                        className="h-11 w-full rounded-xl border border-input bg-background pl-10 pr-3 text-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
-                      >
-                        <option value="all">All Persons</option>
-                        {reimbursementPeople.map((person) => (
-                          <option key={person} value={person}>
-                            {person}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-                  </div>
+                <select
+                  value={budgetStatusFilter}
+                  onChange={(event) =>
+                    setBudgetStatusFilter(event.target.value)
+                  }
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                >
+                  <option value="all">All Status</option>
+                  {budgetStatusOptions.map((status) => (
+                    <option key={status} value={status}>
+                      {status}
+                    </option>
+                  ))}
+                </select>
 
-                  {selectedPersonFilter !== "all" && (
-                    <>
-                      <div className="lg:col-span-3">
-                        <label className="mb-2 block text-xs font-medium text-muted-foreground">
-                          Project
-                        </label>
-                        <div className="relative">
-                          <BriefcaseBusiness className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                          <select
-                            value={selectedProjectFilter}
-                            onChange={(e) =>
-                              setSelectedProjectFilter(e.target.value)
-                            }
-                            className="h-11 w-full rounded-xl border border-input bg-background pl-10 pr-3 text-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
-                          >
-                            <option value="all">All Projects</option>
-                            {reimbursementProjects.map((project) => (
-                              <option key={project} value={project}>
-                                {project}
-                              </option>
-                            ))}
-                          </select>
-                        </div>
-                      </div>
+                <select
+                  value={budgetProjectFilter}
+                  onChange={(event) =>
+                    setBudgetProjectFilter(event.target.value)
+                  }
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                >
+                  <option value="all">All Projects</option>
+                  {budgetProjectOptions.map((project) => (
+                    <option key={project} value={project}>
+                      {project}
+                    </option>
+                  ))}
+                </select>
 
-                      <div className="lg:col-span-2">
-                        <label className="mb-2 block text-xs font-medium text-muted-foreground">
-                          Status
-                        </label>
-                        <div className="relative">
-                          <CircleDollarSign className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                          <select
-                            value={selectedPaymentStatusFilter}
-                            onChange={(e) =>
-                              setSelectedPaymentStatusFilter(e.target.value)
-                            }
-                            className="h-11 w-full rounded-xl border border-input bg-background pl-10 pr-3 text-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
-                          >
-                            <option value="all">All Status</option>
-                            <option value="pending">Pending</option>
-                            <option value="paid">Paid</option>
-                          </select>
-                        </div>
-                      </div>
+                <input
+                  type="date"
+                  value={budgetDateFromFilter}
+                  onChange={(event) =>
+                    setBudgetDateFromFilter(event.target.value)
+                  }
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                />
 
-                      <div className="lg:col-span-3">
-                        <label className="mb-2 block text-xs font-medium text-muted-foreground">
-                          Date Range
-                        </label>
-                        <div className="grid grid-cols-2 gap-2">
-                          <div className="relative">
-                            <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <input
-                              type="date"
-                              value={dateFromFilter}
-                              onChange={(e) => setDateFromFilter(e.target.value)}
-                              className="h-11 w-full rounded-xl border border-input bg-background pl-10 pr-3 text-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
-                            />
-                          </div>
-                          <div className="relative">
-                            <CalendarDays className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-                            <input
-                              type="date"
-                              value={dateToFilter}
-                              onChange={(e) => setDateToFilter(e.target.value)}
-                              className="h-11 w-full rounded-xl border border-input bg-background pl-10 pr-3 text-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
-                            />
-                          </div>
-                        </div>
-                      </div>
-                    </>
-                  )}
-                </div>
-
-                {selectedPersonFilter !== "all" && (
-                  <div className="flex flex-wrap items-center gap-2 pt-1">
-                    <Badge variant="outline" className="rounded-full">
-                      Person: {selectedPersonFilter}
-                    </Badge>
-                    {selectedProjectFilter !== "all" && (
-                      <Badge variant="outline" className="rounded-full">
-                        Project: {selectedProjectFilter}
-                      </Badge>
-                    )}
-                    {selectedPaymentStatusFilter !== "all" && (
-                      <Badge variant="outline" className="rounded-full">
-                        Status: {selectedPaymentStatusFilter}
-                      </Badge>
-                    )}
-                    {dateFromFilter && (
-                      <Badge variant="outline" className="rounded-full">
-                        From: {dateFromFilter}
-                      </Badge>
-                    )}
-                    {dateToFilter && (
-                      <Badge variant="outline" className="rounded-full">
-                        To: {dateToFilter}
-                      </Badge>
-                    )}
-                  </div>
-                )}
-
-                <div className="grid grid-cols-1 gap-3 pt-1 sm:grid-cols-3">
-                  <div className="rounded-xl border border-border/70 bg-muted/20 p-4">
-                    <div className="text-xs text-muted-foreground">
-                      Visible Reimbursements
-                    </div>
-                    <div className="mt-1 text-lg font-semibold">
-                      Rs {overallReimbursementAmount.toLocaleString()}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-yellow-200 bg-yellow-50 p-4">
-                    <div className="text-xs text-muted-foreground">
-                      Visible Pending
-                    </div>
-                    <div className="mt-1 text-lg font-semibold">
-                      Rs {overallPendingAmount.toLocaleString()}
-                    </div>
-                  </div>
-
-                  <div className="rounded-xl border border-green-200 bg-green-50 p-4">
-                    <div className="text-xs text-muted-foreground">
-                      Visible Paid
-                    </div>
-                    <div className="mt-1 text-lg font-semibold">
-                      Rs {overallPaidAmount.toLocaleString()}
-                    </div>
-                  </div>
-                </div>
+                <input
+                  type="date"
+                  value={budgetDateToFilter}
+                  onChange={(event) =>
+                    setBudgetDateToFilter(event.target.value)
+                  }
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                />
               </div>
             </CardContent>
           </Card>
 
-          {groupedReimbursementExpenses.length === 0 ? (
-            <Card>
-              <CardContent className="py-8 text-center text-muted-foreground">
-                No reimbursement expenses found
-              </CardContent>
-            </Card>
-          ) : (
-            groupedReimbursementExpenses.map((group) => {
-              const pendingItems = group.items.filter(
-                (item) => String(item.paymentStatus).toLowerCase() !== "paid"
-              );
-              const paidItems = group.items.filter(
-                (item) => String(item.paymentStatus).toLowerCase() === "paid"
-              );
+          <Card className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm">
+            <CardContent className="p-0">
+              <div className="overflow-x-auto">
+                <table className="w-full min-w-[980px]">
+                  <thead className="border-b border-slate-200 bg-slate-50">
+                    <tr>
+                      <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Expense / Request
+                      </th>
+                      <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Client & Project
+                      </th>
+                      <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Submitted By
+                      </th>
+                      <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Submitted Date
+                      </th>
+                      <th className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Amount
+                      </th>
+                      <th className="px-5 py-4 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Status
+                      </th>
+                      <th className="px-5 py-4 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
 
-              return (
-                <Card key={group.salesPerson}>
-                  <CardContent className="p-5 space-y-5">
-                    <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+                  <tbody className="divide-y divide-slate-100">
+                    {paginatedBudgetExpenses.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="px-6 py-12 text-center">
+                          <div className="mx-auto max-w-sm">
+                            <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100">
+                              <ReceiptText className="h-5 w-5 text-slate-500" />
+                            </div>
+                            <p className="font-semibold text-slate-900">
+                              No budget expenses found
+                            </p>
+                            <p className="mt-1 text-sm text-slate-500">
+                              Try changing your filters or submit a new expense.
+                            </p>
+                          </div>
+                        </td>
+                      </tr>
+                    ) : (
+                      paginatedBudgetExpenses.map((expense) => {
+                        const displayStatus =
+                          getBudgetExpenseDisplayStatus(expense);
+
+                        return (
+                          <tr
+                            key={expense.id}
+                            className="transition hover:bg-slate-50/70"
+                          >
+                            <td className="px-5 py-4 align-top">
+                              <p className="font-semibold text-slate-900">
+                                {getExpenseReference(expense)}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                Record ID: {expense.id}
+                              </p>
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <div className="flex items-start gap-3">
+                                <div className="mt-0.5 rounded-xl bg-slate-100 p-2">
+                                  <BriefcaseBusiness className="h-4 w-4 text-slate-600" />
+                                </div>
+                                <div>
+                                  <p className="font-semibold text-slate-900">
+                                    {getClientName(expense)}
+                                  </p>
+                                  <p className="mt-1 text-sm text-slate-500">
+                                    {getProjectName(expense)}
+                                  </p>
+                                  {expense.projectCode && (
+                                    <p className="mt-1 text-xs text-slate-400">
+                                      Code: {expense.projectCode}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <div className="flex items-center gap-2 text-sm text-slate-700">
+                                <UserRound className="h-4 w-4 text-slate-400" />
+                                {expense.submittedByName ||
+                                  expense.submittedBy ||
+                                  "N/A"}
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <div className="flex items-center gap-2 text-sm text-slate-700">
+                                <CalendarDays className="h-4 w-4 text-slate-400" />
+                                {formatDate(getSubmittedDate(expense))}
+                              </div>
+                              {getDateInputValue(getSubmittedDate(expense)) && (
+                                <p className="mt-1 text-xs text-slate-400">
+                                  {getDateInputValue(getSubmittedDate(expense))}
+                                </p>
+                              )}
+                            </td>
+                            <td className="px-5 py-4 text-right align-top">
+                              <p className="font-bold text-slate-950">
+                                Rs {formatPKR(getExpenseAmount(expense))}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-400">
+                                No approval required
+                              </p>
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <Badge
+                                className={`rounded-full border px-3 py-1 ${getStatusBadgeClass(displayStatus)}`}
+                              >
+                                {displayStatus}
+                              </Badge>
+                            </td>
+                            <td className="px-5 py-4 text-right align-top">
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                className="rounded-xl"
+                                onClick={() => {
+                                  setSelectedExpense(expense);
+                                  setIsDetailsModalOpen(true);
+                                }}
+                              >
+                                <Eye className="mr-2 h-4 w-4" />
+                                View
+                              </Button>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex flex-col gap-3 border-t border-slate-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
+                <p className="text-sm text-slate-500">
+                  Showing{" "}
+                  {filteredBudgetExpenses.length === 0
+                    ? 0
+                    : budgetStartIndex + 1}{" "}
+                  to{" "}
+                  {Math.min(
+                    budgetStartIndex + budgetPageSize,
+                    filteredBudgetExpenses.length,
+                  )}{" "}
+                  of {filteredBudgetExpenses.length} expenses
+                </p>
+
+                <div className="flex items-center gap-2">
+                  <select
+                    value={budgetPageSize}
+                    onChange={(event) =>
+                      setBudgetPageSize(Number(event.target.value))
+                    }
+                    className="h-9 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none"
+                  >
+                    {PAGE_SIZE_OPTIONS.map((size) => (
+                      <option key={size} value={size}>
+                        {size} / page
+                      </option>
+                    ))}
+                  </select>
+
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl"
+                    disabled={safeBudgetPage <= 1}
+                    onClick={() =>
+                      setBudgetPage((current) => Math.max(1, current - 1))
+                    }
+                  >
+                    Previous
+                  </Button>
+                  <span className="min-w-[88px] text-center text-sm font-semibold text-slate-700">
+                    {safeBudgetPage} / {budgetTotalPages}
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="rounded-xl"
+                    disabled={safeBudgetPage >= budgetTotalPages}
+                    onClick={() =>
+                      setBudgetPage((current) =>
+                        Math.min(budgetTotalPages, current + 1),
+                      )
+                    }
+                  >
+                    Next
+                  </Button>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
+
+      {activeSubTab === "reimbursement_expense" && (
+        <div className="space-y-5">
+          <Card className="rounded-2xl border-slate-200 bg-white shadow-sm">
+            <CardContent className="p-5">
+              <div className="mb-4 flex items-center gap-2 text-sm font-semibold text-slate-700">
+                <Filter className="h-4 w-4" />
+                Reimbursement Filters
+              </div>
+
+              <div className="grid grid-cols-1 gap-3 md:grid-cols-5">
+                <select
+                  value={selectedPersonFilter}
+                  onChange={(event) =>
+                    setSelectedPersonFilter(event.target.value)
+                  }
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none"
+                >
+                  <option value="all">All Persons</option>
+                  {peopleOptions.map((person) => (
+                    <option key={person} value={person}>
+                      {person}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={selectedProjectFilter}
+                  onChange={(event) =>
+                    setSelectedProjectFilter(event.target.value)
+                  }
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none"
+                >
+                  <option value="all">All Projects</option>
+                  {projectOptions.map((project) => (
+                    <option key={project} value={project}>
+                      {project}
+                    </option>
+                  ))}
+                </select>
+
+                <select
+                  value={selectedPaymentStatusFilter}
+                  onChange={(event) =>
+                    setSelectedPaymentStatusFilter(event.target.value)
+                  }
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none"
+                >
+                  <option value="all">All Payment Status</option>
+                  <option value="pending">Pending</option>
+                  <option value="paid">Paid</option>
+                </select>
+
+                <input
+                  type="date"
+                  value={dateFromFilter}
+                  onChange={(event) => setDateFromFilter(event.target.value)}
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none"
+                />
+
+                <input
+                  type="date"
+                  value={dateToFilter}
+                  onChange={(event) => setDateToFilter(event.target.value)}
+                  className="h-10 rounded-xl border border-slate-200 bg-white px-3 text-sm outline-none"
+                />
+              </div>
+            </CardContent>
+          </Card>
+
+          {reimbursementLoading ? (
+            <div className="flex h-40 items-center justify-center">
+              <div className="h-8 w-8 animate-spin rounded-full border-b-2 border-primary" />
+            </div>
+          ) : (
+            reimbursementGroups.map((group) => (
+              <Card
+                key={group.salesPerson}
+                className="overflow-hidden rounded-2xl border-slate-200 bg-white shadow-sm"
+              >
+                <CardContent className="p-0">
+                  <div className="border-b border-slate-100 bg-slate-50 px-5 py-4">
+                    <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
                       <div>
-                        <h3 className="text-xl font-semibold text-foreground">
+                        <p className="text-lg font-bold text-slate-950">
                           {group.salesPerson}
-                        </h3>
-                        <p className="text-sm text-muted-foreground mt-1">
-                          Total Claims: {group.items.length}
+                        </p>
+                        <p className="text-sm text-slate-500">
+                          {group.items.length} reimbursement entries
                         </p>
                       </div>
-
-                      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 w-full md:w-auto">
-                        <div className="rounded-lg border p-3 bg-muted/30">
-                          <div className="text-xs text-muted-foreground">
-                            Total Amount
-                          </div>
-                          <div className="text-base font-semibold">
-                            Rs {group.totalAmount.toLocaleString()}
-                          </div>
-                        </div>
-
-                        <div className="rounded-lg border p-3 bg-yellow-50">
-                          <div className="text-xs text-muted-foreground">
-                            Pending
-                          </div>
-                          <div className="text-base font-semibold">
-                            {group.pendingCount} claim(s)
-                          </div>
-                          <div className="text-sm">
-                            Rs {group.pendingAmount.toLocaleString()}
-                          </div>
-                        </div>
-
-                        <div className="rounded-lg border p-3 bg-green-50">
-                          <div className="text-xs text-muted-foreground">
-                            Paid
-                          </div>
-                          <div className="text-base font-semibold">
-                            {group.paidCount} claim(s)
-                          </div>
-                          <div className="text-sm">
-                            Rs {group.paidAmount.toLocaleString()}
-                          </div>
-                        </div>
+                      <div className="grid gap-1 text-sm font-semibold text-slate-700 md:text-right">
+                        <span>
+                          Claimed: Rs {formatPKR(group.totalClaimAmount)}
+                        </span>
+                        <span>
+                          Approved: Rs {formatPKR(group.totalApprovedAmount)}
+                        </span>
                       </div>
                     </div>
+                  </div>
 
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <h4 className="font-medium text-foreground">
-                          Pending Reimbursements
-                        </h4>
-                        <Badge className="bg-yellow-100 text-yellow-800">
-                          {pendingItems.length}
-                        </Badge>
-                      </div>
-
-                      {pendingItems.length === 0 ? (
-                        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                          No pending reimbursements
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {pendingItems.map(renderReimbursementItem)}
-                        </div>
-                      )}
-                    </div>
-
-                    <div>
-                      <div className="flex items-center gap-2 mb-3">
-                        <h4 className="font-medium text-foreground">
-                          Paid Reimbursements
-                        </h4>
-                        <Badge className="bg-green-100 text-green-800">
-                          {paidItems.length}
-                        </Badge>
-                      </div>
-
-                      {paidItems.length === 0 ? (
-                        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                          No paid reimbursements
-                        </div>
-                      ) : (
-                        <div className="space-y-3">
-                          {paidItems.map(renderReimbursementItem)}
-                        </div>
-                      )}
-                    </div>
-                  </CardContent>
-                </Card>
-              );
-            })
+                  <div className="overflow-x-auto">
+                    <table className="w-full min-w-[1100px]">
+                      <thead className="bg-white">
+                        <tr className="border-b border-slate-100">
+                          <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Client / Project
+                          </th>
+                          <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Details
+                          </th>
+                          <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Date
+                          </th>
+                          <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Claim Amount
+                          </th>
+                          <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Approved Amount
+                          </th>
+                          <th className="px-5 py-3 text-left text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Payment
+                          </th>
+                          <th className="px-5 py-3 text-right text-xs font-semibold uppercase tracking-wide text-slate-500">
+                            Bill
+                          </th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {group.items.map((expense) => (
+                          <tr
+                            key={`${expense.recordId}-${expense.id}`}
+                            className="hover:bg-slate-50/70"
+                          >
+                            <td className="px-5 py-4">
+                              <p className="font-semibold text-slate-900">
+                                {expense.clientName}
+                              </p>
+                              <p className="text-sm text-slate-500">
+                                {expense.projectName}
+                              </p>
+                            </td>
+                            <td className="px-5 py-4 text-sm text-slate-600">
+                              {expense.details}
+                            </td>
+                            <td className="px-5 py-4 text-sm text-slate-600">
+                              {formatDate(expense.submittedDate)}
+                            </td>
+                            <td className="px-5 py-4 text-right align-top">
+                              <p className="font-semibold text-slate-900">
+                                Rs {formatPKR(expense.claimAmount)}
+                              </p>
+                              <p className="mt-1 text-xs text-slate-400">
+                                Claimed by user
+                              </p>
+                            </td>
+                            <td className="px-5 py-4 text-right align-top">
+                              {canManageReimbursementApproval() &&
+                              normalizeText(expense.paymentStatus) !==
+                                "paid" ? (
+                                <div className="ml-auto flex max-w-[230px] items-center justify-end gap-2">
+                                  <input
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={
+                                      approvedAmountDrafts[
+                                        getReimbursementRowKey(expense)
+                                      ] ??
+                                      String(
+                                        expense.approvedAmount ||
+                                          expense.claimAmount ||
+                                          "",
+                                      )
+                                    }
+                                    onChange={(event) =>
+                                      setApprovedAmountDrafts(
+                                        (currentDrafts) => ({
+                                          ...currentDrafts,
+                                          [getReimbursementRowKey(expense)]:
+                                            event.target.value,
+                                        }),
+                                      )
+                                    }
+                                    className="h-9 w-28 rounded-xl border border-slate-200 bg-white px-3 text-right text-sm font-semibold text-slate-900 outline-none transition focus:border-slate-400 focus:ring-2 focus:ring-slate-100"
+                                  />
+                                  <Button
+                                    type="button"
+                                    size="sm"
+                                    variant="outline"
+                                    className="h-9 rounded-xl"
+                                    disabled={
+                                      savingApprovedAmountKey ===
+                                      getReimbursementRowKey(expense)
+                                    }
+                                    onClick={() =>
+                                      handleSaveApprovedAmount(expense)
+                                    }
+                                  >
+                                    {savingApprovedAmountKey ===
+                                    getReimbursementRowKey(expense)
+                                      ? "Saving"
+                                      : isReimbursementApproved(expense)
+                                        ? "Update"
+                                        : "Approve"}
+                                  </Button>
+                                </div>
+                              ) : expense.approvedAmount > 0 ? (
+                                <>
+                                  <p className="font-semibold text-slate-900">
+                                    Rs {formatPKR(expense.approvedAmount)}
+                                  </p>
+                                  <p className="mt-1 text-xs text-slate-400">
+                                    Approved value
+                                  </p>
+                                </>
+                              ) : (
+                                <span className="text-sm text-slate-400">
+                                  Not approved
+                                </span>
+                              )}
+                            </td>
+                            <td className="px-5 py-4 align-top">
+                              <div className="space-y-2">
+                                <Badge
+                                  className={`rounded-full border px-3 py-1 ${getStatusBadgeClass(expense.paymentStatus)}`}
+                                >
+                                  {humanizeStatus(expense.paymentStatus)}
+                                </Badge>
+                                <div>
+                                  <Badge
+                                    className={`rounded-full border px-3 py-1 ${getStatusBadgeClass(expense.approvalStatus)}`}
+                                  >
+                                    {isReimbursementApproved(expense)
+                                      ? "Approved"
+                                      : humanizeStatus(expense.approvalStatus)}
+                                  </Badge>
+                                  {expense.approvedBy && (
+                                    <p className="mt-1 text-xs text-slate-400">
+                                      By {expense.approvedBy}
+                                    </p>
+                                  )}
+                                </div>
+                              </div>
+                            </td>
+                            <td className="px-5 py-4 text-right">
+                              {expense.billUrl ? (
+                                <Button
+                                  variant="outline"
+                                  size="sm"
+                                  className="rounded-xl"
+                                  onClick={() =>
+                                    window.open(expense.billUrl, "_blank")
+                                  }
+                                >
+                                  View Bill
+                                </Button>
+                              ) : (
+                                <span className="text-sm text-slate-400">
+                                  No bill
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            ))
           )}
         </div>
       )}
 
-      <ExpenseSheetModal
+      <ExpenseSheetModalComponent
         isOpen={isExpenseModalOpen}
         onClose={() => {
           setIsExpenseModalOpen(false);
           setSelectedExpense(null);
         }}
-        onSuccess={() => {
-          setIsExpenseModalOpen(false);
-          setSelectedExpense(null);
-        }}
         editingExpense={selectedExpense}
+        expense={selectedExpense}
       />
 
-      <ExpenseDetailsModal
+      <ExpenseDetailsModalComponent
         isOpen={isDetailsModalOpen}
         onClose={() => {
           setIsDetailsModalOpen(false);
           setSelectedExpense(null);
         }}
         expense={selectedExpense}
-      />
-
-      <RejectionModal
-        isOpen={isRejectionModalOpen}
-        onClose={() => {
-          setIsRejectionModalOpen(false);
-          setSelectedExpense(null);
-        }}
-        onConfirm={(comment) =>
-          selectedExpense && handleReject(selectedExpense, comment)
-        }
-        itemType="expense sheet"
-        loading={rejectionLoading}
       />
     </div>
   );

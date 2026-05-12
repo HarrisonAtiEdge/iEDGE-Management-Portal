@@ -1,10 +1,17 @@
 import { useState, useEffect } from "react";
 import { useAuth } from "@/contexts/AuthContext";
-import { collection, query, where, getDocs, orderBy, limit } from "firebase/firestore";
+import {
+  collection,
+  query,
+  where,
+  getDocs,
+  orderBy,
+  limit,
+} from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import InvoiceRequestModal from "@/components/InvoiceRequestModal";
+import InvoiceRequestModal from "@/components/BudgetRequestModal";
 import { InvoiceRequest } from "@shared/schema";
 
 interface DashboardStats {
@@ -27,7 +34,7 @@ export default function Dashboard() {
     pending: 0,
     approved: 0,
     totalAmount: 0,
-    avgProcessing: "0 days"
+    avgProcessing: "0 days",
   });
   const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
   const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
@@ -40,15 +47,15 @@ export default function Dashboard() {
   async function loadDashboardData() {
     try {
       setLoading(true);
-      
+
       // Load invoices for stats
       const invoicesQuery = query(collection(db, "invoiceRequests"));
       const invoicesSnapshot = await getDocs(invoicesQuery);
-      
+
       let pendingCount = 0;
       let approvedCount = 0;
       let totalAmount = 0;
-      
+
       invoicesSnapshot.forEach((doc) => {
         const data = doc.data();
         if (data.status === "approved" || data.status === "payment_released") {
@@ -63,17 +70,17 @@ export default function Dashboard() {
         pending: pendingCount,
         approved: approvedCount,
         totalAmount,
-        avgProcessing: "2.4 days" // This would be calculated based on actual data
+        avgProcessing: "2.4 days", // This would be calculated based on actual data
       });
 
       // Load recent activity
       const recentQuery = query(
         collection(db, "invoiceRequests"),
         orderBy("submittedAt", "desc"),
-        limit(5)
+        limit(5),
       );
       const recentSnapshot = await getDocs(recentQuery);
-      
+
       const activities: RecentActivity[] = [];
       recentSnapshot.forEach((doc) => {
         const data = doc.data();
@@ -81,10 +88,10 @@ export default function Dashboard() {
           id: doc.id,
           description: `Invoice #${data.invoiceNumber} ${getStatusDescription(data.status)}`,
           timestamp: formatTimestamp(data.submittedAt?.toDate()),
-          status: data.status
+          status: data.status,
         });
       });
-      
+
       setRecentActivity(activities);
     } catch (error) {
       console.error("Failed to load dashboard data:", error);
@@ -95,13 +102,20 @@ export default function Dashboard() {
 
   function getStatusDescription(status: string): string {
     switch (status) {
-      case "pending_operational_admin": return "awaiting operational admin review";
-      case "pending_main_admin": return "awaiting main admin approval"; 
-      case "pending_finance": return "awaiting finance approval";
-      case "approved": return "approved";
-      case "payment_released": return "payment released";
-      case "rejected": return "rejected";
-      default: return "submitted";
+      case "pending_operational_admin":
+        return "awaiting operational admin review";
+      case "pending_main_admin":
+        return "awaiting main admin approval";
+      case "pending_finance":
+        return "awaiting finance approval";
+      case "approved":
+        return "approved";
+      case "payment_released":
+        return "payment released";
+      case "rejected":
+        return "rejected";
+      default:
+        return "submitted";
     }
   }
 
@@ -109,7 +123,7 @@ export default function Dashboard() {
     if (!date) return "Unknown";
     const now = new Date();
     const diff = Math.floor((now.getTime() - date.getTime()) / 1000 / 60); // minutes
-    
+
     if (diff < 1) return "Just now";
     if (diff < 60) return `${diff} minutes ago`;
     if (diff < 1440) return `${Math.floor(diff / 60)} hours ago`;
@@ -124,7 +138,7 @@ export default function Dashboard() {
       case "rejected":
         return "bg-red-100 text-red-800";
       case "pending_operational_admin":
-      case "pending_main_admin":  
+      case "pending_main_admin":
       case "pending_finance":
         return "bg-yellow-100 text-yellow-800";
       default:
@@ -146,8 +160,15 @@ export default function Dashboard() {
     <div>
       {/* Dashboard Header */}
       <div className="mb-8">
-        <h2 className="text-3xl font-bold text-foreground mb-2" data-testid="text-dashboard-title">Dashboard</h2>
-        <p className="text-muted-foreground">Welcome back! Here's what's happening with your invoices.</p>
+        <h2
+          className="text-3xl font-bold text-foreground mb-2"
+          data-testid="text-dashboard-title"
+        >
+          Dashboard
+        </h2>
+        <p className="text-muted-foreground">
+          Welcome back! Here's what's happening with your invoices.
+        </p>
       </div>
 
       {/* Stats Cards */}
@@ -156,8 +177,15 @@ export default function Dashboard() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Pending Requests</p>
-                <p className="text-3xl font-bold text-foreground" data-testid="text-pending-count">{stats.pending}</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Pending Requests
+                </p>
+                <p
+                  className="text-3xl font-bold text-foreground"
+                  data-testid="text-pending-count"
+                >
+                  {stats.pending}
+                </p>
               </div>
               <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
                 <i className="fas fa-clock text-primary text-xl"></i>
@@ -165,7 +193,9 @@ export default function Dashboard() {
             </div>
             <div className="mt-4 flex items-center text-sm">
               <span className="text-green-600">+8%</span>
-              <span className="text-muted-foreground ml-1">from last month</span>
+              <span className="text-muted-foreground ml-1">
+                from last month
+              </span>
             </div>
           </CardContent>
         </Card>
@@ -174,8 +204,15 @@ export default function Dashboard() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Approved Today</p>
-                <p className="text-3xl font-bold text-foreground" data-testid="text-approved-count">{stats.approved}</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Approved Today
+                </p>
+                <p
+                  className="text-3xl font-bold text-foreground"
+                  data-testid="text-approved-count"
+                >
+                  {stats.approved}
+                </p>
               </div>
               <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
                 <i className="fas fa-check-circle text-green-600 text-xl"></i>
@@ -192,8 +229,13 @@ export default function Dashboard() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Total Amount</p>
-                <p className="text-3xl font-bold text-foreground" data-testid="text-total-amount">
+                <p className="text-sm font-medium text-muted-foreground">
+                  Total Amount
+                </p>
+                <p
+                  className="text-3xl font-bold text-foreground"
+                  data-testid="text-total-amount"
+                >
                   Rs {stats.totalAmount.toLocaleString()}
                 </p>
               </div>
@@ -212,8 +254,15 @@ export default function Dashboard() {
           <CardContent className="p-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm font-medium text-muted-foreground">Processing Time</p>
-                <p className="text-3xl font-bold text-foreground" data-testid="text-processing-time">{stats.avgProcessing}</p>
+                <p className="text-sm font-medium text-muted-foreground">
+                  Processing Time
+                </p>
+                <p
+                  className="text-3xl font-bold text-foreground"
+                  data-testid="text-processing-time"
+                >
+                  {stats.avgProcessing}
+                </p>
               </div>
               <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
                 <i className="fas fa-stopwatch text-purple-600 text-xl"></i>
@@ -233,7 +282,9 @@ export default function Dashboard() {
         {canCreateInvoices && (
           <Card>
             <CardContent className="p-6">
-              <h3 className="text-lg font-semibold text-foreground mb-4">New Invoice Request</h3>
+              <h3 className="text-lg font-semibold text-foreground mb-4">
+                New Invoice Request
+              </h3>
               <Button
                 onClick={() => setIsInvoiceModalOpen(true)}
                 className="w-full"
@@ -249,20 +300,35 @@ export default function Dashboard() {
         {/* Recent Activity */}
         <Card className={canCreateInvoices ? "lg:col-span-2" : "lg:col-span-3"}>
           <CardContent className="p-6">
-            <h3 className="text-lg font-semibold text-foreground mb-4">Recent Activity</h3>
+            <h3 className="text-lg font-semibold text-foreground mb-4">
+              Recent Activity
+            </h3>
             <div className="space-y-4">
               {recentActivity.length === 0 ? (
-                <p className="text-muted-foreground text-center py-4">No recent activity</p>
+                <p className="text-muted-foreground text-center py-4">
+                  No recent activity
+                </p>
               ) : (
                 recentActivity.map((activity) => (
-                  <div key={activity.id} className="flex items-center space-x-4 p-3 bg-muted rounded-lg">
+                  <div
+                    key={activity.id}
+                    className="flex items-center space-x-4 p-3 bg-muted rounded-lg"
+                  >
                     <div className="w-2 h-2 bg-green-500 rounded-full"></div>
                     <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">{activity.description}</p>
-                      <p className="text-xs text-muted-foreground">{activity.timestamp}</p>
+                      <p className="text-sm font-medium text-foreground">
+                        {activity.description}
+                      </p>
+                      <p className="text-xs text-muted-foreground">
+                        {activity.timestamp}
+                      </p>
                     </div>
-                    <span className={`text-xs px-2 py-1 rounded-full ${getStatusColor(activity.status)}`}>
-                      {activity.status.replace('_', ' ').replace('pending ', '')}
+                    <span
+                      className={`text-xs px-2 py-1 rounded-full ${getStatusColor(activity.status)}`}
+                    >
+                      {activity.status
+                        .replace("_", " ")
+                        .replace("pending ", "")}
                     </span>
                   </div>
                 ))

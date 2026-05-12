@@ -808,7 +808,7 @@ export default function Hotel() {
   return (
     <div className="space-y-4">
       <div className="space-y-2">
-        <h2 className="text-xl font-semibold">Travel</h2>
+        <h2 className="text-xl font-semibold  mb-3">Travel Settings</h2>
         <TravelTabs />
       </div>
 

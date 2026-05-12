@@ -10,7 +10,7 @@
 // import InternationalEstimates from "@/pages/InternationalEstimates";
 // import Login from "@/pages/Login";
 // import Dashboard from "@/pages/Dashboard";
-// import InvoiceRequests from "@/pages/InvoiceRequests";
+// import InvoiceRequests from "@/pages/BudgetRequests";
 // import ExpenseSheets from "@/pages/ExpenseSheets";
 // import Records from "@/pages/Records";
 // import UserManagement from "@/pages/UserManagement";
@@ -39,6 +39,9 @@
 // import HotelSettings from "./pages/Travel/HotelSettings";
 // import BookingPage from "@/pages/Booking";
 // import AccountsPage from "./pages/AccountsPage";
+// import SuppliersPage from "./pages/SuppliersPage";
+// import ContactPersonsPage from "./pages/ContactPersonsPage";
+// import ReimbursementDashboard from "./components/ReimbursementDashboard";
 
 // function AuthenticatedApp() {
 //   const { currentUser } = useAuth();
@@ -85,7 +88,7 @@
 //           </ProtectedRoute>
 //         </Route>
 
-//         <Route path="/sales">
+//         <Route path="/project">
 //           <ProtectedRoute>
 //             <Sales />
 //           </ProtectedRoute>
@@ -170,6 +173,24 @@
 //         <Route path="/accounts">
 //           <ProtectedRoute>
 //             <AccountsPage />
+//           </ProtectedRoute>
+//         </Route>
+
+//         <Route path="suppliers">
+//           <ProtectedRoute>
+//             <SuppliersPage />
+//           </ProtectedRoute>
+//         </Route>
+
+//         <Route path="contact-persons">
+//           <ProtectedRoute>
+//             <ContactPersonsPage />
+//           </ProtectedRoute>
+//         </Route>
+
+//         <Route path="/reimbursement">
+//           <ProtectedRoute>
+//             <ReimbursementDashboard />
 //           </ProtectedRoute>
 //         </Route>
 
@@ -261,12 +282,12 @@ import Estimates from "./pages/Estimate";
 import InternationalEstimates from "@/pages/InternationalEstimates";
 import Login from "@/pages/Login";
 import Dashboard from "@/pages/Dashboard";
-import InvoiceRequests from "@/pages/InvoiceRequests";
+import InvoiceRequests from "@/pages/BudgetRequests";
 import ExpenseSheets from "@/pages/ExpenseSheets";
 import Records from "@/pages/Records";
 import UserManagement from "@/pages/UserManagement";
 import ChequeAccounts from "@/pages/ChequeAccounts";
-import OnlineAccounts from "@/pages/OnlineAccounts";
+
 import AddAccount from "@/pages/AddAccount";
 import { Sales } from "@/pages/Sales";
 import { SalesManagement } from "@/pages/SalesManagement";
@@ -275,6 +296,7 @@ import Layout from "@/components/Layout";
 import ProtectedRoute from "@/components/ProtectedRoute";
 import { Clients } from "@/pages/Clients";
 import Settings from "@/pages/Settings";
+import TaskCalendar from "@/pages/TaskCalendar";
 
 import SalesDashboard from "./components/SalesDashboard";
 import InvoiceEstimate from "./pages/EstimateInvoice";
@@ -291,8 +313,13 @@ import HotelSettings from "./pages/Travel/HotelSettings";
 import BookingPage from "@/pages/Booking";
 import AccountsPage from "./pages/AccountsPage";
 import SuppliersPage from "./pages/SuppliersPage";
+import POManagementPage from "./pages/POManagementPage";
+import CreatePOPage from "./pages/CreatePOPage";
+import Ticketing from "./pages/Ticketing";
 import ContactPersonsPage from "./pages/ContactPersonsPage";
 import ReimbursementDashboard from "./components/ReimbursementDashboard";
+import TicketingSettings from "./pages/Travel/TicketingSettings";
+import TravelTickets from "./pages/TravelTickets";
 
 function AuthenticatedApp() {
   const { currentUser } = useAuth();
@@ -327,7 +354,7 @@ function AuthenticatedApp() {
           </ProtectedRoute>
         </Route>
 
-        <Route path="/invoices">
+        <Route path="/budget-requests">
           <ProtectedRoute>
             <InvoiceRequests />
           </ProtectedRoute>
@@ -374,6 +401,11 @@ function AuthenticatedApp() {
             <Settings />
           </ProtectedRoute>
         </Route>
+        <Route path="/task-calendar">
+          <ProtectedRoute>
+            <TaskCalendar />
+          </ProtectedRoute>
+        </Route>
 
         <Route path="/sales-management">
           <ProtectedRoute>
@@ -384,12 +416,6 @@ function AuthenticatedApp() {
         <Route path="/accounts/cheque">
           <ProtectedRoute>
             <ChequeAccounts />
-          </ProtectedRoute>
-        </Route>
-
-        <Route path="/accounts/online">
-          <ProtectedRoute>
-            <OnlineAccounts />
           </ProtectedRoute>
         </Route>
 
@@ -405,14 +431,34 @@ function AuthenticatedApp() {
           </ProtectedRoute>
         </Route>
 
+        <Route path="/suppliers">
+          <ProtectedRoute>
+            <SuppliersPage />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/contact-persons">
+          <ProtectedRoute>
+            <ContactPersonsPage />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/purchase-orders">
+          <ProtectedRoute>
+            <POManagementPage />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/create-po">
+          <ProtectedRoute>
+            <CreatePOPage />
+          </ProtectedRoute>
+        </Route>
+
         <Route path="/booking">
           <ProtectedRoute>
             <BookingPage />
           </ProtectedRoute>
-        </Route>
-
-        <Route path="/">
-          <Redirect to="/dashboard" />
         </Route>
 
         <Route path="/invoice-estimate">
@@ -424,18 +470,6 @@ function AuthenticatedApp() {
         <Route path="/accounts">
           <ProtectedRoute>
             <AccountsPage />
-          </ProtectedRoute>
-        </Route>
-
-        <Route path="suppliers">
-          <ProtectedRoute>
-            <SuppliersPage />
-          </ProtectedRoute>
-        </Route>
-
-        <Route path="contact-persons">
-          <ProtectedRoute>
-            <ContactPersonsPage />
           </ProtectedRoute>
         </Route>
 
@@ -469,6 +503,12 @@ function AuthenticatedApp() {
           </ProtectedRoute>
         </Route>
 
+        <Route path="/travel/TicketingSettings">
+          <ProtectedRoute>
+            <TicketingSettings />
+          </ProtectedRoute>
+        </Route>
+
         <Route path="/usertravel">
           <UserTravel />
         </Route>
@@ -481,7 +521,7 @@ function AuthenticatedApp() {
 
         <Route path="/travel/ticketing">
           <ProtectedRoute>
-            <TravelTicketing />
+            <TravelTickets />
           </ProtectedRoute>
         </Route>
 
@@ -497,6 +537,10 @@ function AuthenticatedApp() {
           </ProtectedRoute>
         </Route>
 
+        <Route path="/">
+          <Redirect to="/dashboard" />
+        </Route>
+
         <Route component={NotFound} />
       </Switch>
     </Layout>
@@ -508,9 +552,6 @@ function App() {
     <QueryClientProvider client={queryClient}>
       <TooltipProvider>
         <AuthProvider>
-          {/* <div className="fixed right-4 top-4 z-[9999]">
-            <ThemeToggle />
-          </div> */}
           <Toaster />
           <AuthenticatedApp />
         </AuthProvider>
