@@ -584,7 +584,18 @@
 
 //     let finalY = (pdf as any).lastAutoTable.finalY + 55;
 
-//     const totalsBlockHeight = addCurrencies ? 120 : 110;
+//     const perPaxCostEnabled = Boolean((estimate as any)?.perPaxCost);
+//     const paxCount = Math.trunc(toNum((estimate as any)?.numberOfPax));
+//     const showPerPaxLine = perPaxCostEnabled && paxCount > 0;
+
+//     const totalsBlockHeight = showPerPaxLine
+//       ? addCurrencies
+//         ? 145
+//         : 135
+//       : addCurrencies
+//         ? 120
+//         : 110;
+
 //     if (finalY + totalsBlockHeight > footerSafeY) {
 //       pdf.addPage();
 //       finalY = 80;
@@ -599,6 +610,7 @@
 
 //     const subtotalPKR = toNum(estimate.subtotal ?? 0);
 //     const totalPKR = toNum(estimate.total ?? 0);
+//     const perPaxPKR = showPerPaxLine ? totalPKR / paxCount : 0;
 
 //     const drawTotalsBlock = (
 //       x: number,
@@ -607,6 +619,7 @@
 //       tax: number,
 //       tot: number,
 //       blockW: number,
+//       perPax?: number,
 //     ) => {
 //       const labelX = x;
 //       const valueX = x + (blockW - 10);
@@ -614,7 +627,7 @@
 //       const pad = 8;
 //       const boxX = labelX - pad;
 //       const boxY = finalY - 26;
-//       const boxH = 72;
+//       const boxH = showPerPaxLine ? 94 : 72;
 
 //       pdf.setFillColor(245, 245, 245);
 //       pdf.rect(boxX, boxY, blockW + pad * 2, boxH, "F");
@@ -650,6 +663,18 @@
 
 //       pdf.text(totalText, valueX, finalY + 32, { align: "right" });
 
+//       if (showPerPaxLine) {
+//         const perPaxText =
+//           typeof perPax === "number" && perPax >= 0
+//             ? formatWithSymbol(meta.symbol, perPax)
+//             : `${meta.symbol} —`;
+
+//         pdf.setFont("helvetica", "normal");
+//         pdf.setFontSize(7);
+//         pdf.text("PER PAX COST INCL. TAXES", labelX, finalY + 50);
+//         pdf.text(perPaxText, valueX, finalY + 50, { align: "right" });
+//       }
+
 //       pdf.setFontSize(10);
 //     };
 
@@ -663,6 +688,7 @@
 //         displayTaxPKR,
 //         totalPKR,
 //         blockW,
+//         perPaxPKR,
 //       );
 //     } else {
 //       const blockW = 160;
@@ -673,10 +699,12 @@
 //       const c1Sub = c1Rate > 0 ? subtotalPKR / c1Rate : -1;
 //       const c1Tax = c1Rate > 0 ? displayTaxPKR / c1Rate : -1;
 //       const c1Tot = c1Rate > 0 ? totalPKR / c1Rate : -1;
+//       const c1PerPax = c1Tot >= 0 && showPerPaxLine ? c1Tot / paxCount : -1;
 
 //       const c2Sub = c2Rate > 0 ? subtotalPKR / c2Rate : -1;
 //       const c2Tax = c2Rate > 0 ? displayTaxPKR / c2Rate : -1;
 //       const c2Tot = c2Rate > 0 ? totalPKR / c2Rate : -1;
+//       const c2PerPax = c2Tot >= 0 && showPerPaxLine ? c2Tot / paxCount : -1;
 
 //       drawTotalsBlock(
 //         startX + (blockW + gap) * 0,
@@ -685,6 +713,7 @@
 //         displayTaxPKR,
 //         totalPKR,
 //         blockW,
+//         perPaxPKR,
 //       );
 
 //       drawTotalsBlock(
@@ -694,8 +723,8 @@
 //         c1Tax,
 //         c1Tot,
 //         blockW,
+//         c1PerPax,
 //       );
-
 //       drawTotalsBlock(
 //         startX + (blockW + gap) * 2,
 //         { code: c2.code, symbol: c2.symbol },
@@ -703,6 +732,7 @@
 //         c2Tax,
 //         c2Tot,
 //         blockW,
+//         c2PerPax,
 //       );
 //     }
 
@@ -796,7 +826,7 @@
 //       0,
 //     );
 
-//     let afterTotalsY = finalY + 55;
+//     let afterTotalsY = finalY + (showPerPaxLine ? 78 : 55);
 
 //     const addCur = Boolean((estimate as any)?.addCurrencies);
 
@@ -1126,10 +1156,10 @@ const resolveUser = (
   usersMap?: Record<string, FooterUser>,
 ) => {
   return (
-    footerUser ||
     (usersMap && estimate?.createdBy
       ? usersMap[estimate.createdBy]
       : undefined) ||
+    footerUser ||
     undefined
   );
 };
