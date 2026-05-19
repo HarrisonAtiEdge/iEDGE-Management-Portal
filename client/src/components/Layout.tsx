@@ -413,6 +413,7 @@ import {
   WalletCards,
   BookUser,
   CalendarCheck,
+  ReceiptText,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -452,6 +453,7 @@ const LUCIDE_ICONS: Record<string, LucideIcon> = {
   WalletCards,
   BookUser,
   CalendarCheck,
+  ReceiptText,
 };
 
 // ✅ Backward compatibility for old FontAwesome names
@@ -493,6 +495,11 @@ const FINANCE_DROPDOWN: SidebarItem = {
     { path: "/expenses", label: "Expenses", icon: "Receipt" },
     { path: "/accounts", label: "Accounts", icon: "WalletCards" },
     { path: "/reimbursement", label: "Reimbursement", icon: "HandCoins" },
+    {
+      path: "/claim-reimbursement",
+      label: "Claim Reimbursement",
+      icon: "ReceiptText",
+    },
   ],
 };
 

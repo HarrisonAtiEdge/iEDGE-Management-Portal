@@ -518,6 +518,15 @@
 //       .reduce((sum, item) => sum + item.amount, 0);
 //   }, [data]);
 
+//   const filteredApprovedAmount = useMemo(() => {
+//     return filteredData
+//       .filter((item) => item.status === "approved")
+//       .reduce(
+//         (sum, item) => sum + Number(item.approvedAmount ?? item.amount ?? 0),
+//         0,
+//       );
+//   }, [filteredData]);
+
 //   const filteredAmount = useMemo(() => {
 //     return filteredData.reduce((sum, item) => sum + item.amount, 0);
 //   }, [filteredData]);
@@ -758,12 +767,16 @@
 //           <div className="mt-4 flex flex-col gap-2 border-t pt-4 text-sm text-muted-foreground md:flex-row md:items-center md:justify-between">
 //             <div className="flex flex-wrap items-center gap-2">
 //               <Badge variant="outline" className="gap-1 rounded-full">
-//                 <Layers3 className="h-3.5 w-3.5" />
-//                 {filteredData.length} result(s)
-//               </Badge>
-//               <Badge variant="outline" className="gap-1 rounded-full">
 //                 <Receipt className="h-3.5 w-3.5" />
-//                 Visible amount: {formatCurrency(filteredAmount)}
+//                 Claim amount: {formatCurrency(filteredAmount)}
+//               </Badge>
+
+//               <Badge
+//                 variant="outline"
+//                 className="gap-1 rounded-full border-green-200 bg-green-50 text-green-700"
+//               >
+//                 <CheckCircle2 className="h-3.5 w-3.5" />
+//                 Approved amount: {formatCurrency(filteredApprovedAmount)}
 //               </Badge>
 //             </div>
 
@@ -1379,13 +1392,20 @@
 //   );
 // }
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   collection,
   getDocs,
   updateDoc,
   doc,
   serverTimestamp,
+  onSnapshot,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
@@ -1417,8 +1437,9 @@ import {
   Receipt,
   CircleDollarSign,
   RotateCcw,
-  Layers3,
 } from "lucide-react";
+
+const PANEL_ID = "IEDGE-SYSTEM";
 
 interface Reimbursement {
   id: string;
@@ -1428,7 +1449,7 @@ interface Reimbursement {
   approvedAmount?: number;
   approvalRemarks?: string;
   approvalDecisionAt?: any;
-  sourcePath?: "panel" | "root";
+  sourcePath?: "panel" | "root" | "claim";
   status: string;
   rawStatus?: string;
   billUrl?: string;
@@ -1440,6 +1461,12 @@ interface Reimbursement {
   approvedBy?: string;
   paymentStatus?: string;
   paidBy?: string;
+
+  claimFor?: "project" | "general";
+  claimType?: "fuel" | "food";
+  projectCode?: string;
+  foodItem?: string;
+  billImagePublicId?: string;
 }
 
 const normalizeReimbursementStatus = (value: string) => {
@@ -1457,6 +1484,7 @@ const normalizeReimbursementStatus = (value: string) => {
 
 const formatStatusLabel = (value?: string) => {
   const raw = String(value || "").trim();
+
   if (!raw) return "Pending";
 
   return raw
@@ -1495,6 +1523,7 @@ const formatDate = (date: any) => {
 
     if (typeof date === "string") {
       const parsed = new Date(date);
+
       if (!isNaN(parsed.getTime())) {
         return parsed.toLocaleDateString();
       }
@@ -1543,7 +1572,7 @@ function StatCard({
   title: string;
   value: string;
   subtitle?: string;
-  icon: React.ReactNode;
+  icon: ReactNode;
 }) {
   return (
     <Card className="border-border/60 shadow-sm">
@@ -1553,13 +1582,16 @@ function StatCard({
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               {title}
             </p>
+
             <p className="mt-2 text-2xl font-semibold text-foreground">
               {value}
             </p>
+
             {subtitle && (
               <p className="mt-1 text-xs text-muted-foreground">{subtitle}</p>
             )}
           </div>
+
           <div className="rounded-xl border bg-muted/40 p-2.5 text-muted-foreground">
             {icon}
           </div>
@@ -1596,7 +1628,11 @@ export default function ReimbursementDashboard() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [detailItem, setDetailItem] = useState<Reimbursement | null>(null);
 
-  const getMeetingDocRef = (item: Reimbursement) => {
+  const getReimbursementDocRef = (item: Reimbursement) => {
+    if (item.sourcePath === "claim") {
+      return doc(db, "Panels", PANEL_ID, "claimReimbursements", item.id);
+    }
+
     if (item.sourcePath === "root") {
       return doc(db, "salesRecords", item.recordId, "meetingUpdates", item.id);
     }
@@ -1604,7 +1640,7 @@ export default function ReimbursementDashboard() {
     return doc(
       db,
       "Panels",
-      "IEDGE-SYSTEM",
+      PANEL_ID,
       "salesRecords",
       item.recordId,
       "meetingUpdates",
@@ -1613,11 +1649,11 @@ export default function ReimbursementDashboard() {
   };
 
   const fetchData = useCallback(async () => {
-    setLoading(data.length === 0);
+    setLoading(true);
 
     try {
       const panelRecordsSnap = await getDocs(
-        collection(db, "Panels", "IEDGE-SYSTEM", "salesRecords"),
+        collection(db, "Panels", PANEL_ID, "salesRecords"),
       );
 
       let legacyRecordDocs: any[] = [];
@@ -1671,7 +1707,7 @@ export default function ReimbursementDashboard() {
               collection(
                 db,
                 "Panels",
-                "IEDGE-SYSTEM",
+                PANEL_ID,
                 "salesRecords",
                 recordId,
                 "meetingUpdates",
@@ -1716,6 +1752,7 @@ export default function ReimbursementDashboard() {
               const meetingKey = `${sourcePath}-${meetingDoc.id}`;
 
               if (seenMeetings.has(meetingKey)) return null;
+
               seenMeetings.add(meetingKey);
 
               const meeting: any = meetingDoc.data();
@@ -1759,8 +1796,9 @@ export default function ReimbursementDashboard() {
                   meeting.createdAt ||
                   meeting.meetingDate ||
                   null,
-                fuelClaim: Number(reimbursement.kms || 0),
-                details: reimbursement.detail || "N/A",
+                fuelClaim: Number(reimbursement.kms || reimbursement.km || 0),
+                details:
+                  reimbursement.detail || reimbursement.description || "N/A",
                 approvedBy: reimbursement.approvedBy || "",
                 paymentStatus: reimbursement.paymentStatus || "pending",
                 paidBy: reimbursement.paidBy || "",
@@ -1770,12 +1808,93 @@ export default function ReimbursementDashboard() {
         }),
       );
 
-      const rows = recordResults
+      const meetingRows = recordResults
         .filter(
           (result): result is PromiseFulfilledResult<Reimbursement[]> =>
             result.status === "fulfilled",
         )
         .flatMap((result) => result.value);
+
+      let claimRows: Reimbursement[] = [];
+
+      try {
+        const claimReimbursementsSnap = await getDocs(
+          collection(db, "Panels", PANEL_ID, "claimReimbursements"),
+        );
+
+        claimRows = claimReimbursementsSnap.docs.map((claimDoc) => {
+          const claim: any = claimDoc.data();
+
+          const claimFor = claim.claimFor === "project" ? "project" : "general";
+          const claimType = claim.claimType === "food" ? "food" : "fuel";
+          const isProjectClaim = claimFor === "project";
+          const isFuelClaim = claimType === "fuel";
+
+          const rawStatus = String(
+            claim.status || claim.approvalStatus || "pending",
+          );
+
+          return {
+            id: claimDoc.id,
+            recordId: "claimReimbursements",
+            sourcePath: "claim",
+
+            client: isProjectClaim
+              ? "Project Reimbursement"
+              : "General Reimbursement",
+
+            projectName: isProjectClaim
+              ? claim.projectCode || "Project"
+              : "General",
+
+            claimFor,
+            claimType,
+            projectCode: claim.projectCode || "",
+            foodItem: claim.foodItem || "",
+
+            amount: Number(claim.claimAmount || claim.amount || 0),
+
+            approvedAmount:
+              claim.approvedAmount !== undefined
+                ? Number(claim.approvedAmount || 0)
+                : undefined,
+
+            approvalRemarks: claim.approvalRemarks || "",
+            approvalDecisionAt: claim.approvalDecisionAt || null,
+
+            rawStatus,
+            status: normalizeReimbursementStatus(rawStatus),
+
+            billUrl: claim.billImageUrl || claim.billUrl || "",
+            billImagePublicId: claim.billImagePublicId || "",
+
+            personName:
+              claim.submittedByName ||
+              claim.createdByName ||
+              claim.userName ||
+              "Unknown",
+
+            submittedDate:
+              claim.submittedAt || claim.createdAt || claim.updatedAt || null,
+
+            fuelClaim: isFuelClaim ? Number(claim.km || claim.kms || 0) : 0,
+
+            details:
+              claim.description ||
+              (isFuelClaim
+                ? `Fuel claim${claim.km ? ` - ${claim.km} KM` : ""}`
+                : `Food claim${claim.foodItem ? ` - ${claim.foodItem}` : ""}`),
+
+            approvedBy: claim.approvedBy || "",
+            paymentStatus: claim.paymentStatus || "pending",
+            paidBy: claim.paidBy || "",
+          };
+        });
+      } catch (claimError) {
+        console.error("Error fetching claim reimbursements:", claimError);
+      }
+
+      const rows = [...meetingRows, ...claimRows];
 
       rows.sort(
         (a, b) =>
@@ -1793,6 +1912,20 @@ export default function ReimbursementDashboard() {
 
   useEffect(() => {
     fetchData();
+  }, [fetchData]);
+
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      collection(db, "Panels", PANEL_ID, "claimReimbursements"),
+      () => {
+        fetchData();
+      },
+      (error) => {
+        console.error("Claim reimbursements realtime listener failed:", error);
+      },
+    );
+
+    return () => unsubscribe();
   }, [fetchData]);
 
   const uniquePeople = useMemo(() => {
@@ -1824,7 +1957,11 @@ export default function ReimbursementDashboard() {
         item.client?.toLowerCase().includes(query) ||
         item.personName?.toLowerCase().includes(query) ||
         item.projectName?.toLowerCase().includes(query) ||
-        item.details?.toLowerCase().includes(query);
+        item.details?.toLowerCase().includes(query) ||
+        item.projectCode?.toLowerCase().includes(query) ||
+        item.foodItem?.toLowerCase().includes(query) ||
+        item.claimType?.toLowerCase().includes(query) ||
+        item.claimFor?.toLowerCase().includes(query);
 
       return (
         matchesApproval && matchesPayment && matchesPerson && matchesSearch
@@ -1896,7 +2033,10 @@ export default function ReimbursementDashboard() {
       .filter(
         (item) => String(item.paymentStatus || "").toLowerCase() === "paid",
       )
-      .reduce((sum, item) => sum + item.amount, 0);
+      .reduce(
+        (sum, item) => sum + Number(item.approvedAmount ?? item.amount ?? 0),
+        0,
+      );
   }, [data]);
 
   const filteredApprovedAmount = useMemo(() => {
@@ -1950,21 +2090,42 @@ export default function ReimbursementDashboard() {
     setApprovalSaving(true);
 
     try {
-      const payload: Record<string, any> = {
-        "reimbursement.approvalStatus": approvalAction,
-        "reimbursement.approvedAmount": finalAmount,
-        "reimbursement.approvalRemarks": approvalRemarks.trim(),
-        "reimbursement.approvedBy":
-          userProfile?.displayName || currentUser?.email || "Unknown",
-        "reimbursement.approvedById": currentUser?.uid || "",
-        "reimbursement.approvalDecisionAt": serverTimestamp(),
-      };
+      if (selectedItem.sourcePath === "claim") {
+        const claimPayload: Record<string, any> = {
+          status: approvalAction,
+          approvalStatus: approvalAction,
+          approvedAmount: finalAmount,
+          approvalRemarks: approvalRemarks.trim(),
+          approvedBy:
+            userProfile?.displayName || currentUser?.email || "Unknown",
+          approvedById: currentUser?.uid || "",
+          approvalDecisionAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
 
-      if (approvalAction === "approved") {
-        payload["reimbursement.paymentStatus"] = "pending";
+        if (approvalAction === "approved") {
+          claimPayload.paymentStatus = "pending";
+        }
+
+        await updateDoc(getReimbursementDocRef(selectedItem), claimPayload);
+      } else {
+        const payload: Record<string, any> = {
+          "reimbursement.approvalStatus": approvalAction,
+          "reimbursement.approvedAmount": finalAmount,
+          "reimbursement.approvalRemarks": approvalRemarks.trim(),
+          "reimbursement.approvedBy":
+            userProfile?.displayName || currentUser?.email || "Unknown",
+          "reimbursement.approvedById": currentUser?.uid || "",
+          "reimbursement.approvalDecisionAt": serverTimestamp(),
+          "reimbursement.updatedAt": serverTimestamp(),
+        };
+
+        if (approvalAction === "approved") {
+          payload["reimbursement.paymentStatus"] = "pending";
+        }
+
+        await updateDoc(getReimbursementDocRef(selectedItem), payload);
       }
-
-      await updateDoc(getMeetingDocRef(selectedItem), payload);
 
       setShowApprovalModal(false);
       setSelectedItem(null);
@@ -2022,18 +2183,21 @@ export default function ReimbursementDashboard() {
           subtitle={`${data.length} total claims`}
           icon={<Wallet className="h-5 w-5" />}
         />
+
         <StatCard
           title="Pending Approval"
           value={String(pendingApprovalCount)}
           subtitle="Claims awaiting decision"
           icon={<Clock3 className="h-5 w-5" />}
         />
+
         <StatCard
           title="Approved Claims"
           value={String(approvedCount)}
           subtitle="Approved reimbursements"
           icon={<CheckCircle2 className="h-5 w-5" />}
         />
+
         <StatCard
           title="Paid Amount"
           value={formatCurrency(paidAmount)}
@@ -2048,6 +2212,7 @@ export default function ReimbursementDashboard() {
             <div className="rounded-lg border bg-muted/40 p-2">
               <Filter className="h-4 w-4 text-muted-foreground" />
             </div>
+
             <div>
               <h2 className="text-sm font-semibold text-foreground">Filters</h2>
               <p className="text-xs text-muted-foreground">
@@ -2062,8 +2227,10 @@ export default function ReimbursementDashboard() {
               <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 Search
               </label>
+
               <div className="relative">
                 <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
                 <input
                   placeholder="Search by client, project, person, or details"
                   className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
@@ -2078,8 +2245,10 @@ export default function ReimbursementDashboard() {
               <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 Person
               </label>
+
               <div className="relative">
                 <Users className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
                 <select
                   value={personFilter}
                   onChange={(e) => setPersonFilter(e.target.value)}
@@ -2087,6 +2256,7 @@ export default function ReimbursementDashboard() {
                   data-testid="select-person-filter"
                 >
                   <option value="all">All persons</option>
+
                   {uniquePeople.map((person) => (
                     <option key={person} value={person}>
                       {person}
@@ -2100,6 +2270,7 @@ export default function ReimbursementDashboard() {
               <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 Approval Status
               </label>
+
               <select
                 value={approvalFilter}
                 onChange={(e) => setApprovalFilter(e.target.value)}
@@ -2117,6 +2288,7 @@ export default function ReimbursementDashboard() {
               <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 Payment / Sort
               </label>
+
               <div className="grid grid-cols-2 gap-2">
                 <select
                   value={paymentFilter}
@@ -2179,9 +2351,11 @@ export default function ReimbursementDashboard() {
               <div className="rounded-2xl border bg-muted/40 p-3">
                 <Receipt className="h-6 w-6 text-muted-foreground" />
               </div>
+
               <h3 className="text-base font-medium text-foreground">
                 No reimbursement claims found
               </h3>
+
               <p className="max-w-md text-sm text-muted-foreground">
                 Try changing your search or filters to see more results.
               </p>
@@ -2195,21 +2369,27 @@ export default function ReimbursementDashboard() {
                       <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                         Claim
                       </th>
+
                       <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                         Person
                       </th>
+
                       <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                         Amount
                       </th>
+
                       <th className="px-4 py-3 text-left font-medium text-muted-foreground">
-                        Fuel / Date
+                        Fuel / Food / Date
                       </th>
+
                       <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                         Status
                       </th>
+
                       <th className="px-4 py-3 text-left font-medium text-muted-foreground">
                         Bill
                       </th>
+
                       <th className="px-4 py-3 text-right font-medium text-muted-foreground">
                         Actions
                       </th>
@@ -2221,15 +2401,19 @@ export default function ReimbursementDashboard() {
                       const paymentStatus = String(
                         item.paymentStatus || "pending",
                       ).toLowerCase();
+
                       const actionLocked =
                         item.status === "approved" ||
                         item.status === "rejected";
+
                       const canReleasePayment =
                         item.status === "approved" && paymentStatus !== "paid";
 
                       return (
                         <tr
-                          key={`${item.sourcePath}-${item.recordId}-${item.id}`}
+                          key={`${item.sourcePath || "unknown"}-${
+                            item.recordId || "record"
+                          }-${item.id}`}
                           className="border-b transition-colors hover:bg-muted/20"
                         >
                           <td className="px-4 py-4 align-top">
@@ -2237,9 +2421,11 @@ export default function ReimbursementDashboard() {
                               <p className="font-medium text-foreground">
                                 {item.client}
                               </p>
+
                               <p className="text-xs text-muted-foreground">
                                 {item.projectName}
                               </p>
+
                               <p className="line-clamp-2 max-w-[280px] text-xs text-muted-foreground">
                                 {item.details || "No details"}
                               </p>
@@ -2251,11 +2437,13 @@ export default function ReimbursementDashboard() {
                               <p className="font-medium text-foreground">
                                 {item.personName || "Unknown"}
                               </p>
+
                               {item.approvedBy && (
                                 <p className="text-xs text-muted-foreground">
                                   Approved by {item.approvedBy}
                                 </p>
                               )}
+
                               {item.paidBy && paymentStatus === "paid" && (
                                 <p className="text-xs text-green-700">
                                   Paid by {item.paidBy}
@@ -2270,6 +2458,7 @@ export default function ReimbursementDashboard() {
                                 <p className="font-semibold text-foreground">
                                   {formatCurrency(item.amount)}
                                 </p>
+
                                 <p className="text-xs text-muted-foreground">
                                   Claim amount
                                 </p>
@@ -2287,6 +2476,7 @@ export default function ReimbursementDashboard() {
                                   >
                                     {formatCurrency(item.approvedAmount ?? 0)}
                                   </p>
+
                                   <p className="text-xs text-muted-foreground">
                                     Approved amount
                                   </p>
@@ -2298,8 +2488,11 @@ export default function ReimbursementDashboard() {
                           <td className="px-4 py-4 align-top">
                             <div className="space-y-1">
                               <p className="text-foreground">
-                                {Number(item.fuelClaim || 0)} KM
+                                {item.claimType === "food"
+                                  ? item.foodItem || "Food"
+                                  : `${Number(item.fuelClaim || 0)} KM`}
                               </p>
+
                               <p className="text-xs text-muted-foreground">
                                 {formatDate(item.submittedDate)}
                               </p>
@@ -2433,6 +2626,7 @@ export default function ReimbursementDashboard() {
 
                   <div className="flex items-center gap-2">
                     <span>Rows</span>
+
                     <select
                       value={pageSize}
                       onChange={(e) => setPageSize(Number(e.target.value))}
@@ -2520,6 +2714,7 @@ export default function ReimbursementDashboard() {
 
             <div>
               <Label htmlFor="approvalAmount">Approved Amount</Label>
+
               <Input
                 id="approvalAmount"
                 type="number"
@@ -2532,6 +2727,7 @@ export default function ReimbursementDashboard() {
 
             <div>
               <Label htmlFor="approvalRemarks">Remarks</Label>
+
               <Textarea
                 id="approvalRemarks"
                 value={approvalRemarks}
@@ -2624,9 +2820,16 @@ export default function ReimbursementDashboard() {
                 </div>
 
                 <div className="rounded-xl border p-3">
-                  <p className="text-xs text-muted-foreground">Fuel Claim</p>
+                  <p className="text-xs text-muted-foreground">
+                    {detailItem.claimType === "food"
+                      ? "Food Item"
+                      : "Fuel Claim"}
+                  </p>
+
                   <p className="text-sm font-medium text-foreground">
-                    {Number(detailItem.fuelClaim || 0)} KM
+                    {detailItem.claimType === "food"
+                      ? detailItem.foodItem || "Food"
+                      : `${Number(detailItem.fuelClaim || 0)} KM`}
                   </p>
                 </div>
               </div>
@@ -2652,6 +2855,7 @@ export default function ReimbursementDashboard() {
                   <p className="text-xs text-muted-foreground">
                     Approval Status
                   </p>
+
                   <Badge
                     variant="outline"
                     className={`mt-1 rounded-full ${getApprovalBadgeClass(
@@ -2668,6 +2872,7 @@ export default function ReimbursementDashboard() {
                   <p className="text-xs text-muted-foreground">
                     Payment Status
                   </p>
+
                   <Badge
                     variant="outline"
                     className={`mt-1 rounded-full ${getPaymentBadgeClass(
@@ -2728,16 +2933,18 @@ export default function ReimbursementDashboard() {
         title="Release Reimbursement Payment"
         context={selectedItem}
         docPath={(item) =>
-          item.sourcePath === "root"
-            ? ["salesRecords", item.recordId, "meetingUpdates", item.id]
-            : [
-                "Panels",
-                "IEDGE-SYSTEM",
-                "salesRecords",
-                item.recordId,
-                "meetingUpdates",
-                item.id,
-              ]
+          item.sourcePath === "claim"
+            ? ["Panels", PANEL_ID, "claimReimbursements", item.id]
+            : item.sourcePath === "root"
+              ? ["salesRecords", item.recordId, "meetingUpdates", item.id]
+              : [
+                  "Panels",
+                  PANEL_ID,
+                  "salesRecords",
+                  item.recordId,
+                  "meetingUpdates",
+                  item.id,
+                ]
         }
         amount={Number(
           selectedItem?.approvedAmount ?? selectedItem?.amount ?? 0,
@@ -2746,28 +2953,46 @@ export default function ReimbursementDashboard() {
         partyLabel="Claimed By"
         parties={selectedItem?.personName ? [selectedItem.personName] : []}
         initialPaymentMethod="cash"
-        buildUpdateData={({
-          formData,
-          receiptUrl,
-          selectedAccount,
-          actor,
-        }) => ({
-          "reimbursement.paymentStatus": "paid",
-          "reimbursement.paidBy": actor.displayName || actor.email || "Unknown",
-          "reimbursement.paidById": actor.uid || "",
-          "reimbursement.paymentType": formData.paymentMethod,
-          "reimbursement.paidAmount": Number(formData.amount),
-          "reimbursement.transactionReference": formData.transactionReference,
-          "reimbursement.paymentNotes": formData.paymentNotes,
-          "reimbursement.paymentReceiptUrl": receiptUrl,
-          "reimbursement.paymentReleasedAt": serverTimestamp(),
-          ...(formData.chequeNumber
-            ? { "reimbursement.chequeNumber": formData.chequeNumber }
-            : {}),
-          ...(selectedAccount
-            ? { "reimbursement.selectedAccount": selectedAccount }
-            : {}),
-        })}
+        buildUpdateData={({ formData, receiptUrl, selectedAccount, actor }) => {
+          if (selectedItem?.sourcePath === "claim") {
+            return {
+              paymentStatus: "paid",
+              paidBy: actor.displayName || actor.email || "Unknown",
+              paidById: actor.uid || "",
+              paymentType: formData.paymentMethod,
+              paidAmount: Number(formData.amount),
+              transactionReference: formData.transactionReference,
+              paymentNotes: formData.paymentNotes,
+              paymentReceiptUrl: receiptUrl,
+              paymentReleasedAt: serverTimestamp(),
+              updatedAt: serverTimestamp(),
+              ...(formData.chequeNumber
+                ? { chequeNumber: formData.chequeNumber }
+                : {}),
+              ...(selectedAccount ? { selectedAccount } : {}),
+            };
+          }
+
+          return {
+            "reimbursement.paymentStatus": "paid",
+            "reimbursement.paidBy":
+              actor.displayName || actor.email || "Unknown",
+            "reimbursement.paidById": actor.uid || "",
+            "reimbursement.paymentType": formData.paymentMethod,
+            "reimbursement.paidAmount": Number(formData.amount),
+            "reimbursement.transactionReference": formData.transactionReference,
+            "reimbursement.paymentNotes": formData.paymentNotes,
+            "reimbursement.paymentReceiptUrl": receiptUrl,
+            "reimbursement.paymentReleasedAt": serverTimestamp(),
+            "reimbursement.updatedAt": serverTimestamp(),
+            ...(formData.chequeNumber
+              ? { "reimbursement.chequeNumber": formData.chequeNumber }
+              : {}),
+            ...(selectedAccount
+              ? { "reimbursement.selectedAccount": selectedAccount }
+              : {}),
+          };
+        }}
       />
     </div>
   );

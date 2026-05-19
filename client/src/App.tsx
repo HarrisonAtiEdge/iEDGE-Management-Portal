@@ -320,6 +320,7 @@ import ContactPersonsPage from "./pages/ContactPersonsPage";
 import ReimbursementDashboard from "./components/ReimbursementDashboard";
 import TicketingSettings from "./pages/Travel/TicketingSettings";
 import TravelTickets from "./pages/TravelTickets";
+import ClaimReimbursement from "@/pages/ClaimReimbursement";
 
 function AuthenticatedApp() {
   const { currentUser } = useAuth();
@@ -536,6 +537,13 @@ function AuthenticatedApp() {
             <TravelLtdLsp />
           </ProtectedRoute>
         </Route>
+
+        <Route
+          path="/claim-reimbursement">
+            <ProtectedRoute>
+              <ClaimReimbursement />
+            </ProtectedRoute>
+          </Route>
 
         <Route path="/">
           <Redirect to="/dashboard" />

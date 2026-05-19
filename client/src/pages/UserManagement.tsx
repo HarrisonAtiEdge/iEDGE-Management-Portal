@@ -67,6 +67,7 @@ import {
   WalletCards,
   XCircle,
   CalendarCheck,
+  ReceiptText,
 } from "lucide-react";
 
 // --------------------
@@ -91,6 +92,11 @@ const AVAILABLE_TABS = [
   { path: "/suppliers", label: "Suppliers", icon: "BookUser" },
   { path: "/task-calendar", label: "Task Calendar", icon: "CalendarCheck" },
   { path: "/reimbursement", label: "Reimbursement", icon: "HandCoins" },
+  {
+    path: "/claim-reimbursement",
+    label: "Claim Reimbursement",
+    icon: "ReceiptText",
+  },
 ];
 
 const PANEL_ID = "IEDGE-SYSTEM";
@@ -114,6 +120,7 @@ const iconMap: Record<string, any> = {
   Hotel,
   FileText,
   CalendarCheck,
+  ReceiptText,
 };
 
 // --------------------
