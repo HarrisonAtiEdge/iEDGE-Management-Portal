@@ -3,6 +3,7 @@ import { addDoc, collection, serverTimestamp } from "firebase/firestore";
 import {
   AlertCircle,
   CheckCircle2,
+  CircleEllipsis,
   FileText,
   FolderKanban,
   Fuel,
@@ -18,7 +19,7 @@ import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 
 type ClaimFor = "project" | "general";
-type ClaimType = "fuel" | "food";
+type ClaimType = "fuel" | "food" | "other";
 
 const PANEL_ID = "IEDGE-SYSTEM";
 
@@ -81,7 +82,7 @@ export default function ClaimReimbursement() {
   const labelClass = "mb-2 block text-sm font-medium text-slate-700";
 
   function handleInputChange(
-    e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+    e: ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
   ) {
     const { name, value } = e.target;
 
@@ -107,8 +108,8 @@ export default function ClaimReimbursement() {
     setFormData((prev) => ({
       ...prev,
       claimType: value,
-      km: value === "food" ? "" : prev.km,
-      foodItem: value === "fuel" ? "" : prev.foodItem,
+      km: value === "fuel" ? prev.km : "",
+      foodItem: value === "food" ? prev.foodItem : "",
     }));
 
     setMessage(null);
@@ -262,6 +263,7 @@ export default function ClaimReimbursement() {
 
       await addDoc(collection(db, "Panels", PANEL_ID, "claimReimbursements"), {
         claimFor: formData.claimFor,
+
         projectCode:
           formData.claimFor === "project" ? formData.projectCode.trim() : "",
 
@@ -269,8 +271,7 @@ export default function ClaimReimbursement() {
         claimAmount: Number(formData.claimAmount),
 
         km: formData.claimType === "fuel" ? Number(formData.km) : null,
-        foodItem:
-          formData.claimType === "food" ? formData.foodItem.trim() : "",
+        foodItem: formData.claimType === "food" ? formData.foodItem.trim() : "",
 
         description: formData.description.trim(),
 
@@ -318,7 +319,7 @@ export default function ClaimReimbursement() {
 
   return (
     <div className="min-h-0 overflow-x-hidden bg-slate-50 px-4 py-5 sm:px-6 lg:px-8">
-      <div className="mx-auto w-full max-w-7xl">
+      <div className="mx-auto w-full max-w-6xl">
         <div className="mb-5 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-600 shadow-sm">
@@ -326,9 +327,13 @@ export default function ClaimReimbursement() {
               Reimbursement Request
             </div>
 
+            <h1 className="text-3xl font-semibold tracking-tight text-slate-950">
+              Claim Reimbursement
+            </h1>
+
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              Submit fuel or food claims with clean tracking, optional notes,
-              and optional bill attachment.
+              Submit fuel, food, or other reimbursement claims with optional
+              notes and optional bill attachment.
             </p>
           </div>
 
@@ -353,6 +358,7 @@ export default function ClaimReimbursement() {
             ) : (
               <AlertCircle className="mt-0.5 h-4 w-4 shrink-0" />
             )}
+
             <span>{message.text}</span>
           </div>
         )}
@@ -361,12 +367,13 @@ export default function ClaimReimbursement() {
           onSubmit={handleSubmit}
           className="grid w-full grid-cols-1 gap-5 lg:grid-cols-[minmax(0,1fr)_340px]"
         >
-          <div className="min-w-0 space-y-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm ">
+          <div className="min-w-0 space-y-5 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
             <section>
               <div className="mb-4">
                 <h2 className="text-base font-semibold text-slate-950">
                   Claim Information
                 </h2>
+
                 <p className="mt-1 text-sm text-slate-500">
                   Select whether this claim belongs to a project or is general.
                 </p>
@@ -383,7 +390,9 @@ export default function ClaimReimbursement() {
                   }`}
                 >
                   <FileText className="mb-3 h-5 w-5" />
+
                   <p className="text-sm font-semibold">General</p>
+
                   <p
                     className={`mt-1 text-xs ${
                       formData.claimFor === "general"
@@ -405,7 +414,9 @@ export default function ClaimReimbursement() {
                   }`}
                 >
                   <FolderKanban className="mb-3 h-5 w-5" />
+
                   <p className="text-sm font-semibold">Project</p>
+
                   <p
                     className={`mt-1 text-xs ${
                       formData.claimFor === "project"
@@ -443,12 +454,13 @@ export default function ClaimReimbursement() {
                 <h2 className="text-base font-semibold text-slate-950">
                   Reimbursement Type
                 </h2>
+
                 <p className="mt-1 text-sm text-slate-500">
                   Choose the claim category and fill only the required details.
                 </p>
               </div>
 
-              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
                 <button
                   type="button"
                   onClick={() => handleClaimTypeChange("fuel")}
@@ -459,7 +471,9 @@ export default function ClaimReimbursement() {
                   }`}
                 >
                   <Fuel className="mb-3 h-5 w-5" />
+
                   <p className="text-sm font-semibold">Fuel</p>
+
                   <p className="mt-1 text-xs text-slate-500">
                     Claim fuel expense with KM.
                   </p>
@@ -475,9 +489,29 @@ export default function ClaimReimbursement() {
                   }`}
                 >
                   <Utensils className="mb-3 h-5 w-5" />
+
                   <p className="text-sm font-semibold">Food</p>
+
                   <p className="mt-1 text-xs text-slate-500">
                     Claim food or meal expense.
+                  </p>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => handleClaimTypeChange("other")}
+                  className={`rounded-2xl border p-4 text-left transition ${
+                    formData.claimType === "other"
+                      ? "border-slate-700 bg-slate-100 text-slate-950"
+                      : "border-slate-200 bg-white text-slate-700 hover:border-slate-300 hover:bg-slate-50"
+                  }`}
+                >
+                  <CircleEllipsis className="mb-3 h-5 w-5" />
+
+                  <p className="text-sm font-semibold">Other</p>
+
+                  <p className="mt-1 text-xs text-slate-500">
+                    Claim any other reimbursement.
                   </p>
                 </button>
               </div>
@@ -535,6 +569,14 @@ export default function ClaimReimbursement() {
                     />
                   </div>
                 )}
+
+                {formData.claimType === "other" && (
+                  <div className="flex items-end">
+                    <div className="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-500">
+                      No extra field required for Other claims.
+                    </div>
+                  </div>
+                )}
               </div>
             </section>
 
@@ -545,6 +587,7 @@ export default function ClaimReimbursement() {
                 <h2 className="text-base font-semibold text-slate-950">
                   Additional Details
                 </h2>
+
                 <p className="mt-1 text-sm text-slate-500">
                   Description and bill image are optional.
                 </p>
@@ -593,6 +636,7 @@ export default function ClaimReimbursement() {
                       <div className="flex items-center justify-between border-b border-slate-100 px-4 py-3">
                         <div className="flex items-center gap-2">
                           <ImagePlus className="h-4 w-4 text-slate-500" />
+
                           <p className="text-sm font-medium text-slate-800">
                             Bill Preview
                           </p>
@@ -660,6 +704,7 @@ export default function ClaimReimbursement() {
                   <h3 className="text-sm font-semibold text-slate-950">
                     Claim Summary
                   </h3>
+
                   <p className="text-xs text-slate-500">
                     Review before submitting
                   </p>
@@ -669,6 +714,7 @@ export default function ClaimReimbursement() {
               <div className="space-y-3 text-sm">
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Claim For</span>
+
                   <span className="font-medium capitalize text-slate-900">
                     {formData.claimFor}
                   </span>
@@ -676,6 +722,7 @@ export default function ClaimReimbursement() {
 
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Type</span>
+
                   <span className="font-medium capitalize text-slate-900">
                     {formData.claimType}
                   </span>
@@ -684,6 +731,7 @@ export default function ClaimReimbursement() {
                 {formData.claimFor === "project" && (
                   <div className="flex items-center justify-between gap-4">
                     <span className="text-slate-500">Project Code</span>
+
                     <span className="max-w-[160px] truncate font-medium text-slate-900">
                       {formData.projectCode || "Not added"}
                     </span>
@@ -692,6 +740,7 @@ export default function ClaimReimbursement() {
 
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Amount</span>
+
                   <span className="font-semibold text-slate-950">
                     Rs{" "}
                     {Number(formData.claimAmount || 0).toLocaleString("en-PK")}
@@ -700,17 +749,25 @@ export default function ClaimReimbursement() {
 
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">
-                    {formData.claimType === "fuel" ? "KM" : "Food Item"}
+                    {formData.claimType === "fuel"
+                      ? "KM"
+                      : formData.claimType === "food"
+                        ? "Food Item"
+                        : "Other"}
                   </span>
+
                   <span className="max-w-[160px] truncate font-medium text-slate-900">
                     {formData.claimType === "fuel"
                       ? formData.km || "0"
-                      : formData.foodItem || "Not added"}
+                      : formData.claimType === "food"
+                        ? formData.foodItem || "Not added"
+                        : "No extra field"}
                   </span>
                 </div>
 
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Description</span>
+
                   <span className="font-medium text-slate-900">
                     {formData.description.trim() ? "Added" : "Optional"}
                   </span>
@@ -718,6 +775,7 @@ export default function ClaimReimbursement() {
 
                 <div className="flex items-center justify-between gap-4">
                   <span className="text-slate-500">Bill Image</span>
+
                   <span className="font-medium text-slate-900">
                     {formData.billImage ? "Attached" : "Optional"}
                   </span>
@@ -727,6 +785,7 @@ export default function ClaimReimbursement() {
 
             <div className="rounded-3xl border border-slate-200 bg-slate-950 p-5 text-white shadow-sm">
               <p className="text-sm font-semibold">Status after submit</p>
+
               <p className="mt-2 text-sm leading-6 text-slate-300">
                 The claim will be saved as{" "}
                 <span className="font-semibold text-white">Pending</span> and
