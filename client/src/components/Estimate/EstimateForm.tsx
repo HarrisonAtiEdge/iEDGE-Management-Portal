@@ -518,6 +518,47 @@
 //   }
 // };
 
+// function AutoGrowTextarea({
+//   value,
+//   onChange,
+//   className = "",
+//   minHeight = 96,
+//   ...props
+// }: React.TextareaHTMLAttributes<HTMLTextAreaElement> & {
+//   minHeight?: number;
+// }) {
+//   const ref = useRef<HTMLTextAreaElement | null>(null);
+
+//   const resize = () => {
+//     const el = ref.current;
+//     if (!el) return;
+
+//     el.style.height = "auto";
+//     el.style.height = `${Math.max(el.scrollHeight, minHeight)}px`;
+//   };
+
+//   useEffect(() => {
+//     resize();
+//   }, [value, minHeight]);
+
+//   return (
+//     <textarea
+//       {...props}
+//       ref={ref}
+//       value={value}
+//       onChange={(e) => {
+//         onChange?.(e);
+//         requestAnimationFrame(resize);
+//       }}
+//       className={`${className} resize-none overflow-hidden leading-6`}
+//       style={{
+//         ...props.style,
+//         minHeight,
+//       }}
+//     />
+//   );
+// }
+
 // export default function EstimateForm({
 //   existingEstimate,
 //   duplicateMode = false,
@@ -1044,18 +1085,26 @@
 
 //   useEffect(() => {
 //     const q = query(collection(db, "Panels", "IEDGE-SYSTEM", "services"));
+
 //     const unsubscribe = onSnapshot(q, (snapshot) => {
-//       setServicesList(
-//         snapshot.docs.map((docSnap) => ({
+//       const sortedServices = snapshot.docs
+//         .map((docSnap) => ({
 //           id: docSnap.id,
-//           name: docSnap.data().name,
-//           description: docSnap.data().description,
-//         })),
-//       );
+//           name: String(docSnap.data().name || "").trim(),
+//           description: docSnap.data().description || "",
+//         }))
+//         .filter((service) => service.name)
+//         .sort((a, b) =>
+//           a.name.localeCompare(b.name, undefined, {
+//             sensitivity: "base",
+//           }),
+//         );
+
+//       setServicesList(sortedServices);
 //     });
+
 //     return () => unsubscribe();
 //   }, []);
-
 //   useEffect(() => {
 //     const q = query(collection(db, "Panels", "IEDGE-SYSTEM", "paymentTerms"));
 //     const unsubscribe = onSnapshot(q, (snapshot) => {
@@ -2546,20 +2595,28 @@
 //       <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
 //         <h3 className="text-sm font-semibold mb-4 text-gray-700">Services</h3>
 
-//         <div className="overflow-x-auto">
+//         <div className="overflow-x-auto max-w-full">
 //           <DndContext
 //             sensors={sensors}
 //             collisionDetection={closestCenter}
 //             onDragEnd={handleDragEnd}
 //           >
-//             <table className="w-full border-collapse text-sm">
+//             <table
+//               className={`${
+//                 addCurrencies ? "min-w-[1750px]" : "min-w-[1450px]"
+//               } w-full border-collapse text-sm`}
+//             >
 //               <thead>
 //                 <tr className="bg-gray-100 text-gray-700 text-left">
 //                   <th className="p-3 font-semibold border-b w-10 text-center">
 //                     ↕
 //                   </th>
-//                   <th className="p-3 font-semibold border-b">Service</th>
-//                   <th className="p-3 font-semibold border-b">Description</th>
+//                   <th className="p-3 font-semibold border-b min-w-[240px]">
+//                     Service
+//                   </th>
+//                   <th className="p-3 font-semibold border-b min-w-[380px]">
+//                     Description
+//                   </th>
 //                   <th className="p-3 font-semibold border-b text-center">
 //                     Units
 //                   </th>
@@ -2671,7 +2728,7 @@
 //                                     onFocus={() => setOpenServiceRowId(null)}
 //                                     placeholder="Type or select service"
 //                                     className={fieldClass(
-//                                       "w-full border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500",
+//                                       "w-full min-w-[220px] border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500",
 //                                       invalidService,
 //                                     )}
 //                                   />
@@ -2723,17 +2780,16 @@
 //                             </td>
 
 //                             <td className="p-2">
-//                               <textarea
-//                                 rows={4}
-//                                 cols={36}
-//                                 value={s.description}
+//                               <AutoGrowTextarea
+//                                 value={s.description || ""}
+//                                 minHeight={110}
 //                                 onChange={(e) => {
 //                                   const copy = [...services];
 //                                   copy[i].description = e.target.value;
 //                                   setServices(copy);
 //                                 }}
 //                                 placeholder="Service description"
-//                                 className="w-full border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500"
+//                                 className="w-full min-w-[360px] border border-gray-300 rounded-md p-2 focus:ring-2 focus:ring-blue-500"
 //                               />
 //                             </td>
 
@@ -5238,18 +5294,13 @@ export default function EstimateForm({
             (existingEstimate as any)?.createdByEmail ||
             "",
         );
-        const originalProjectOwner = String(
-          currentData.projectOwner ||
-            (existingEstimate as any)?.projectOwner ||
-            projectOwner ||
-            "",
-        );
+        const editedProjectOwner = String(projectOwner || "").trim();
 
         const estimateToUpdate: Estimate = {
           ...estimateBase,
           estimateNo: estimateNo,
           createdBy: originalCreatedBy,
-          projectOwner: originalProjectOwner,
+          projectOwner: editedProjectOwner,
           ...({
             createdByName: originalCreatedByName,
             createdByEmail: originalCreatedByEmail,
@@ -5268,7 +5319,7 @@ export default function EstimateForm({
           editCount: increment(1),
         } as any);
 
-        setProjectOwner(originalProjectOwner);
+        setProjectOwner(editedProjectOwner);
         setLastEditedByName(currentUserName);
         setLastEditedAt(localEditedAt);
 
