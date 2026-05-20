@@ -740,7 +740,13 @@
 //   );
 // }
 
-import { useState, useEffect } from "react";
+import {
+  useState,
+  useEffect,
+  useRef,
+  type FormEvent,
+  type TextareaHTMLAttributes,
+} from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import { Trash2, CalendarIcon } from "lucide-react";
 import {
@@ -788,6 +794,118 @@ type LineItem = {
   comment: string;
 };
 
+type AutoResizeTextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
+  minHeight?: number;
+  maxHeight?: number;
+  minWidthCh?: number;
+  maxWidthCh?: number;
+};
+
+function getAutoWidth(value: any, minWidthCh = 10, maxWidthCh = 45) {
+  const text = String(value || "");
+  const longestLine = text
+    .split("\n")
+    .reduce((longest, line) => Math.max(longest, line.length), 0);
+
+  return `${Math.min(Math.max(longestLine + 2, minWidthCh), maxWidthCh)}ch`;
+}
+
+function AutoResizeTextarea({
+  value,
+  onChange,
+  className = "",
+  minHeight = 36,
+  maxHeight = 140,
+  minWidthCh = 10,
+  maxWidthCh = 45,
+  style,
+  ...props
+}: AutoResizeTextareaProps) {
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+  function resizeTextarea() {
+    const el = textareaRef.current;
+    if (!el) return;
+
+    el.style.height = "auto";
+
+    const nextHeight = Math.min(
+      Math.max(el.scrollHeight, minHeight),
+      maxHeight,
+    );
+
+    el.style.height = `${nextHeight}px`;
+    el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
+  }
+
+  useEffect(() => {
+    resizeTextarea();
+  }, [value]);
+
+  return (
+    <Textarea
+      ref={textareaRef}
+      value={value}
+      rows={1}
+      onChange={(e) => {
+        onChange?.(e);
+        requestAnimationFrame(resizeTextarea);
+      }}
+      className={`resize-none overflow-hidden text-sm leading-5 ${className}`}
+      style={{
+        minHeight,
+        width: getAutoWidth(value, minWidthCh, maxWidthCh),
+        ...style,
+      }}
+      {...props}
+    />
+  );
+}
+
+function sanitizeDecimalInput(value: string) {
+  let cleanValue = value.replace(/[^\d.]/g, "");
+
+  const parts = cleanValue.split(".");
+  if (parts.length > 2) {
+    cleanValue = `${parts[0]}.${parts.slice(1).join("")}`;
+  }
+
+  return cleanValue;
+}
+
+function getRoleLabel(role: string) {
+  const normalizedRole = String(role || "").trim();
+
+  const roleLabels: Record<string, string> = {
+    admin: "Admin",
+    main_admin: "Admin",
+    finance_admin: "Finance Admin",
+    financial_admin: "Finance Admin",
+    finance: "Finance",
+    operation: "Operation",
+    operational_admin: "Operation Admin",
+    creative: "Creative",
+    sales: "Sales",
+  };
+
+  return (
+    roleLabels[normalizedRole] ||
+    normalizedRole
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase())
+  );
+}
+
+function canRoleCreateBudgetRequest(role: string) {
+  const blockedRoles = [
+    "admin",
+    "main_admin",
+    "finance_admin",
+    "financial_admin",
+  ];
+  return !!role && !blockedRoles.includes(role);
+}
+
 export default function InvoiceRequestModal({
   isOpen,
   onClose,
@@ -798,8 +916,7 @@ export default function InvoiceRequestModal({
   const { toast } = useToast();
 
   const currentUserRole = String(userProfile?.role || "");
-  const canSubmitBudgetRequest =
-    currentUserRole === "operation" || currentUserRole === "creative";
+  const canSubmitBudgetRequest = canRoleCreateBudgetRequest(currentUserRole);
 
   const [loading, setLoading] = useState(false);
   const [invoiceType, setInvoiceType] = useState<InvoiceType>("general");
@@ -833,6 +950,37 @@ export default function InvoiceRequestModal({
       comment: "",
     },
   ]);
+
+  function getEmptyLineItem(id = 1): LineItem {
+    return {
+      id,
+      date: "",
+      service: "",
+      description: "",
+      vendor: "",
+      units: "",
+      unitRate: "",
+      total: 0,
+      comment: "",
+    };
+  }
+
+  function resetForm() {
+    setInvoiceType("general");
+    setSelectedEstimateId("");
+    setSelectedEstimateInput("");
+    setSubject("");
+    setMessage("");
+    setFormData({
+      requestId: "",
+      clientName: "",
+      project: "",
+      projectCode: "",
+      title: "",
+      comment: "",
+    });
+    setLineItems([getEmptyLineItem(1)]);
+  }
 
   function getSupplierDisplayName(supplier: any) {
     return (
@@ -875,6 +1023,11 @@ export default function InvoiceRequestModal({
       estimate?.estimateNo || estimate?.estimateNumber || estimate?.id || ""
     );
   }
+
+  useEffect(() => {
+    if (!isOpen || editingInvoice) return;
+    resetForm();
+  }, [isOpen, editingInvoice]);
 
   /* ===================== FETCH SUPPLIERS ===================== */
   useEffect(() => {
@@ -1012,20 +1165,12 @@ export default function InvoiceRequestModal({
   }
 
   function addLineItem() {
-    setLineItems((prev) => [
-      ...prev,
-      {
-        id: prev.length + 1,
-        date: "",
-        service: "",
-        description: "",
-        vendor: "",
-        units: "",
-        unitRate: "",
-        total: 0,
-        comment: "",
-      },
-    ]);
+    setLineItems((prev) => {
+      const nextId =
+        prev.length > 0 ? Math.max(...prev.map((item) => item.id || 0)) + 1 : 1;
+
+      return [...prev, getEmptyLineItem(nextId)];
+    });
   }
 
   function removeLineItem(id: number) {
@@ -1054,13 +1199,13 @@ export default function InvoiceRequestModal({
   );
 
   /* ===================== SUBMIT ===================== */
-  async function handleSubmit(e: React.FormEvent) {
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (!userProfile || !canSubmitBudgetRequest) {
       toast({
         title: "Permission denied",
-        description: "You do not have permission to create Budget Requests.",
+        description: "Admin and Finance Admin cannot create Budget Requests.",
         variant: "destructive",
       });
       return;
@@ -1070,6 +1215,13 @@ export default function InvoiceRequestModal({
       setLoading(true);
 
       const lineItemsForSave = normalizeLineItemsForSave(lineItems);
+      const submittedBy =
+        userProfile.id || (userProfile as any).uid || userProfile.email || "";
+      const submittedByName =
+        userProfile.displayName ||
+        (userProfile as any).name ||
+        userProfile.email ||
+        "";
 
       if (!editingInvoice) {
         const requestId = await generateRequestId();
@@ -1090,20 +1242,29 @@ export default function InvoiceRequestModal({
           totalAmount,
           subject,
           message,
+
+          // New approval flow: User -> Admin -> Finance
           status: "pending_main_admin",
+          currentApprover: "main_admin",
+
+          // Return-to-role support
+          returnedToRole: "",
+          returnedToRoleLabel: "",
+          returnedToCreator: false,
+          needsCreatorRevision: false,
+
           submittedAt: serverTimestamp(),
           editDate: null,
-          submittedBy:
-            userProfile.id || (userProfile as any).uid || userProfile.email,
+          submittedBy,
+          createdBy: submittedBy,
           submittedByRole: currentUserRole,
-          submittedByName:
-            userProfile.displayName ||
-            (userProfile as any).name ||
-            userProfile.email ||
-            "",
+          submittedByRoleLabel: getRoleLabel(currentUserRole),
+          submittedByName,
+          createdByName: submittedByName,
+          updatedAt: serverTimestamp(),
         });
 
-        toast({ title: "Payment request submitted" });
+        toast({ title: "Budget request submitted" });
       } else {
         await updateDoc(
           doc(db, "Panels", PANEL_ID, "invoiceRequests", editingInvoice.id),
@@ -1122,19 +1283,33 @@ export default function InvoiceRequestModal({
             totalAmount,
             subject,
             message,
+
+            // Resubmit returned request back to Admin
             status: "pending_main_admin",
+            currentApprover: "main_admin",
+            returnedToRole: "",
+            returnedToRoleLabel: "",
+            returnedToCreator: false,
+            needsCreatorRevision: false,
+
             editDate: serverTimestamp(),
+            updatedAt: serverTimestamp(),
           },
         );
 
-        toast({ title: "Payment request resubmitted" });
+        toast({ title: "Budget request resubmitted" });
       }
 
       onSuccess?.();
+      onClose?.();
       window.location.reload();
     } catch (err) {
       console.error(err);
-      toast({ title: "Error", variant: "destructive" });
+      toast({
+        title: "Error",
+        description: "Failed to submit Budget Request.",
+        variant: "destructive",
+      });
     } finally {
       setLoading(false);
     }
@@ -1190,29 +1365,22 @@ export default function InvoiceRequestModal({
     setLineItems(
       editingInvoice.lineItems?.length
         ? normalizeLineItemsForSave(editingInvoice.lineItems)
-        : [
-            {
-              id: 1,
-              date: "",
-              service: "",
-              description: "",
-              vendor: "",
-              units: "",
-              unitRate: "",
-              total: 0,
-              comment: "",
-            },
-          ],
+        : [getEmptyLineItem(1)],
     );
   }, [editingInvoice]);
 
   /* ===================== UI ===================== */
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose?.();
+      }}
+    >
       <DialogContent className="max-w-[95vw] max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
-            {editingInvoice ? "Edit Payment Request" : "New Payment Request"}
+            {editingInvoice ? "Edit Budget Request" : "New Budget Request"}
           </DialogTitle>
         </DialogHeader>
 
@@ -1225,6 +1393,7 @@ export default function InvoiceRequestModal({
             >
               General
             </Button>
+
             <Button
               type="button"
               variant={invoiceType === "project" ? "default" : "outline"}
@@ -1243,7 +1412,7 @@ export default function InvoiceRequestModal({
                   onChange={(e) =>
                     setFormData({ ...formData, title: e.target.value })
                   }
-                  placeholder="Enter invoice title"
+                  placeholder="Enter request title"
                   required
                 />
               </div>
@@ -1253,7 +1422,7 @@ export default function InvoiceRequestModal({
                 <Input
                   value={subject}
                   onChange={(e) => setSubject(e.target.value)}
-                  placeholder="Enter invoice subject"
+                  placeholder="Enter request subject"
                 />
               </div>
 
@@ -1262,7 +1431,7 @@ export default function InvoiceRequestModal({
                 <Textarea
                   value={message}
                   onChange={(e) => setMessage(e.target.value)}
-                  placeholder="Enter invoice message"
+                  placeholder="Enter request message"
                   rows={4}
                 />
               </div>
@@ -1279,6 +1448,7 @@ export default function InvoiceRequestModal({
                 placeholder="Select or type estimate number"
                 required
               />
+
               <datalist id="estimate-options">
                 {estimates.map((e) => (
                   <option key={e.id} value={getEstimateDisplayNo(e)} />
@@ -1351,8 +1521,8 @@ export default function InvoiceRequestModal({
 
               <tbody>
                 {lineItems.map((item) => (
-                  <tr key={item.id} className="border-t hover:bg-gray-50 h-14">
-                    <td className="px-2 py-2">
+                  <tr key={item.id} className="border-t hover:bg-gray-50">
+                    <td className="px-2 py-2 align-top">
                       <Popover>
                         <PopoverTrigger asChild>
                           <Button
@@ -1386,27 +1556,32 @@ export default function InvoiceRequestModal({
                       </Popover>
                     </td>
 
-                    <td className="px-2 py-2">
+                    <td className="px-2 py-2 align-top">
                       <Input
                         className="h-9 text-sm"
                         value={item.service}
                         onChange={(e) =>
                           updateLineItem(item.id, "service", e.target.value)
                         }
+                        placeholder="Service"
                       />
                     </td>
 
-                    <td className="px-2 py-2">
-                      <Input
-                        className="h-9 text-sm"
+                    <td className="px-2 py-2 align-top">
+                      <AutoResizeTextarea
                         value={item.description}
+                        minWidthCh={22}
+                        maxWidthCh={70}
+                        minHeight={36}
+                        maxHeight={160}
+                        placeholder="Enter description"
                         onChange={(e) =>
                           updateLineItem(item.id, "description", e.target.value)
                         }
                       />
                     </td>
 
-                    <td className="px-2 py-2">
+                    <td className="px-2 py-2 align-top">
                       <div>
                         <Input
                           list={`vendor-options-${item.id}`}
@@ -1417,6 +1592,7 @@ export default function InvoiceRequestModal({
                           }
                           placeholder="Enter vendor name"
                         />
+
                         <datalist id={`vendor-options-${item.id}`}>
                           {suppliers.map((supplier) => {
                             const supplierName =
@@ -1433,7 +1609,7 @@ export default function InvoiceRequestModal({
                       </div>
                     </td>
 
-                    <td className="px-2 py-2">
+                    <td className="px-2 py-2 align-top">
                       <Input
                         type="number"
                         step="0.01"
@@ -1443,37 +1619,49 @@ export default function InvoiceRequestModal({
                         onChange={(e) =>
                           updateLineItem(item.id, "units", e.target.value)
                         }
+                        placeholder="0"
                       />
                     </td>
 
-                    <td className="px-2 py-2">
-                      <Input
-                        type="number"
-                        step="0.01"
-                        min="0"
-                        className="h-9 text-sm text-center"
+                    <td className="px-2 py-2 align-top">
+                      <AutoResizeTextarea
                         value={item.unitRate}
+                        inputMode="decimal"
+                        minWidthCh={8}
+                        maxWidthCh={18}
+                        minHeight={36}
+                        maxHeight={90}
+                        className="text-center"
+                        placeholder="0.00"
+                        onKeyDown={(e) => {
+                          if (e.key === "Enter") e.preventDefault();
+                        }}
                         onChange={(e) =>
-                          updateLineItem(item.id, "unitRate", e.target.value)
+                          updateLineItem(
+                            item.id,
+                            "unitRate",
+                            sanitizeDecimalInput(e.target.value),
+                          )
                         }
                       />
                     </td>
 
-                    <td className="font-semibold text-right pr-3">
+                    <td className="font-semibold text-right pr-3 align-top pt-4">
                       {Number(item.total || 0).toFixed(2)}
                     </td>
 
-                    <td className="px-2 py-2">
+                    <td className="px-2 py-2 align-top">
                       <Input
                         className="h-9 text-sm"
                         value={item.comment}
                         onChange={(e) =>
                           updateLineItem(item.id, "comment", e.target.value)
                         }
+                        placeholder="Comment"
                       />
                     </td>
 
-                    <td className="text-center px-2 py-2">
+                    <td className="text-center px-2 py-2 align-top pt-4">
                       <button
                         type="button"
                         onClick={() => removeLineItem(item.id)}

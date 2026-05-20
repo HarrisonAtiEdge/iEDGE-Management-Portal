@@ -321,6 +321,7 @@ import ReimbursementDashboard from "./components/ReimbursementDashboard";
 import TicketingSettings from "./pages/Travel/TicketingSettings";
 import TravelTickets from "./pages/TravelTickets";
 import ClaimReimbursement from "@/pages/ClaimReimbursement";
+import AccountStatement from "./pages/AccountStatement";
 
 function AuthenticatedApp() {
   const { currentUser } = useAuth();
@@ -480,6 +481,11 @@ function AuthenticatedApp() {
           </ProtectedRoute>
         </Route>
 
+        <Route path="/account-statement">
+          <ProtectedRoute>
+            <AccountStatement />
+          </ProtectedRoute>
+        </Route>
         <Route path="/estimateInternational">
           <ProtectedRoute>
             <InternationalEstimates />
@@ -538,12 +544,11 @@ function AuthenticatedApp() {
           </ProtectedRoute>
         </Route>
 
-        <Route
-          path="/claim-reimbursement">
-            <ProtectedRoute>
-              <ClaimReimbursement />
-            </ProtectedRoute>
-          </Route>
+        <Route path="/claim-reimbursement">
+          <ProtectedRoute>
+            <ClaimReimbursement />
+          </ProtectedRoute>
+        </Route>
 
         <Route path="/">
           <Redirect to="/dashboard" />

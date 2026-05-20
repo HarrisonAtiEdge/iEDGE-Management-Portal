@@ -491,6 +491,7 @@ const FINANCE_DROPDOWN: SidebarItem = {
   label: "Finance",
   icon: "WalletCards",
   children: [
+    { path: "/account-statement", label: "Account Statement", icon: "Receipt" },
     { path: "/budget-requests", label: "Budget Requests", icon: "FileText" },
     { path: "/expenses", label: "Expenses", icon: "Receipt" },
     { path: "/accounts", label: "Accounts", icon: "WalletCards" },

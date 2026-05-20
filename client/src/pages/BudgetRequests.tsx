@@ -5306,6 +5306,62 @@ function normalizeText(value: any) {
     .trim();
 }
 
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Admin",
+  main_admin: "Admin",
+  finance: "Finance",
+  financial_admin: "Finance Admin",
+  operation: "Operation",
+  operations: "Operation",
+  operational_admin: "Operation Admin",
+  operation_admin: "Operation Admin",
+  creative: "Creative",
+  sales: "Sales",
+};
+
+function formatRoleLabel(role: any): string {
+  const roleKey = normalizeText(role);
+  if (!roleKey) return "";
+
+  return (
+    ROLE_LABELS[roleKey] ||
+    String(role || "")
+      .replace(/_/g, " ")
+      .replace(/\b\w/g, (letter) => letter.toUpperCase())
+      .trim()
+  );
+}
+
+function getDirectReturnedRole(invoice?: any): string {
+  const directRole = getFirstTextValue([
+    invoice?.returnedToRole,
+    invoice?.returnToRole,
+    invoice?.returnedRole,
+    invoice?.returnedTo,
+    invoice?.creatorRole,
+    invoice?.createdByRole,
+    invoice?.submittedByRole,
+    invoice?.requestedByRole,
+    invoice?.requesterRole,
+    invoice?.userRole,
+    invoice?.departmentRole,
+    invoice?.department,
+    invoice?.team,
+  ]);
+
+  return normalizeText(directRole);
+}
+
+function getReturnedToRoleStatusLabel(invoice?: any): string {
+  const savedRoleLabel = getFirstTextValue([
+    invoice?.returnedToRoleLabel,
+    invoice?.returnToRoleLabel,
+  ]);
+  const role = getDirectReturnedRole(invoice);
+  const roleLabel = savedRoleLabel || formatRoleLabel(role);
+  return roleLabel ? `Returned To ${roleLabel}` : "Returned To Role";
+}
+
 function formatStatus(status: string) {
   return String(status || "unknown")
     .replace(/_/g, " ")
@@ -5395,6 +5451,66 @@ function compareRequestIdsAscending(a: any, b: any): number {
   return String(a?.id || "").localeCompare(String(b?.id || ""));
 }
 
+function getTableStatusSortRank(invoice: any): number {
+  const status = normalizeText(invoice?.status);
+
+  // Admin-approval requests should be shown at the very top so Admin can
+  // immediately see the requests waiting for their action.
+  if (isWaitingForAdminApproval(invoice) && !wasReturnedToCreator(invoice)) {
+    return 0;
+  }
+
+  // Rejected / returned requests come after Admin-pending requests because
+  // they need the creator's revision before being resubmitted.
+  if (
+    wasReturnedToCreator(invoice) ||
+    ["rejected", "returned_to_creator", "changes_requested"].includes(status)
+  ) {
+    return 1;
+  }
+
+  // Finance-pending requests come after returned requests.
+  if (status === "pending_finance") {
+    return 2;
+  }
+
+  // Any other pending status remains above approved/completed records.
+  if (status.startsWith("pending")) {
+    return 3;
+  }
+
+  // Approved / completed workflow records come after pending requests.
+  if (
+    [
+      "approved",
+      "po_created",
+      "po_submitted",
+      "po_approved",
+      "po_issued",
+      "ready_for_payment",
+      "payment_released",
+      "expense_submitted",
+      "expense_completed",
+    ].includes(status)
+  ) {
+    return 4;
+  }
+
+  return 5;
+}
+
+function compareBudgetRequestsForTable(a: any, b: any): number {
+  const aStatusRank = getTableStatusSortRank(a);
+  const bStatusRank = getTableStatusSortRank(b);
+
+  if (aStatusRank !== bStatusRank) {
+    return aStatusRank - bStatusRank;
+  }
+
+  // Keep Request IDs in number-wise ascending order inside each status group.
+  return compareRequestIdsAscending(a, b);
+}
+
 function formatRequestDate(invoice: any) {
   const date = getRequestDate(invoice);
   if (!date) return "-";
@@ -5454,6 +5570,98 @@ const CREATOR_NAME_OVERRIDES: Record<string, string> = {
   // Example:
   // "wVS6kzCFiYM5dFQSEZ5P7Y8SChg1": "Bilal Tariq",
 };
+
+function getRoleKey(role: any): string {
+  return normalizeText(role);
+}
+
+function isAdminRole(role: any): boolean {
+  const roleKey = getRoleKey(role);
+  return roleKey === "main_admin" || roleKey === "admin";
+}
+
+function isFinanceAdminRole(role: any): boolean {
+  return getRoleKey(role) === "financial_admin";
+}
+
+function isFinanceApproverRole(role: any): boolean {
+  const roleKey = getRoleKey(role);
+  return roleKey === "finance" || roleKey === "financial_admin";
+}
+
+function canRoleCreateBudgetRequest(role: any): boolean {
+  const roleKey = getRoleKey(role);
+  if (!roleKey) return false;
+
+  // Per latest flow: every role can create budget requests except Admin and Finance Admin.
+  return !isAdminRole(roleKey) && !isFinanceAdminRole(roleKey);
+}
+
+function canRoleSeeAllBudgetRequests(role: any): boolean {
+  // Admin needs to review admin-pending requests.
+  // Finance / Finance Admin need to review finance-pending and payment records.
+  return isAdminRole(role) || isFinanceApproverRole(role);
+}
+
+function getLatestApprovalAction(invoice: any): string {
+  const approvalHistory = Array.isArray(invoice?.approvalHistory)
+    ? invoice.approvalHistory
+    : [];
+  const latest = approvalHistory[approvalHistory.length - 1];
+
+  return normalizeText(latest?.action || latest?.status || "");
+}
+
+function wasReturnedToCreator(invoice: any): boolean {
+  const status = normalizeText(invoice?.status);
+
+  if (["rejected", "returned_to_creator", "changes_requested"].includes(status))
+    return true;
+
+  // Compatibility for old records created before Operation Admin approval was removed:
+  // old rejection code moved requests back to pending_operational_admin.
+  if (
+    status === "pending_operational_admin" &&
+    getLatestApprovalAction(invoice) === "rejected"
+  ) {
+    return true;
+  }
+
+  return Boolean(invoice?.returnedToCreator || invoice?.needsCreatorRevision);
+}
+
+function isWaitingForAdminApproval(invoice: any): boolean {
+  const status = normalizeText(invoice?.status);
+
+  // New direct flow status.
+  if (status === "pending_main_admin" || status === "pending_admin")
+    return true;
+
+  // Compatibility for old records that were created with the removed Operation Admin status.
+  // These should now be handled by Admin directly, unless they were rejected back to creator.
+  if (status === "pending_operational_admin" && !wasReturnedToCreator(invoice))
+    return true;
+
+  return false;
+}
+
+function getStatusLabel(status: string, invoice?: any): string {
+  const normalizedStatus = normalizeText(status);
+
+  if (invoice && wasReturnedToCreator(invoice))
+    return getReturnedToRoleStatusLabel(invoice);
+  if (
+    normalizedStatus === "pending_main_admin" ||
+    normalizedStatus === "pending_admin"
+  )
+    return "Pending Admin";
+  if (normalizedStatus === "pending_operational_admin") return "Pending Admin";
+  if (normalizedStatus === "pending_finance") return "Pending Finance";
+  if (normalizedStatus === "rejected")
+    return getReturnedToRoleStatusLabel(invoice);
+
+  return formatStatus(status);
+}
 
 export default function InvoiceRequests() {
   const PANEL_ID = "IEDGE-SYSTEM";
@@ -5936,40 +6144,78 @@ export default function InvoiceRequests() {
   async function handleApprove(invoice: InvoiceRequest) {
     if (!userProfile) return;
 
+    const roleKey = getRoleKey(userProfile.role);
+    const status = normalizeText(invoice.status);
+    const approvalHistory = Array.isArray((invoice as any).approvalHistory)
+      ? (invoice as any).approvalHistory
+      : [];
+
+    let newStatus = status;
+    let currentApprover = String((invoice as any).currentApprover || "");
+    const updatePayload: Record<string, any> = {
+      approvalHistory: [
+        ...approvalHistory,
+        {
+          approver:
+            userProfile.displayName ||
+            (userProfile as any)?.name ||
+            userProfile.email ||
+            roleKey,
+          approverRole: roleKey,
+          action: "approved",
+          timestamp: new Date(),
+          notes: "",
+        },
+      ],
+      returnedToCreator: false,
+      needsCreatorRevision: false,
+      returnedToRole: "",
+      returnedToRoleLabel: "",
+      updatedAt: serverTimestamp(),
+    };
+
+    if (isAdminRole(roleKey) && isWaitingForAdminApproval(invoice)) {
+      newStatus = "pending_finance";
+      currentApprover = "finance";
+      updatePayload.adminApprovedAt = serverTimestamp();
+      updatePayload.adminApprovedBy =
+        userProfile.displayName || userProfile.email || "";
+      updatePayload.adminApprovedById =
+        userProfile.id ||
+        (userProfile as any)?.uid ||
+        (userProfile as any)?.userId ||
+        userProfile.email ||
+        "";
+    } else if (isFinanceApproverRole(roleKey) && status === "pending_finance") {
+      newStatus = "approved";
+      currentApprover = "";
+      updatePayload.financeApprovedAt = serverTimestamp();
+      updatePayload.financeApprovedBy =
+        userProfile.displayName || userProfile.email || "";
+      updatePayload.financeApprovedById =
+        userProfile.id ||
+        (userProfile as any)?.uid ||
+        (userProfile as any)?.userId ||
+        userProfile.email ||
+        "";
+      updatePayload.approvedAt = serverTimestamp();
+    } else {
+      toast({
+        title: "Action not allowed",
+        description:
+          "This request is not currently assigned to your approval stage.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     try {
-      let newStatus = invoice.status;
-      let currentApprover = "";
-
-      switch (userProfile.role) {
-        case "operational_admin":
-          if (invoice.status === "pending_operational_admin")
-            newStatus = "pending_main_admin";
-          break;
-        case "main_admin":
-          if (invoice.status === "pending_main_admin")
-            newStatus = "pending_finance";
-          break;
-        case "finance":
-        case "financial_admin":
-          if (invoice.status === "pending_finance") newStatus = "approved";
-          break;
-      }
-
       await updateDoc(
         doc(db, "Panels", PANEL_ID, "invoiceRequests", invoice.id),
         {
+          ...updatePayload,
           status: newStatus,
           currentApprover,
-          approvalHistory: [
-            ...(invoice.approvalHistory || []),
-            {
-              approver: userProfile.displayName,
-              action: "approved",
-              timestamp: new Date(),
-              notes: "",
-            },
-          ],
-          updatedAt: serverTimestamp(),
         },
       );
 
@@ -5996,14 +6242,37 @@ export default function InvoiceRequests() {
     try {
       setRejectionLoading(true);
 
+      const roleKey = getRoleKey(userProfile.role);
+      const ownerId = getBudgetRequestOwnerId(invoice);
+      const approvalHistory = Array.isArray((invoice as any).approvalHistory)
+        ? (invoice as any).approvalHistory
+        : [];
+
+      const returnedToRole = getBudgetRequestOwnerRole(invoice);
+      const returnedToRoleLabel = formatRoleLabel(returnedToRole);
+
       await updateDoc(
         doc(db, "Panels", PANEL_ID, "invoiceRequests", invoice.id),
         {
-          status: "pending_operational_admin",
+          status: "rejected",
+          currentApprover: ownerId,
+          returnedToRole,
+          returnedToRoleLabel,
+          returnedToCreator: true,
+          needsCreatorRevision: true,
+          rejectionComment,
+          rejectedAt: serverTimestamp(),
+          rejectedBy: userProfile.displayName || userProfile.email || "",
+          rejectedByRole: roleKey,
           approvalHistory: [
-            ...(invoice.approvalHistory || []),
+            ...approvalHistory,
             {
-              approver: userProfile.displayName,
+              approver:
+                userProfile.displayName ||
+                (userProfile as any)?.name ||
+                userProfile.email ||
+                roleKey,
+              approverRole: roleKey,
               action: "rejected",
               timestamp: new Date(),
               notes: rejectionComment,
@@ -6014,8 +6283,8 @@ export default function InvoiceRequests() {
       );
 
       toast({
-        title: "Success",
-        description: "Budget request rejected with comments",
+        title: "Request returned",
+        description: `Budget request has been sent back to ${returnedToRoleLabel || "the original role"} for changes.`,
       });
 
       setIsRejectionModalOpen(false);
@@ -6032,7 +6301,10 @@ export default function InvoiceRequests() {
     }
   }
 
-  function getStatusBadgeColor(status: string): string {
+  function getStatusBadgeColor(status: string, invoice?: any): string {
+    if (invoice && wasReturnedToCreator(invoice))
+      return "border-red-200 bg-red-50 text-red-700";
+
     switch (status) {
       case "approved":
       case "payment_released":
@@ -6040,9 +6312,12 @@ export default function InvoiceRequests() {
       case "expense_completed":
         return "border-green-200 bg-green-50 text-green-700";
       case "rejected":
+      case "returned_to_creator":
+      case "changes_requested":
         return "border-red-200 bg-red-50 text-red-700";
       case "pending_operational_admin":
       case "pending_main_admin":
+      case "pending_admin":
       case "pending_finance":
         return "border-amber-200 bg-amber-50 text-amber-700";
       default:
@@ -6075,11 +6350,15 @@ export default function InvoiceRequests() {
       return "PO Created / Ready for Payment";
     }
 
+    if (wasReturnedToCreator(invoice)) {
+      return `${getBudgetRequestStatusLabel(invoice)} / Waiting for Resubmission`;
+    }
+
     switch (status) {
       case "pending_operational_admin":
-        return "Operational Admin Review";
       case "pending_main_admin":
-        return "Main Admin Approval";
+      case "pending_admin":
+        return "Admin Approval";
       case "pending_finance":
         return "Finance Approval";
       case "approved":
@@ -6096,7 +6375,9 @@ export default function InvoiceRequests() {
       case "expense_completed":
         return "Expense Submitted / No Approval Required";
       case "rejected":
-        return "Rejected";
+      case "returned_to_creator":
+      case "changes_requested":
+        return getBudgetRequestStatusLabel(invoice);
       default:
         return "Unknown";
     }
@@ -6105,25 +6386,40 @@ export default function InvoiceRequests() {
   function canApprove(invoice: InvoiceRequest): boolean {
     if (!userProfile) return false;
 
-    switch (userProfile.role) {
-      case "operational_admin":
-        return invoice.status === "pending_operational_admin";
-      case "main_admin":
-        return invoice.status === "pending_main_admin";
-      case "finance":
-      case "financial_admin":
-        return invoice.status === "pending_finance";
-      default:
-        return false;
+    const roleKey = getRoleKey(userProfile.role);
+
+    if (isAdminRole(roleKey)) {
+      return isWaitingForAdminApproval(invoice);
     }
+
+    if (isFinanceApproverRole(roleKey)) {
+      return normalizeText(invoice.status) === "pending_finance";
+    }
+
+    return false;
   }
 
   function canEdit(invoice: InvoiceRequest): boolean {
     if (!userProfile) return false;
-    return (
-      userProfile.role === "operation" &&
-      invoice.status === "pending_operational_admin"
-    );
+
+    // After Admin/Finance rejects a request, it goes back only to the original creator.
+    // The creator can edit and resubmit it to Admin.
+    return isOwnBudgetRequest(invoice) && wasReturnedToCreator(invoice);
+  }
+
+  function getEditableInvoice(invoice: InvoiceRequest): InvoiceRequest {
+    if (!wasReturnedToCreator(invoice)) return invoice;
+
+    return {
+      ...(invoice as any),
+      status: "pending_main_admin",
+      currentApprover: "main_admin",
+      returnedToCreator: false,
+      needsCreatorRevision: false,
+      returnedToRole: "",
+      returnedToRoleLabel: "",
+      resubmittedAt: new Date(),
+    } as InvoiceRequest;
   }
 
   function canReleasePayment(invoice: InvoiceRequest): boolean {
@@ -6193,8 +6489,7 @@ export default function InvoiceRequests() {
     return expenseSheet?.status || expenseSheet?.expenseStatus || null;
   }
 
-  const canCreateInvoices =
-    currentUserRole === "operation" || currentUserRole === "creative";
+  const canCreateInvoices = canRoleCreateBudgetRequest(currentUserRole);
 
   function getCurrentUserId() {
     return String(
@@ -6254,6 +6549,90 @@ export default function InvoiceRequests() {
 
     return map;
   }, [users, panelUsers]);
+
+  function getUserRoleLabel(user: any): string {
+    const role = getFirstTextValue([
+      user?.role,
+      user?.userRole,
+      user?.departmentRole,
+      user?.department,
+      user?.team,
+    ]);
+
+    return normalizeText(role);
+  }
+
+  function getBudgetRequestOwnerRole(invoice: any): string {
+    const directRole = getDirectReturnedRole(invoice);
+    if (directRole) return directRole;
+
+    const ownerLookupValues = [
+      invoice?.createdBy,
+      invoice?.submittedBy,
+      invoice?.requestedBy,
+      invoice?.requesterId,
+      invoice?.createdById,
+      invoice?.submittedById,
+      invoice?.userId,
+      invoice?.uid,
+      invoice?.createdByEmail,
+      invoice?.submittedByEmail,
+      invoice?.email,
+    ];
+
+    for (const value of ownerLookupValues) {
+      const lookupKey = String(value || "")
+        .trim()
+        .toLowerCase();
+      if (!lookupKey) continue;
+
+      const matchedUser = usersByLookup.get(lookupKey);
+      const matchedRole = getUserRoleLabel(matchedUser);
+      if (matchedRole) return matchedRole;
+    }
+
+    const currentUserLookupValues = [
+      userProfile?.id,
+      (userProfile as any)?.uid,
+      (userProfile as any)?.userId,
+      (userProfile as any)?.firebaseUid,
+      (userProfile as any)?.authUid,
+      userProfile?.email,
+    ]
+      .map((value) =>
+        String(value || "")
+          .trim()
+          .toLowerCase(),
+      )
+      .filter(Boolean);
+
+    const isCurrentUserOwner = ownerLookupValues
+      .map((value) =>
+        String(value || "")
+          .trim()
+          .toLowerCase(),
+      )
+      .filter(Boolean)
+      .some((ownerKey) => currentUserLookupValues.includes(ownerKey));
+
+    if (isCurrentUserOwner) return getRoleKey(userProfile?.role);
+
+    return "";
+  }
+
+  function getBudgetRequestStatusLabel(invoice: any): string {
+    if (wasReturnedToCreator(invoice)) {
+      const role = getBudgetRequestOwnerRole(invoice);
+      const savedRoleLabel = getFirstTextValue([
+        invoice?.returnedToRoleLabel,
+        invoice?.returnToRoleLabel,
+      ]);
+      const roleLabel = savedRoleLabel || formatRoleLabel(role);
+      return roleLabel ? `Returned To ${roleLabel}` : "Returned To Role";
+    }
+
+    return getStatusLabel(invoice?.status || "", invoice);
+  }
 
   const creatorNamesByLookup = useMemo(() => {
     const map = new Map<string, string>();
@@ -6400,12 +6779,18 @@ export default function InvoiceRequests() {
 
   function getInvoiceWithCreator(invoice: InvoiceRequest): InvoiceRequest {
     const createdByName = getCreatedByName(invoice);
+    const returnedToRole = wasReturnedToCreator(invoice)
+      ? getBudgetRequestOwnerRole(invoice)
+      : getDirectReturnedRole(invoice);
+    const returnedToRoleLabel = formatRoleLabel(returnedToRole);
 
     return {
       ...(invoice as any),
       createdByName,
       submittedByName: (invoice as any)?.submittedByName || createdByName,
       requestedByName: (invoice as any)?.requestedByName || createdByName,
+      returnedToRole,
+      returnedToRoleLabel,
     } as InvoiceRequest;
   }
 
@@ -6463,10 +6848,8 @@ export default function InvoiceRequests() {
         !monthFilter || requestDateInputValue.startsWith(monthFilter);
       const matchesFrom = !fromDate || (requestDate && requestDate >= fromDate);
       const matchesTo = !toDate || (requestDate && requestDate <= toDate);
-      const isRestrictedRequesterRole =
-        currentUserRole === "operation" || currentUserRole === "creative";
-      const matchesOwnership =
-        !isRestrictedRequesterRole || isOwnBudgetRequest(invoice);
+      const canSeeAllRequests = canRoleSeeAllBudgetRequests(currentUserRole);
+      const matchesOwnership = canSeeAllRequests || isOwnBudgetRequest(invoice);
 
       return (
         matchesOwnership &&
@@ -6511,7 +6894,7 @@ export default function InvoiceRequests() {
   }, [filteredInvoices]);
 
   const sortedInvoices = useMemo(() => {
-    return [...filteredInvoices].sort(compareRequestIdsAscending);
+    return [...filteredInvoices].sort(compareBudgetRequestsForTable);
   }, [filteredInvoices]);
 
   const totalPages = Math.max(1, Math.ceil(sortedInvoices.length / pageSize));
@@ -6579,8 +6962,8 @@ export default function InvoiceRequests() {
               Budget Requests
             </h2> */}
             <p className="mt-2 max-w-2xl text-sm text-slate-500">
-              Review project and general budget requests, approve workflow
-              stages, release payments, or create POs.
+              Review project and general budget requests, send requests through
+              Admin and Finance approval, release payments, or create POs.
             </p>
           </div>
 
@@ -6702,7 +7085,7 @@ export default function InvoiceRequests() {
                   <option value="all">All Statuses</option>
                   {statusOptions.map((status) => (
                     <option key={status} value={status}>
-                      {formatStatus(status)}
+                      {getStatusLabel(status)}
                     </option>
                   ))}
                 </select>
@@ -6900,9 +7283,9 @@ export default function InvoiceRequests() {
                           <td className="px-5 py-4">
                             <Badge
                               variant="outline"
-                              className={`rounded-full px-3 py-1 ${getStatusBadgeColor(invoice.status)}`}
+                              className={`rounded-full px-3 py-1 ${getStatusBadgeColor(invoice.status, invoice)}`}
                             >
-                              {formatStatus(invoice.status)}
+                              {getBudgetRequestStatusLabel(invoice)}
                             </Badge>
                           </td>
 
@@ -6928,7 +7311,9 @@ export default function InvoiceRequests() {
                                   size="sm"
                                   className="rounded-xl border-blue-200 bg-blue-50 text-blue-700 hover:bg-blue-100"
                                   onClick={() => {
-                                    setSelectedInvoice(invoice);
+                                    setSelectedInvoice(
+                                      getEditableInvoice(invoice),
+                                    );
                                     setIsInvoiceModalOpen(true);
                                   }}
                                   data-testid={`button-edit-${invoice.id}`}
