@@ -92,6 +92,7 @@ const AVAILABLE_TABS = [
   { path: "/suppliers", label: "Suppliers", icon: "BookUser" },
   { path: "/task-calendar", label: "Task Calendar", icon: "CalendarCheck" },
   { path: "/reimbursement", label: "Reimbursement", icon: "HandCoins" },
+  { path: "/purchase-orders", label: "Purchase Orders", icon: "ReceiptText" },
   {
     path: "/claim-reimbursement",
     label: "Claim Reimbursement",

@@ -337,7 +337,7 @@ export default function SuppliersPage() {
         </div>
 
         <div className="flex flex-wrap gap-3">
-          <Button
+          {/* <Button
             variant="outline"
             className="rounded-2xl"
             onClick={() => setLocation("/purchase-orders")}
@@ -352,7 +352,7 @@ export default function SuppliersPage() {
           >
             <FileText className="h-4 w-4 mr-2" />
             Create PO
-          </Button>
+          </Button> */}
           <Button className="rounded-2xl" onClick={openCreateDialog}>
             <Plus className="h-4 w-4 mr-2" />
             Add Supplier

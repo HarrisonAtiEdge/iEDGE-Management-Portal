@@ -496,6 +496,7 @@ const FINANCE_DROPDOWN: SidebarItem = {
     { path: "/expenses", label: "Expenses", icon: "Receipt" },
     { path: "/accounts", label: "Accounts", icon: "WalletCards" },
     { path: "/reimbursement", label: "Reimbursement", icon: "HandCoins" },
+    { path: "/purchase-orders", label: "Purchase Orders", icon: "ReceiptText" },
     {
       path: "/claim-reimbursement",
       label: "Claim Reimbursement",
