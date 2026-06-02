@@ -1053,6 +1053,9 @@
 //                             <p className="text-sm font-semibold text-gray-900 truncate">
 //                               {item.number}
 //                             </p>
+//                             <p className="text-xs text-gray-500 truncate">
+//                               {item.createdByName || "Creator unavailable"}
+//                             </p>
 //                           </div>
 //                           <Badge className={statusBadgeClass(item.status)}>
 //                             {item.status || "Saved"}
@@ -1586,6 +1589,7 @@ import {
   Building2,
   Hash,
   Clock3,
+  ExternalLink,
 } from "lucide-react";
 import {
   serverTimestamp,
@@ -1602,6 +1606,8 @@ import { useMeetingUpdates } from "@/hooks/useMeetingUpdates";
 import { useMeetingUpdateComments } from "@/hooks/useMeetingUpdateComments";
 import { createNotification } from "@/hooks/useNotifications";
 import { useToast } from "@/hooks/use-toast";
+import { buildEstimatePdfBlob } from "@/lib/estimatePdf";
+import { buildEstimateInvoicePdfBlob } from "@/lib/estimateInvoicePdf";
 import type { SalesRecord } from "@shared/schema";
 
 interface ViewDetailModalProps {
@@ -1648,7 +1654,28 @@ interface LinkedCommercialItem {
   status?: string;
   createdAt?: any;
   createdByName?: string;
+  rawData: any;
 }
+
+const PDF_COMPANY_LIST = [
+  { name: "iEDGE", logo: "/Iedge-TM-Logos-01.png" },
+  {
+    name: "iEDGE - Digital & Creative",
+    logo: "/Iedge-Digital-and-Creative-TM-Logos-12.png",
+  },
+  { name: "iEDGE - Events & Activations", logo: "/iedge-events-logo.png" },
+  {
+    name: "iEDGE - Health Sciences",
+    logo: "/Iedge-Health-Sciences-TM-Logos-05.png",
+  },
+  { name: "iEDGE - International Education", logo: "/iedge-edu-logo.png" },
+  { name: "iEDGE - Trading", logo: "/Iedge-Trade-TM-Logos-10.png" },
+  { name: "iEDGE - Travel & Tours", logo: "/iedge-travel-logo.png" },
+  { name: "Catapult", logo: "/Catapult-TM-Logos-03.png" },
+  { name: "iConsultant", logo: "/Consultant-TM-Logos-02.png" },
+  { name: "Let's Save Green", logo: "/Lets-save-Green-TM-Logos-04.png" },
+  { name: "Emaan Biz", logo: "/Emaan-Biz-TM-Logos-06.png" },
+];
 
 function toJsDate(value: any): Date | null {
   if (!value) return null;
@@ -1824,6 +1851,10 @@ function resolveCommercialCreatedByName(data: any) {
   );
 }
 
+function formatCommercialSource(source: LinkedCommercialItem["source"]) {
+  return source === "estimateInvoices" ? "Invoice" : "Estimate";
+}
+
 function sortByLatest(items: any[], dateGetter: (item: any) => any) {
   return [...items].sort((a, b) => {
     const aDate = toJsDate(dateGetter(a));
@@ -1884,6 +1915,7 @@ export function ViewDetailModal({
   const [userDirectory, setUserDirectory] = useState<Record<string, string>>(
     {},
   );
+  const [usersMap, setUsersMap] = useState<Record<string, any>>({});
   const [extraRecordData, setExtraRecordData] = useState<ExtraRecordData>({});
   const [approvalRemark, setApprovalRemark] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
@@ -1964,24 +1996,29 @@ export function ViewDetailModal({
         }
 
         const directory: Record<string, string> = {};
+        const nextUsersMap: Record<string, any> = {};
         usersSnap.forEach((userDoc) => {
           const data = userDoc.data() as any;
-          directory[userDoc.id] =
+          const displayName =
             data.displayName ||
             data.fullName ||
             data.name ||
             data.email ||
             userDoc.id;
+          const userData = {
+            id: userDoc.id,
+            ...data,
+            displayName,
+          };
+          directory[userDoc.id] = displayName;
+          nextUsersMap[userDoc.id] = userData;
           if (data.id) {
-            directory[String(data.id)] =
-              data.displayName ||
-              data.fullName ||
-              data.name ||
-              data.email ||
-              String(data.id);
+            directory[String(data.id)] = displayName;
+            nextUsersMap[String(data.id)] = userData;
           }
         });
         setUserDirectory(directory);
+        setUsersMap(nextUsersMap);
       } catch (error) {
         console.error("Error fetching extra record data:", error);
       }
@@ -2027,6 +2064,10 @@ export function ViewDetailModal({
               status: resolveCommercialStatus(data),
               createdAt: data?.createdAt,
               createdByName: resolveCommercialCreatedByName(data),
+              rawData: {
+                id: itemDoc.id,
+                ...data,
+              },
             });
           });
         }
@@ -2069,6 +2110,60 @@ export function ViewDetailModal({
   const displayUserList = (ids: string[] = []) => {
     if (!ids.length) return "N/A";
     return ids.map((id) => userDirectory[id] || id).join(", ");
+  };
+
+  const handleOpenLinkedCommercialPdf = async (item: LinkedCommercialItem) => {
+    const documentType = formatCommercialSource(item.source);
+    const data = item.rawData || {};
+    const pdfWindow = window.open("about:blank", "_blank");
+
+    if (!pdfWindow) {
+      toast({
+        title: "Popup blocked",
+        description: `Please allow popups to open the ${documentType.toLowerCase()} PDF.`,
+        variant: "destructive",
+      });
+      return;
+    }
+
+    pdfWindow.opener = null;
+    pdfWindow.document.write(
+      `<p style="font-family: Arial, sans-serif; padding: 24px;">Generating ${documentType} PDF...</p>`,
+    );
+
+    try {
+      const blob =
+        item.source === "estimateInvoices"
+          ? await buildEstimateInvoicePdfBlob({
+              invoice: data,
+              companyList: PDF_COMPANY_LIST,
+              withLogo: Boolean(data?.withLogo ?? true),
+              footerUser: userProfile,
+              usersMap,
+              companyName: String(data?.company || "").trim(),
+            } as any)
+          : await buildEstimatePdfBlob({
+              estimate: data,
+              companyList: PDF_COMPANY_LIST,
+              usersMap,
+              companyName: String(data?.company || "").trim(),
+            } as any);
+
+      const url = URL.createObjectURL(blob);
+      pdfWindow.location.href = url;
+
+      setTimeout(() => {
+        URL.revokeObjectURL(url);
+      }, 60000);
+    } catch (error) {
+      console.error(`Error generating ${documentType} PDF:`, error);
+      pdfWindow.close();
+      toast({
+        title: "PDF generation failed",
+        description: `Unable to generate the ${documentType.toLowerCase()} PDF.`,
+        variant: "destructive",
+      });
+    }
   };
 
   const handleCommentSubmit = async (e: React.FormEvent) => {
@@ -2606,14 +2701,18 @@ export function ViewDetailModal({
                 ) : linkedEstimates.length ? (
                   <div className="space-y-2 max-h-[15rem] overflow-y-auto pr-1">
                     {linkedEstimates.map((item) => (
-                      <div
+                      <button
+                        type="button"
                         key={`${item.source}-${item.id}`}
-                        className="rounded-lg border bg-white p-2.5"
+                        onClick={() => handleOpenLinkedCommercialPdf(item)}
+                        className="w-full rounded-lg border bg-white p-2.5 text-left transition hover:bg-gray-50"
+                        title="Open Estimate PDF in new tab"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 truncate">
-                              {item.number}
+                            <p className="flex items-center gap-1 text-sm font-semibold text-gray-900 truncate">
+                              <span className="truncate">{item.number}</span>
+                              <ExternalLink className="h-3 w-3 shrink-0 text-gray-500" />
                             </p>
                             <p className="text-xs text-gray-500 truncate">
                               {item.createdByName || "Creator unavailable"}
@@ -2623,10 +2722,13 @@ export function ViewDetailModal({
                             {item.status || "Saved"}
                           </Badge>
                         </div>
-                        <p className="text-xs text-gray-700 mt-1">
-                          {formatCurrency(item.amount)}
-                        </p>
-                      </div>
+                        <div className="mt-1 flex items-center justify-between gap-2 text-xs text-gray-700">
+                          <span>{formatCurrency(item.amount)}</span>
+                          <span className="inline-flex items-center gap-1 text-blue-600">
+                            Open PDF <ExternalLink className="h-3 w-3" />
+                          </span>
+                        </div>
+                      </button>
                     ))}
                   </div>
                 ) : (
@@ -2647,14 +2749,18 @@ export function ViewDetailModal({
                 ) : linkedInvoices.length ? (
                   <div className="space-y-2 max-h-[15rem] overflow-y-auto pr-1">
                     {linkedInvoices.map((item) => (
-                      <div
+                      <button
+                        type="button"
                         key={`${item.source}-${item.id}`}
-                        className="rounded-lg border bg-white p-2.5"
+                        onClick={() => handleOpenLinkedCommercialPdf(item)}
+                        className="w-full rounded-lg border bg-white p-2.5 text-left transition hover:bg-gray-50"
+                        title="Open Invoice PDF in new tab"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="text-sm font-semibold text-gray-900 truncate">
-                              {item.number}
+                            <p className="flex items-center gap-1 text-sm font-semibold text-gray-900 truncate">
+                              <span className="truncate">{item.number}</span>
+                              <ExternalLink className="h-3 w-3 shrink-0 text-gray-500" />
                             </p>
                             <p className="text-xs text-gray-500 truncate">
                               {item.createdByName || "Creator unavailable"}
@@ -2664,10 +2770,13 @@ export function ViewDetailModal({
                             {item.status || "Saved"}
                           </Badge>
                         </div>
-                        <p className="text-xs text-gray-700 mt-1">
-                          {formatCurrency(item.amount)}
-                        </p>
-                      </div>
+                        <div className="mt-1 flex items-center justify-between gap-2 text-xs text-gray-700">
+                          <span>{formatCurrency(item.amount)}</span>
+                          <span className="inline-flex items-center gap-1 text-blue-600">
+                            Open PDF <ExternalLink className="h-3 w-3" />
+                          </span>
+                        </div>
+                      </button>
                     ))}
                   </div>
                 ) : (

@@ -75,6 +75,11 @@ import {
 // --------------------
 const AVAILABLE_TABS = [
   { path: "/dashboard", label: "Dashboard", icon: "LayoutDashboard" },
+  {
+    path: "/account-statement",
+    label: "Account Statement",
+    icon: "LayoutDashboard",
+  },
   { path: "/sales-dashboard", label: "Sales Dashboard", icon: "LineChart" },
   { path: "/project", label: "Project", icon: "BarChart3" },
   { path: "/clients", label: "Clients", icon: "Users" },
