@@ -1,7 +1,14 @@
-// import { useState, useEffect } from "react";
+// import { useEffect, useMemo, useState } from "react";
+// import { serverTimestamp } from "firebase/firestore";
 // import { useAuth } from "@/contexts/AuthContext";
-// import { doc, updateDoc, serverTimestamp } from "firebase/firestore";
-// import { db } from "@/lib/firebase";
+// import { releasePayment } from "@/lib/payments/releasePayment";
+// import { fetchPaymentAccounts } from "@/lib/payments/paymentAccounts";
+// import {
+//   PaymentAccount,
+//   PaymentReleaseFormValues,
+//   PaymentReleaseSubmitArgs,
+// } from "@/lib/payments/types";
+// import { InvoiceRequest } from "@shared/schema";
 // import {
 //   Dialog,
 //   DialogContent,
@@ -11,187 +18,326 @@
 // import { Button } from "@/components/ui/button";
 // import { Input } from "@/components/ui/input";
 // import { Label } from "@/components/ui/label";
-// import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+// import {
+//   Select,
+//   SelectContent,
+//   SelectItem,
+//   SelectTrigger,
+//   SelectValue,
+// } from "@/components/ui/select";
 // import { Textarea } from "@/components/ui/textarea";
 // import { useToast } from "@/hooks/use-toast";
-// import { InvoiceRequest } from "@shared/schema";
 
-// interface PaymentReleaseModalProps {
+// interface PaymentReleaseModalProps<T = any> {
 //   isOpen: boolean;
 //   onClose: () => void;
 //   onSuccess: () => void;
-//   invoice: InvoiceRequest | null;
+//   title?: string;
+
+//   invoice?: InvoiceRequest | null;
+
+//   context?: T | null;
+//   docPath?: ((context: T) => string[]) | string[];
+//   buildUpdateData?: (
+//     args: PaymentReleaseSubmitArgs<T>
+//   ) => Record<string, any>;
+
+//   amount?: number;
+//   amountLabel?: string;
+//   partyLabel?: string;
+//   parties?: string[];
+
+//   accounts?: PaymentAccount[];
+//   allowCheque?: boolean;
+//   allowReceiptUpload?: boolean;
+//   initialPaymentMethod?: "cash" | "cheque" | "bank_transfer" | "wire";
+//   amountReadOnly?: boolean;
 // }
 
-// export default function PaymentReleaseModal({
+// export default function PaymentReleaseModal<T = any>({
 //   isOpen,
 //   onClose,
 //   onSuccess,
-//   invoice,
-// }: PaymentReleaseModalProps) {
-//   const { userProfile } = useAuth();
+//   title = "Release Payment",
+//   invoice = null,
+
+//   context = null,
+//   docPath,
+//   buildUpdateData,
+
+//   amount,
+//   amountLabel,
+//   partyLabel,
+//   parties,
+
+//   accounts = [],
+//   allowCheque = true,
+//   allowReceiptUpload = true,
+//   initialPaymentMethod,
+//   amountReadOnly,
+// }: PaymentReleaseModalProps<T>) {
+//   const { userProfile, currentUser } = useAuth();
 //   const { toast } = useToast();
+
 //   const [loading, setLoading] = useState(false);
+//   const [accountsLoading, setAccountsLoading] = useState(false);
 //   const [receiptFile, setReceiptFile] = useState<File | null>(null);
-//   const [accounts, setAccounts] = useState<any[]>([]);
-//   const [selectedAccount, setSelectedAccount] = useState<any>(null);
-//   const [selectedVendors, setSelectedVendors] = useState<string[]>([]);
-//   const [formData, setFormData] = useState({
-//     paymentMethod: "",
+//   const [selectedAccount, setSelectedAccount] = useState<PaymentAccount | null>(
+//     null
+//   );
+//   const [storedAccounts, setStoredAccounts] = useState<PaymentAccount[]>([]);
+
+//   const approvedInvoiceItems = useMemo(() => {
+//     const items = Array.isArray((invoice as any)?.lineItems)
+//       ? (invoice as any).lineItems
+//       : [];
+
+//     return items.filter((item: any) => item?.status === "approved");
+//   }, [invoice]);
+
+//   const invoiceApprovedAmount = useMemo(() => {
+//     return approvedInvoiceItems.reduce((sum: number, item: any) => {
+//       const qty = Number(item?.units || 0);
+//       const rate = Number(item?.unitRate || 0);
+//       const tax = Number(item?.tax || 0);
+//       const total = Number(item?.total ?? qty * rate + tax);
+//       return sum + total;
+//     }, 0);
+//   }, [approvedInvoiceItems]);
+
+//   const invoiceApprovedVendors = useMemo(() => {
+//     return [
+//       ...new Set(
+//         approvedInvoiceItems
+//           .map((item: any) => String(item?.vendor || "").trim())
+//           .filter(Boolean)
+//       ),
+//     ] as string[];
+//   }, [approvedInvoiceItems]);
+
+//   const resolvedContext = (context ?? invoice ?? null) as
+//     | T
+//     | InvoiceRequest
+//     | null;
+
+//   const resolvedDocPath = useMemo(() => {
+//     if (docPath && resolvedContext) {
+//       return typeof docPath === "function"
+//         ? docPath(resolvedContext as T)
+//         : docPath;
+//     }
+
+//     if ((invoice as any)?.id) {
+//       return [
+//         "Panels",
+//         "IEDGE-SYSTEM",
+//         "invoiceRequests",
+//         (invoice as any).id,
+//       ];
+//     }
+
+//     return [];
+//   }, [docPath, resolvedContext, invoice]);
+
+//   const resolvedAmount = amount ?? (invoice ? invoiceApprovedAmount : 0);
+
+//   const resolvedParties = parties ?? (invoice ? invoiceApprovedVendors : []);
+
+//   const resolvedAmountLabel =
+//     amountLabel ?? (invoice ? "Approved Amount" : "Amount");
+
+//   const resolvedPartyLabel =
+//     partyLabel ?? (invoice ? "Approved Vendors" : "Payee");
+
+//   const resolvedInitialPaymentMethod =
+//     initialPaymentMethod ?? (invoice ? "bank_transfer" : "cash");
+
+//   const resolvedAmountReadOnly = amountReadOnly ?? !!invoice;
+
+//   const resolvedAccounts = useMemo(() => {
+//     const map = new Map<string, PaymentAccount>();
+
+//     [...storedAccounts, ...accounts].forEach((acc) => {
+//       if (!acc?.id) return;
+//       map.set(acc.id, acc);
+//     });
+
+//     return Array.from(map.values()).filter((acc) => acc.isActive !== false);
+//   }, [storedAccounts, accounts]);
+
+//   const defaultInvoiceBuildUpdateData = ({
+//     formData,
+//     receiptUrl,
+//     selectedAccount,
+//     actor,
+//   }: PaymentReleaseSubmitArgs<InvoiceRequest>) => {
+//     const paymentDetails: any = {
+//       paymentMethod: formData.paymentMethod,
+//       amount: Number(formData.amount),
+//       vendors: invoiceApprovedVendors,
+//       transactionReference: formData.transactionReference,
+//       bankReceiptUrl: receiptUrl,
+//       paymentNotes: formData.paymentNotes,
+//       releasedBy: actor.profileId || actor.uid,
+//       releasedByName: actor.displayName || actor.email || "Unknown",
+//       releasedAt: serverTimestamp(),
+//     };
+
+//     if (formData.chequeNumber) {
+//       paymentDetails.chequeNumber = formData.chequeNumber;
+//     }
+
+//     if (selectedAccount) {
+//       paymentDetails.selectedAccount = selectedAccount;
+//     }
+
+//     return {
+//       status: "payment_released",
+//       paymentDetails,
+//     };
+//   };
+
+//   const [formData, setFormData] = useState<PaymentReleaseFormValues>({
+//     paymentMethod: resolvedInitialPaymentMethod,
 //     selectedAccountId: "",
-//     amount: "",
-//     vendor: "",
+//     amount: String(resolvedAmount || 0),
 //     chequeNumber: "",
 //     transactionReference: "",
 //     paymentNotes: "",
 //   });
 
+//   useEffect(() => {
+//     if (!isOpen) return;
 
-//   async function uploadToCloudinary(file: File) {
-//     if (!file) return "";
+//     setFormData({
+//       paymentMethod: resolvedInitialPaymentMethod,
+//       selectedAccountId: "",
+//       amount: String(resolvedAmount || 0),
+//       chequeNumber: "",
+//       transactionReference: "",
+//       paymentNotes: "",
+//     });
 
-//     // const CLOUD_NAME = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-//     // const UPLOAD_PRESET = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
-
-//     const CLOUD_NAME = import.meta.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
-//     const UPLOAD_PRESET = import.meta.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
-
-//     if (!CLOUD_NAME || !UPLOAD_PRESET) {
-//       console.error("❌ Cloudinary env missing");
-//       return "";
-//     }
-
-//     const form = new FormData();
-//     form.append("file", file);
-//     form.append("upload_preset", UPLOAD_PRESET);
-
-//     try {
-//       const res = await fetch(
-//         `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`,
-//         {
-//           method: "POST",
-//           body: form,
-//         }
-//       );
-
-//       const data = await res.json();
-
-//       console.log("✅ Cloudinary Response:", data);
-
-//       return data.secure_url || "";
-//     } catch (err) {
-//       console.error("❌ Cloudinary upload failed:", err);
-//       return "";
-//     }
-//   }
+//     setSelectedAccount(null);
+//     setReceiptFile(null);
+//   }, [isOpen, resolvedAmount, resolvedInitialPaymentMethod]);
 
 //   useEffect(() => {
-//     if (!invoice) return;
+//     let mounted = true;
 
-//     const lineItems = (invoice as any).lineItems || [];
+//     async function loadAccounts() {
+//       try {
+//         setAccountsLoading(true);
+//         const rows = await fetchPaymentAccounts();
+//         if (mounted) {
+//           setStoredAccounts(rows);
+//         }
+//       } catch (error) {
+//         console.error("Failed to load payment accounts:", error);
+//         if (mounted) {
+//           toast({
+//             title: "Error",
+//             description: "Failed to load payment accounts",
+//             variant: "destructive",
+//           });
+//         }
+//       } finally {
+//         if (mounted) {
+//           setAccountsLoading(false);
+//         }
+//       }
+//     }
 
-//     // Filter approved items
-//     const approvedItems = lineItems.filter((item: any) => item.status === "approved");
+//     if (isOpen) {
+//       loadAccounts();
+//     }
 
-//     // Calculate approved total
-//     const approvedTotal = approvedItems.reduce((sum: number, item: any) => {
-//       const qty = item.units || 0;
-//       const rate = item.unitRate || 0;
-//       const tax = item.tax || 0;
-//       const total = item.total || qty * rate + tax;
-//       return sum + total;
-//     }, 0);
-
-//     // Collect vendors from approved items (remove duplicates)
-//     const approvedVendors = [...new Set(approvedItems.map((item: any) => item.vendor))] as string[];
-
-//     setFormData((prev) => ({
-//       ...prev,
-//       amount: approvedTotal.toString(),
-//       vendor: "", // clear single field
-//     }));
-
-//     setSelectedVendors(approvedVendors); // store as array
-//   }, [invoice]);
+//     return () => {
+//       mounted = false;
+//     };
+//   }, [isOpen, toast]);
 
 //   async function handleSubmit(e: React.FormEvent) {
 //     e.preventDefault();
 
-//     if (!userProfile || !invoice) {
+//     if (!resolvedContext) {
 //       toast({
 //         title: "Error",
-//         description: "Invalid request",
+//         description: "No record selected",
 //         variant: "destructive",
 //       });
 //       return;
 //     }
 
-//     if (formData.paymentMethod === "check" && !formData.chequeNumber) {
+//     if (!formData.paymentMethod) {
 //       toast({
 //         title: "Error",
-//         description: "Please enter cheque number",
+//         description: "Please select a payment method",
 //         variant: "destructive",
 //       });
 //       return;
+//     }
+
+//     if (!formData.amount || Number(formData.amount) <= 0) {
+//       toast({
+//         title: "Error",
+//         description: "Please enter a valid amount",
+//         variant: "destructive",
+//       });
+//       return;
+//     }
+
+//     if (formData.paymentMethod === "cheque") {
+//       if (!formData.selectedAccountId) {
+//         toast({
+//           title: "Error",
+//           description: "Please select an account",
+//           variant: "destructive",
+//         });
+//         return;
+//       }
+
+//       if (!formData.chequeNumber) {
+//         toast({
+//           title: "Error",
+//           description: "Please enter cheque number",
+//           variant: "destructive",
+//         });
+//         return;
+//       }
 //     }
 
 //     try {
 //       setLoading(true);
 
-//       let receiptUrl = "";
-//       if (receiptFile) {
-//         receiptUrl = await uploadToCloudinary(receiptFile);
-//       }
-
-//       const paymentDetailsData: any = {
-//         paymentMethod: formData.paymentMethod,
-//         amount: parseFloat(formData.amount),
-//         vendor: formData.vendor,
-//         transactionReference: formData.transactionReference,
-//         bankReceiptUrl: receiptUrl,
-//         paymentNotes: formData.paymentNotes,
-//         releasedBy: userProfile.id,
-//         releasedAt: serverTimestamp(),
-//       };
-
-//       // Only add non-empty fields
-//       if (formData.chequeNumber) {
-//         paymentDetailsData.chequeNumber = formData.chequeNumber;
-//       }
-//       if (selectedAccount) {
-//         paymentDetailsData.selectedAccount = selectedAccount;
-//       }
-
-//       await updateDoc(
-//         doc(db, "Panels", "IEDGE-SYSTEM", "invoiceRequests", invoice.id),
-//         {
-//           status: "payment_released",
-//           paymentDetails: paymentDetailsData,
-//           updatedAt: serverTimestamp(),
-//         }
-//       );
+//       await releasePayment({
+//         docPath: resolvedDocPath,
+//         context: resolvedContext as any,
+//         formData,
+//         receiptFile,
+//         selectedAccount,
+//         actor: {
+//           uid: currentUser?.uid,
+//           email: currentUser?.email,
+//           displayName: userProfile?.displayName || currentUser?.email,
+//           profileId: userProfile?.id,
+//         },
+//         buildUpdateData: (buildUpdateData ||
+//           defaultInvoiceBuildUpdateData) as any,
+//       });
 
 //       toast({
 //         title: "Success",
 //         description: "Payment released successfully",
 //       });
 
-//       setFormData({
-//         paymentMethod: "",
-//         selectedAccountId: "",
-//         amount: "",
-//         vendor: "",
-//         chequeNumber: "",
-//         transactionReference: "",
-//         paymentNotes: "",
-//       });
-//       setReceiptFile(null);
 //       onSuccess();
+//       onClose();
 //     } catch (error: any) {
 //       console.error("Failed to release payment:", error);
 //       toast({
 //         title: "Error",
-//         description: error.message || "Failed to release payment",
+//         description: error?.message || "Failed to release payment",
 //         variant: "destructive",
 //       });
 //     } finally {
@@ -199,134 +345,149 @@
 //     }
 //   }
 
-//   if (!invoice) return null;
-
 //   return (
 //     <Dialog open={isOpen} onOpenChange={onClose}>
 //       <DialogContent className="max-w-2xl">
 //         <DialogHeader>
-//           <DialogTitle>Release Payment</DialogTitle>
+//           <DialogTitle>{title}</DialogTitle>
 //         </DialogHeader>
 
-//         {/* Invoice Summary */}
-//         <div className="bg-muted p-4 rounded-lg mb-6">
-//           <h4 className="font-medium text-foreground mb-2">Budget Details</h4>
-//           <div className="grid grid-cols-2 gap-4 text-sm">
+//         <div className="bg-muted p-4 rounded-lg mb-4">
+//           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
 //             <div>
-//               <span className="text-muted-foreground">Request ID:</span>
-//               <span className="text-foreground ml-2">{(invoice as any).requestId}</span>
-//             </div>
-//             <div>
-//               <span className="text-muted-foreground">Client:</span>
-//               <span className="text-foreground ml-2">{(invoice as any).clientName || "-"}</span>
-//             </div>
-//             <div>
-//               <span className="text-muted-foreground">Amount:</span>
-//               <span className="text-foreground ml-2 font-semibold">
-//                 Rs {((invoice as any).totalAmount || 0).toLocaleString()}
+//               <span className="text-muted-foreground">
+//                 {resolvedAmountLabel}:
+//               </span>
+//               <span className="ml-2 font-semibold">
+//                 Rs {Number(resolvedAmount || 0).toLocaleString()}
 //               </span>
 //             </div>
+
 //             <div>
-//               <span className="text-muted-foreground">Status:</span>
-//               <span className="text-foreground ml-2">{invoice.status}</span>
+//               <span className="text-muted-foreground">
+//                 {resolvedPartyLabel}:
+//               </span>
+//               <span className="ml-2">
+//                 {resolvedParties.length ? resolvedParties.join(", ") : "-"}
+//               </span>
 //             </div>
 //           </div>
 //         </div>
 
-//         <form onSubmit={handleSubmit} className="space-y-6">
-//           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-
-//             <div>
-//               <Label htmlFor="amount">Approved Amount</Label>
-//               <Input
-//                 id="amount"
-//                 type="number"
-//                 value={formData.amount}
-//                 readOnly
-//                 className="bg-muted"
-//               />
-//             </div>
-   
-//             <div>
-//               <Label>Approved Vendors</Label>
-//               <div className="space-y-2">
-//                 {selectedVendors.length === 0 && (
-//                   <span className="text-muted-foreground">No approved vendors</span>
-//                 )}
-//                 {selectedVendors.map((vendor, idx) => (
-//                   <Input
-//                     key={idx}
-//                     value={vendor}
-//                     readOnly
-//                     className="bg-muted"
-//                   />
-//                 ))}
-//               </div>
-//             </div>
+//         <form onSubmit={handleSubmit} className="space-y-5">
+//           <div>
+//             <Label htmlFor="amount">Release Amount</Label>
+//             <Input
+//               id="amount"
+//               type="number"
+//               value={formData.amount}
+//               readOnly={resolvedAmountReadOnly}
+//               className={resolvedAmountReadOnly ? "bg-muted" : ""}
+//               onChange={(e) =>
+//                 setFormData((prev) => ({ ...prev, amount: e.target.value }))
+//               }
+//             />
 //           </div>
 
 //           <div>
 //             <Label htmlFor="paymentMethod">Payment Method</Label>
 //             <Select
 //               value={formData.paymentMethod}
-//               onValueChange={(value) =>
-//                 setFormData({ ...formData, paymentMethod: value })
+//               onValueChange={(value: any) =>
+//                 setFormData((prev) => ({ ...prev, paymentMethod: value }))
 //               }
 //             >
 //               <SelectTrigger>
 //                 <SelectValue placeholder="Select payment method" />
 //               </SelectTrigger>
 //               <SelectContent>
+//                 <SelectItem value="cash">Cash</SelectItem>
 //                 <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-//                 <SelectItem value="check">Cheque</SelectItem>
 //                 <SelectItem value="wire">Online Transfer</SelectItem>
+//                 {allowCheque && <SelectItem value="cheque">Cheque</SelectItem>}
 //               </SelectContent>
 //             </Select>
 //           </div>
 
-
-//           {/* Account dropdown for Cheque */}
-//           {formData.paymentMethod === "check" && (
+//           {formData.paymentMethod === "cheque" && allowCheque && (
 //             <>
 //               <div>
 //                 <Label htmlFor="account">Select Account</Label>
 //                 <Select
 //                   value={formData.selectedAccountId}
 //                   onValueChange={(value) => {
-//                     setFormData({ ...formData, selectedAccountId: value });
-//                     const account = accounts.find(acc => acc.id === value);
+//                     const account =
+//                       resolvedAccounts.find((acc) => acc.id === value) || null;
+
 //                     setSelectedAccount(account);
+//                     setFormData((prev) => ({
+//                       ...prev,
+//                       selectedAccountId: value,
+//                     }));
 //                   }}
 //                 >
-//                   <SelectTrigger data-testid="select-account">
-//                     <SelectValue placeholder="Select account" />
+//                   <SelectTrigger>
+//                     <SelectValue
+//                       placeholder={
+//                         accountsLoading
+//                           ? "Loading accounts..."
+//                           : "Select account"
+//                       }
+//                     />
 //                   </SelectTrigger>
 //                   <SelectContent>
-//                     <SelectItem value="iedge">iEDGE</SelectItem>
-//                     <SelectItem value="iedge-travel">IEDGE TRAVEL & TOURS (PRIVATE) LIMITED</SelectItem>
+//                     {resolvedAccounts.length === 0 ? (
+//                       <SelectItem value="__no_accounts__" disabled>
+//                         No active accounts found
+//                       </SelectItem>
+//                     ) : (
+//                       resolvedAccounts.map((account) => (
+//                         <SelectItem key={account.id} value={account.id}>
+//                           {account.accountName || account.id}
+//                         </SelectItem>
+//                       ))
+//                     )}
 //                   </SelectContent>
 //                 </Select>
 //               </div>
 
 //               {selectedAccount && (
 //                 <div className="bg-muted p-4 rounded-lg">
-//                   <h4 className="font-medium text-foreground mb-2">Account Information</h4>
+//                   <h4 className="font-medium text-foreground mb-2">
+//                     Account Information
+//                   </h4>
 //                   <div className="grid grid-cols-2 gap-4 text-sm">
 //                     <div>
-//                       <span className="text-muted-foreground">Account Name:</span>
-//                       <span className="text-foreground ml-2">{selectedAccount.accountName}</span>
+//                       <span className="text-muted-foreground">
+//                         Account Name:
+//                       </span>
+//                       <span className="text-foreground ml-2">
+//                         {selectedAccount.accountName || "-"}
+//                       </span>
 //                     </div>
 //                     <div>
-//                       <span className="text-muted-foreground">Account Number:</span>
-//                       <span className="text-foreground ml-2">{selectedAccount.accountNumber}</span>
+//                       <span className="text-muted-foreground">
+//                         Account Number:
+//                       </span>
+//                       <span className="text-foreground ml-2">
+//                         {selectedAccount.accountNumber || "-"}
+//                       </span>
 //                     </div>
 //                     <div>
 //                       <span className="text-muted-foreground">Bank:</span>
-//                       <span className="text-foreground ml-2">{selectedAccount.bankName}</span>
+//                       <span className="text-foreground ml-2">
+//                         {selectedAccount.bankName || "-"}
+//                       </span>
 //                     </div>
 //                     <div>
 //                       <span className="text-muted-foreground">Balance:</span>
-//                       <span className="text-foreground ml-2">${selectedAccount.balance?.toLocaleString() || '0.00'}</span>
+//                       <span className="text-foreground ml-2">
+//                         {(
+//                           selectedAccount.currentBalance ??
+//                           selectedAccount.balance ??
+//                           0
+//                         ).toLocaleString()}
+//                       </span>
 //                     </div>
 //                   </div>
 //                 </div>
@@ -338,55 +499,48 @@
 //                   id="chequeNumber"
 //                   value={formData.chequeNumber}
 //                   onChange={(e) =>
-//                     setFormData({ ...formData, chequeNumber: e.target.value })
+//                     setFormData((prev) => ({
+//                       ...prev,
+//                       chequeNumber: e.target.value,
+//                     }))
 //                   }
 //                   placeholder="Enter cheque number"
-//                   required
-//                   data-testid="input-cheque-number"
 //                 />
-//               </div>
-
-//               <div className="flex justify-end">
-//                 <Button
-//                   type="button"
-//                   variant="outline"
-//                   size="sm"
-//                   onClick={() => {
-//                     // This would open a modal to add new cheque account details
-//                     toast({
-//                       title: "Add New Account",
-//                       description: "Navigate to Accounts > Add New to create a new cheque account",
-//                     });
-//                   }}
-//                   data-testid="button-add-new-cheque"
-//                 >
-//                   <i className="fas fa-plus mr-2"></i>
-//                   Add New Cheque Detail
-//                 </Button>
 //               </div>
 //             </>
 //           )}
 
 //           <div>
-//             <Label htmlFor="transactionReference">Bank Transaction Reference</Label>
+//             <Label htmlFor="transactionReference">Transaction Reference</Label>
 //             <Input
 //               id="transactionReference"
 //               value={formData.transactionReference}
-//               onChange={(e) => setFormData({ ...formData, transactionReference: e.target.value })}
+//               onChange={(e) =>
+//                 setFormData((prev) => ({
+//                   ...prev,
+//                   transactionReference: e.target.value,
+//                 }))
+//               }
 //               placeholder="Enter transaction reference"
-//               required
 //             />
 //           </div>
 
-//           <div>
-//             <Label htmlFor="receipt">Upload Bank Cheque/Receipt (Optional)</Label>
-//             <Input
-//               type="file"
-//               accept=".jpg,.jpeg,.png,.pdf"
-//               onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
-//             />
-//             {receiptFile && <p className="text-green-600 mt-1">{receiptFile.name} selected</p>}
-//           </div>
+//           {allowReceiptUpload && (
+//             <div>
+//               <Label htmlFor="receipt">Upload Receipt / Cheque Copy</Label>
+//               <Input
+//                 id="receipt"
+//                 type="file"
+//                 accept=".jpg,.jpeg,.png,.pdf"
+//                 onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
+//               />
+//               {receiptFile && (
+//                 <p className="text-green-600 mt-1">
+//                   {receiptFile.name} selected
+//                 </p>
+//               )}
+//             </div>
+//           )}
 
 //           <div>
 //             <Label htmlFor="paymentNotes">Payment Notes</Label>
@@ -394,14 +548,21 @@
 //               id="paymentNotes"
 //               rows={3}
 //               value={formData.paymentNotes}
-//               onChange={(e) => setFormData({ ...formData, paymentNotes: e.target.value })}
+//               onChange={(e) =>
+//                 setFormData((prev) => ({
+//                   ...prev,
+//                   paymentNotes: e.target.value,
+//                 }))
+//               }
 //               placeholder="Add any notes..."
 //             />
 //           </div>
 
-//           <div className="flex justify-end space-x-3">
-//             <Button type="button" variant="outline" onClick={onClose}>Cancel</Button>
-//             <Button type="submit" disabled={loading} className="bg-green-600 hover:bg-green-700">
+//           <div className="flex justify-end gap-3">
+//             <Button type="button" variant="outline" onClick={onClose}>
+//               Cancel
+//             </Button>
+//             <Button type="submit" disabled={loading}>
 //               {loading ? "Releasing..." : "Release Payment"}
 //             </Button>
 //           </div>
@@ -411,9 +572,718 @@
 //   );
 // }
 
+// import { useEffect, useMemo, useState } from "react";
+// import { serverTimestamp } from "firebase/firestore";
+// import { useAuth } from "@/contexts/AuthContext";
+// import { releasePayment } from "@/lib/payments/releasePayment";
+// import { fetchPaymentAccounts } from "@/lib/payments/paymentAccounts";
+// import {
+//   PaymentAccount,
+//   PaymentReleaseFormValues,
+//   PaymentReleaseSubmitArgs,
+// } from "@/lib/payments/types";
+// import { InvoiceRequest } from "@shared/schema";
+// import {
+//   Dialog,
+//   DialogContent,
+//   DialogHeader,
+//   DialogTitle,
+// } from "@/components/ui/dialog";
+// import { Button } from "@/components/ui/button";
+// import { Input } from "@/components/ui/input";
+// import { Label } from "@/components/ui/label";
+// import {
+//   Select,
+//   SelectContent,
+//   SelectItem,
+//   SelectTrigger,
+//   SelectValue,
+// } from "@/components/ui/select";
+// import { Textarea } from "@/components/ui/textarea";
+// import { useToast } from "@/hooks/use-toast";
 
-import { useEffect, useMemo, useState } from "react";
+// interface PaymentReleaseModalProps<T = any> {
+//   isOpen: boolean;
+//   onClose: () => void;
+//   onSuccess: () => void;
+//   title?: string;
+
+//   invoice?: InvoiceRequest | null;
+
+//   context?: T | null;
+//   docPath?: ((context: T) => string[]) | string[];
+//   buildUpdateData?: (
+//     args: PaymentReleaseSubmitArgs<T>
+//   ) => Record<string, any>;
+
+//   amount?: number;
+//   amountLabel?: string;
+//   partyLabel?: string;
+//   parties?: string[];
+
+//   accounts?: PaymentAccount[];
+//   allowCheque?: boolean;
+//   allowReceiptUpload?: boolean;
+//   initialPaymentMethod?: "cash" | "cheque" | "bank_transfer" | "wire";
+//   amountReadOnly?: boolean;
+// }
+
+// type ExtendedPaymentReleaseFormValues = PaymentReleaseFormValues & {
+//   chequeNumbers: string[];
+// };
+
+// function cleanChequeNumbers(values: string[] = []) {
+//   return values.map((value) => value.trim()).filter(Boolean);
+// }
+
+// export default function PaymentReleaseModal<T = any>({
+//   isOpen,
+//   onClose,
+//   onSuccess,
+//   title = "Release Payment",
+//   invoice = null,
+
+//   context = null,
+//   docPath,
+//   buildUpdateData,
+
+//   amount,
+//   amountLabel,
+//   partyLabel,
+//   parties,
+
+//   accounts = [],
+//   allowCheque = true,
+//   allowReceiptUpload = true,
+//   initialPaymentMethod,
+//   amountReadOnly,
+// }: PaymentReleaseModalProps<T>) {
+//   const { userProfile, currentUser } = useAuth();
+//   const { toast } = useToast();
+
+//   const [loading, setLoading] = useState(false);
+//   const [accountsLoading, setAccountsLoading] = useState(false);
+//   const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
+//   const [selectedAccount, setSelectedAccount] = useState<PaymentAccount | null>(
+//     null
+//   );
+//   const [storedAccounts, setStoredAccounts] = useState<PaymentAccount[]>([]);
+
+//   const approvedInvoiceItems = useMemo(() => {
+//     const items = Array.isArray((invoice as any)?.lineItems)
+//       ? (invoice as any).lineItems
+//       : [];
+
+//     return items.filter((item: any) => item?.status === "approved");
+//   }, [invoice]);
+
+//   const invoiceApprovedAmount = useMemo(() => {
+//     return approvedInvoiceItems.reduce((sum: number, item: any) => {
+//       const qty = Number(item?.units || 0);
+//       const rate = Number(item?.unitRate || 0);
+//       const tax = Number(item?.tax || 0);
+//       const total = Number(item?.total ?? qty * rate + tax);
+//       return sum + total;
+//     }, 0);
+//   }, [approvedInvoiceItems]);
+
+//   const invoiceApprovedVendors = useMemo(() => {
+//     return [
+//       ...new Set(
+//         approvedInvoiceItems
+//           .map((item: any) => String(item?.vendor || "").trim())
+//           .filter(Boolean)
+//       ),
+//     ] as string[];
+//   }, [approvedInvoiceItems]);
+
+//   const resolvedContext = (context ?? invoice ?? null) as
+//     | T
+//     | InvoiceRequest
+//     | null;
+
+//   const resolvedDocPath = useMemo(() => {
+//     if (docPath && resolvedContext) {
+//       return typeof docPath === "function"
+//         ? docPath(resolvedContext as T)
+//         : docPath;
+//     }
+
+//     if ((invoice as any)?.id) {
+//       return [
+//         "Panels",
+//         "IEDGE-SYSTEM",
+//         "invoiceRequests",
+//         (invoice as any).id,
+//       ];
+//     }
+
+//     return [];
+//   }, [docPath, resolvedContext, invoice]);
+
+//   const resolvedAmount = amount ?? (invoice ? invoiceApprovedAmount : 0);
+
+//   const resolvedParties = parties ?? (invoice ? invoiceApprovedVendors : []);
+
+//   const resolvedAmountLabel =
+//     amountLabel ?? (invoice ? "Approved Amount" : "Amount");
+
+//   const resolvedPartyLabel =
+//     partyLabel ?? (invoice ? "Approved Vendors" : "Payee");
+
+//   const resolvedInitialPaymentMethod =
+//     initialPaymentMethod ?? (invoice ? "bank_transfer" : "cash");
+
+//   const resolvedAmountReadOnly = amountReadOnly ?? !!invoice;
+
+//   const resolvedAccounts = useMemo(() => {
+//     const map = new Map<string, PaymentAccount>();
+
+//     [...storedAccounts, ...accounts].forEach((acc) => {
+//       if (!acc?.id) return;
+//       map.set(acc.id, acc);
+//     });
+
+//     return Array.from(map.values()).filter((acc) => acc.isActive !== false);
+//   }, [storedAccounts, accounts]);
+
+//   const defaultInvoiceBuildUpdateData = (
+//     args: PaymentReleaseSubmitArgs<InvoiceRequest>
+//   ) => {
+//     const { formData, receiptUrl, selectedAccount, actor } = args;
+
+//     const extendedFormData = formData as ExtendedPaymentReleaseFormValues;
+
+//     const chequeNumbers = cleanChequeNumbers(
+//       extendedFormData.chequeNumbers?.length
+//         ? extendedFormData.chequeNumbers
+//         : [extendedFormData.chequeNumber || ""]
+//     );
+
+//     const receiptUrls = Array.isArray((args as any).receiptUrls)
+//       ? (args as any).receiptUrls
+//       : receiptUrl
+//         ? [receiptUrl]
+//         : [];
+
+//     const paymentDetails: any = {
+//       paymentMethod: extendedFormData.paymentMethod,
+//       amount: Number(extendedFormData.amount),
+//       vendors: invoiceApprovedVendors,
+//       transactionReference: extendedFormData.transactionReference,
+//       bankReceiptUrl: receiptUrls[0] || receiptUrl || "",
+//       bankReceiptUrls: receiptUrls,
+//       paymentNotes: extendedFormData.paymentNotes,
+//       releasedBy: actor.profileId || actor.uid,
+//       releasedByName: actor.displayName || actor.email || "Unknown",
+//       releasedAt: serverTimestamp(),
+//     };
+
+//     if (chequeNumbers.length > 0) {
+//       paymentDetails.chequeNumber = chequeNumbers[0];
+//       paymentDetails.chequeNumbers = chequeNumbers;
+//     }
+
+//     if (selectedAccount) {
+//       paymentDetails.selectedAccount = selectedAccount;
+//     }
+
+//     return {
+//       status: "payment_released",
+//       paymentDetails,
+//     };
+//   };
+
+//   const [formData, setFormData] = useState<ExtendedPaymentReleaseFormValues>({
+//     paymentMethod: resolvedInitialPaymentMethod,
+//     selectedAccountId: "",
+//     amount: String(resolvedAmount || 0),
+//     chequeNumber: "",
+//     chequeNumbers: [""],
+//     transactionReference: "",
+//     paymentNotes: "",
+//   });
+
+//   useEffect(() => {
+//     if (!isOpen) return;
+
+//     setFormData({
+//       paymentMethod: resolvedInitialPaymentMethod,
+//       selectedAccountId: "",
+//       amount: String(resolvedAmount || 0),
+//       chequeNumber: "",
+//       chequeNumbers: [""],
+//       transactionReference: "",
+//       paymentNotes: "",
+//     });
+
+//     setSelectedAccount(null);
+//     setReceiptFiles([]);
+//   }, [isOpen, resolvedAmount, resolvedInitialPaymentMethod]);
+
+//   useEffect(() => {
+//     let mounted = true;
+
+//     async function loadAccounts() {
+//       try {
+//         setAccountsLoading(true);
+//         const rows = await fetchPaymentAccounts();
+//         if (mounted) {
+//           setStoredAccounts(rows);
+//         }
+//       } catch (error) {
+//         console.error("Failed to load payment accounts:", error);
+//         if (mounted) {
+//           toast({
+//             title: "Error",
+//             description: "Failed to load payment accounts",
+//             variant: "destructive",
+//           });
+//         }
+//       } finally {
+//         if (mounted) {
+//           setAccountsLoading(false);
+//         }
+//       }
+//     }
+
+//     if (isOpen) {
+//       loadAccounts();
+//     }
+
+//     return () => {
+//       mounted = false;
+//     };
+//   }, [isOpen, toast]);
+
+//   const handleChequeNumberChange = (index: number, value: string) => {
+//     setFormData((prev) => {
+//       const updatedChequeNumbers = [...prev.chequeNumbers];
+//       updatedChequeNumbers[index] = value;
+
+//       return {
+//         ...prev,
+//         chequeNumbers: updatedChequeNumbers,
+//         chequeNumber: updatedChequeNumbers[0] || "",
+//       };
+//     });
+//   };
+
+//   const handleAddChequeNumber = () => {
+//     setFormData((prev) => ({
+//       ...prev,
+//       chequeNumbers: [...prev.chequeNumbers, ""],
+//     }));
+//   };
+
+//   const handleRemoveChequeNumber = (index: number) => {
+//     setFormData((prev) => {
+//       const updatedChequeNumbers = prev.chequeNumbers.filter(
+//         (_, chequeIndex) => chequeIndex !== index
+//       );
+
+//       const safeChequeNumbers =
+//         updatedChequeNumbers.length > 0 ? updatedChequeNumbers : [""];
+
+//       return {
+//         ...prev,
+//         chequeNumbers: safeChequeNumbers,
+//         chequeNumber: safeChequeNumbers[0] || "",
+//       };
+//     });
+//   };
+
+//   const handleReceiptFilesChange = (
+//     event: React.ChangeEvent<HTMLInputElement>
+//   ) => {
+//     const files = Array.from(event.target.files || []);
+//     setReceiptFiles(files);
+//   };
+
+//   async function handleSubmit(e: React.FormEvent) {
+//     e.preventDefault();
+
+//     if (!resolvedContext) {
+//       toast({
+//         title: "Error",
+//         description: "No record selected",
+//         variant: "destructive",
+//       });
+//       return;
+//     }
+
+//     if (!formData.paymentMethod) {
+//       toast({
+//         title: "Error",
+//         description: "Please select a payment method",
+//         variant: "destructive",
+//       });
+//       return;
+//     }
+
+//     if (!formData.amount || Number(formData.amount) <= 0) {
+//       toast({
+//         title: "Error",
+//         description: "Please enter a valid amount",
+//         variant: "destructive",
+//       });
+//       return;
+//     }
+
+//     const normalizedChequeNumbers = cleanChequeNumbers(formData.chequeNumbers);
+
+//     if (formData.paymentMethod === "cheque") {
+//       if (!formData.selectedAccountId) {
+//         toast({
+//           title: "Error",
+//           description: "Please select an account",
+//           variant: "destructive",
+//         });
+//         return;
+//       }
+
+//       if (normalizedChequeNumbers.length === 0) {
+//         toast({
+//           title: "Error",
+//           description: "Please enter at least one cheque number",
+//           variant: "destructive",
+//         });
+//         return;
+//       }
+//     }
+
+//     const normalizedFormData: ExtendedPaymentReleaseFormValues = {
+//       ...formData,
+//       chequeNumber: normalizedChequeNumbers[0] || "",
+//       chequeNumbers: normalizedChequeNumbers,
+//     };
+
+//     try {
+//       setLoading(true);
+
+//       await releasePayment({
+//         docPath: resolvedDocPath,
+//         context: resolvedContext as any,
+//         formData: normalizedFormData as any,
+
+//         // Old support: existing releasePayment can still use this first file.
+//         receiptFile: receiptFiles[0] || null,
+
+//         // New support: update releasePayment to upload these if not already supported.
+//         receiptFiles,
+
+//         selectedAccount,
+//         actor: {
+//           uid: currentUser?.uid,
+//           email: currentUser?.email,
+//           displayName: userProfile?.displayName || currentUser?.email,
+//           profileId: userProfile?.id,
+//         },
+//         buildUpdateData: (buildUpdateData ||
+//           defaultInvoiceBuildUpdateData) as any,
+//       } as any);
+
+//       toast({
+//         title: "Success",
+//         description: "Payment released successfully",
+//       });
+
+//       onSuccess();
+//       onClose();
+//     } catch (error: any) {
+//       console.error("Failed to release payment:", error);
+//       toast({
+//         title: "Error",
+//         description: error?.message || "Failed to release payment",
+//         variant: "destructive",
+//       });
+//     } finally {
+//       setLoading(false);
+//     }
+//   }
+
+//   return (
+//     <Dialog open={isOpen} onOpenChange={onClose}>
+//       <DialogContent className="max-w-2xl">
+//         <DialogHeader>
+//           <DialogTitle>{title}</DialogTitle>
+//         </DialogHeader>
+
+//         <div className="bg-muted p-4 rounded-lg mb-4">
+//           <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+//             <div>
+//               <span className="text-muted-foreground">
+//                 {resolvedAmountLabel}:
+//               </span>
+//               <span className="ml-2 font-semibold">
+//                 Rs {Number(resolvedAmount || 0).toLocaleString()}
+//               </span>
+//             </div>
+
+//             <div>
+//               <span className="text-muted-foreground">
+//                 {resolvedPartyLabel}:
+//               </span>
+//               <span className="ml-2">
+//                 {resolvedParties.length ? resolvedParties.join(", ") : "-"}
+//               </span>
+//             </div>
+//           </div>
+//         </div>
+
+//         <form onSubmit={handleSubmit} className="space-y-5">
+//           <div>
+//             <Label htmlFor="amount">Release Amount</Label>
+//             <Input
+//               id="amount"
+//               type="number"
+//               value={formData.amount}
+//               readOnly={resolvedAmountReadOnly}
+//               className={resolvedAmountReadOnly ? "bg-muted" : ""}
+//               onChange={(e) =>
+//                 setFormData((prev) => ({ ...prev, amount: e.target.value }))
+//               }
+//             />
+//           </div>
+
+//           <div>
+//             <Label htmlFor="paymentMethod">Payment Method</Label>
+//             <Select
+//               value={formData.paymentMethod}
+//               onValueChange={(value: any) =>
+//                 setFormData((prev) => ({
+//                   ...prev,
+//                   paymentMethod: value,
+//                   chequeNumbers:
+//                     value === "cheque" && prev.chequeNumbers.length === 0
+//                       ? [""]
+//                       : prev.chequeNumbers,
+//                 }))
+//               }
+//             >
+//               <SelectTrigger>
+//                 <SelectValue placeholder="Select payment method" />
+//               </SelectTrigger>
+//               <SelectContent>
+//                 <SelectItem value="cash">Cash</SelectItem>
+//                 <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
+//                 <SelectItem value="wire">Online Transfer</SelectItem>
+//                 {allowCheque && <SelectItem value="cheque">Cheque</SelectItem>}
+//               </SelectContent>
+//             </Select>
+//           </div>
+
+//           {formData.paymentMethod === "cheque" && allowCheque && (
+//             <>
+//               <div>
+//                 <Label htmlFor="account">Select Account</Label>
+//                 <Select
+//                   value={formData.selectedAccountId}
+//                   onValueChange={(value) => {
+//                     const account =
+//                       resolvedAccounts.find((acc) => acc.id === value) || null;
+
+//                     setSelectedAccount(account);
+//                     setFormData((prev) => ({
+//                       ...prev,
+//                       selectedAccountId: value,
+//                     }));
+//                   }}
+//                 >
+//                   <SelectTrigger>
+//                     <SelectValue
+//                       placeholder={
+//                         accountsLoading
+//                           ? "Loading accounts..."
+//                           : "Select account"
+//                       }
+//                     />
+//                   </SelectTrigger>
+//                   <SelectContent>
+//                     {resolvedAccounts.length === 0 ? (
+//                       <SelectItem value="__no_accounts__" disabled>
+//                         No active accounts found
+//                       </SelectItem>
+//                     ) : (
+//                       resolvedAccounts.map((account) => (
+//                         <SelectItem key={account.id} value={account.id}>
+//                           {account.accountName || account.id}
+//                         </SelectItem>
+//                       ))
+//                     )}
+//                   </SelectContent>
+//                 </Select>
+//               </div>
+
+//               {selectedAccount && (
+//                 <div className="bg-muted p-4 rounded-lg">
+//                   <h4 className="font-medium text-foreground mb-2">
+//                     Account Information
+//                   </h4>
+//                   <div className="grid grid-cols-2 gap-4 text-sm">
+//                     <div>
+//                       <span className="text-muted-foreground">
+//                         Account Name:
+//                       </span>
+//                       <span className="text-foreground ml-2">
+//                         {selectedAccount.accountName || "-"}
+//                       </span>
+//                     </div>
+//                     <div>
+//                       <span className="text-muted-foreground">
+//                         Account Number:
+//                       </span>
+//                       <span className="text-foreground ml-2">
+//                         {selectedAccount.accountNumber || "-"}
+//                       </span>
+//                     </div>
+//                     <div>
+//                       <span className="text-muted-foreground">Bank:</span>
+//                       <span className="text-foreground ml-2">
+//                         {selectedAccount.bankName || "-"}
+//                       </span>
+//                     </div>
+//                     <div>
+//                       <span className="text-muted-foreground">Balance:</span>
+//                       <span className="text-foreground ml-2">
+//                         {(
+//                           selectedAccount.currentBalance ??
+//                           selectedAccount.balance ??
+//                           0
+//                         ).toLocaleString()}
+//                       </span>
+//                     </div>
+//                   </div>
+//                 </div>
+//               )}
+
+//               <div className="space-y-3">
+//                 <div className="flex items-center justify-between gap-3">
+//                   <Label>Cheque Numbers</Label>
+//                   <Button
+//                     type="button"
+//                     variant="outline"
+//                     size="sm"
+//                     onClick={handleAddChequeNumber}
+//                   >
+//                     Add Cheque
+//                   </Button>
+//                 </div>
+
+//                 {formData.chequeNumbers.map((chequeNumber, index) => (
+//                   <div key={index} className="flex items-center gap-2">
+//                     <Input
+//                       value={chequeNumber}
+//                       onChange={(e) =>
+//                         handleChequeNumberChange(index, e.target.value)
+//                       }
+//                       placeholder={`Enter cheque number ${index + 1}`}
+//                     />
+
+//                     <Button
+//                       type="button"
+//                       variant="outline"
+//                       size="sm"
+//                       onClick={() => handleRemoveChequeNumber(index)}
+//                       disabled={formData.chequeNumbers.length === 1}
+//                     >
+//                       Remove
+//                     </Button>
+//                   </div>
+//                 ))}
+//               </div>
+//             </>
+//           )}
+
+//           <div>
+//             <Label htmlFor="transactionReference">Transaction Reference</Label>
+//             <Input
+//               id="transactionReference"
+//               value={formData.transactionReference}
+//               onChange={(e) =>
+//                 setFormData((prev) => ({
+//                   ...prev,
+//                   transactionReference: e.target.value,
+//                 }))
+//               }
+//               placeholder="Enter transaction reference"
+//             />
+//           </div>
+
+//           {allowReceiptUpload && (
+//             <div>
+//               <Label htmlFor="receipt">Upload Receipt / Cheque Copies</Label>
+//               <Input
+//                 id="receipt"
+//                 type="file"
+//                 accept=".jpg,.jpeg,.png,.pdf"
+//                 multiple
+//                 onChange={handleReceiptFilesChange}
+//               />
+
+//               {receiptFiles.length > 0 && (
+//                 <div className="mt-2 space-y-1 text-sm text-green-600">
+//                   {receiptFiles.map((file, index) => (
+//                     <p key={`${file.name}-${index}`}>
+//                       {index + 1}. {file.name} selected
+//                     </p>
+//                   ))}
+//                 </div>
+//               )}
+//             </div>
+//           )}
+
+//           <div>
+//             <Label htmlFor="paymentNotes">Payment Notes</Label>
+//             <Textarea
+//               id="paymentNotes"
+//               rows={3}
+//               value={formData.paymentNotes}
+//               onChange={(e) =>
+//                 setFormData((prev) => ({
+//                   ...prev,
+//                   paymentNotes: e.target.value,
+//                 }))
+//               }
+//               placeholder="Add any notes..."
+//             />
+//           </div>
+
+//           <div className="flex justify-end gap-3">
+//             <Button type="button" variant="outline" onClick={onClose}>
+//               Cancel
+//             </Button>
+//             <Button type="submit" disabled={loading}>
+//               {loading ? "Releasing..." : "Release Payment"}
+//             </Button>
+//           </div>
+//         </form>
+//       </DialogContent>
+//     </Dialog>
+//   );
+// }
+
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type ChangeEvent,
+  type FormEvent,
+} from "react";
 import { serverTimestamp } from "firebase/firestore";
+import {
+  ArrowLeft,
+  Banknote,
+  Building2,
+  CheckCircle2,
+  CreditCard,
+  FileUp,
+  Loader2,
+  Plus,
+  ReceiptText,
+  Trash2,
+  Wallet,
+} from "lucide-react";
 import { useAuth } from "@/contexts/AuthContext";
 import { releasePayment } from "@/lib/payments/releasePayment";
 import { fetchPaymentAccounts } from "@/lib/payments/paymentAccounts";
@@ -423,12 +1293,6 @@ import {
   PaymentReleaseSubmitArgs,
 } from "@/lib/payments/types";
 import { InvoiceRequest } from "@shared/schema";
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -452,9 +1316,7 @@ interface PaymentReleaseModalProps<T = any> {
 
   context?: T | null;
   docPath?: ((context: T) => string[]) | string[];
-  buildUpdateData?: (
-    args: PaymentReleaseSubmitArgs<T>
-  ) => Record<string, any>;
+  buildUpdateData?: (args: PaymentReleaseSubmitArgs<T>) => Record<string, any>;
 
   amount?: number;
   amountLabel?: string;
@@ -466,6 +1328,50 @@ interface PaymentReleaseModalProps<T = any> {
   allowReceiptUpload?: boolean;
   initialPaymentMethod?: "cash" | "cheque" | "bank_transfer" | "wire";
   amountReadOnly?: boolean;
+}
+
+type ExtendedPaymentReleaseFormValues = PaymentReleaseFormValues & {
+  chequeNumbers: string[];
+};
+
+function cleanChequeNumbers(values: string[] = []) {
+  return values.map((value) => value.trim()).filter(Boolean);
+}
+
+function formatPKR(value: number | string | undefined | null) {
+  const numberValue =
+    typeof value === "number"
+      ? value
+      : Number(String(value || 0).replace(/,/g, "")) || 0;
+
+  return numberValue.toLocaleString("en-PK", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
+function getPaymentMethodLabel(method?: string) {
+  switch (method) {
+    case "cash":
+      return "Cash";
+    case "cheque":
+      return "Cheque";
+    case "bank_transfer":
+      return "Bank Transfer";
+    case "wire":
+      return "Online Transfer";
+    default:
+      return "Not Selected";
+  }
+}
+
+function getFileSizeLabel(bytes: number) {
+  if (!bytes) return "0 KB";
+
+  const kb = bytes / 1024;
+  if (kb < 1024) return `${kb.toFixed(1)} KB`;
+
+  return `${(kb / 1024).toFixed(1)} MB`;
 }
 
 export default function PaymentReleaseModal<T = any>({
@@ -495,9 +1401,9 @@ export default function PaymentReleaseModal<T = any>({
 
   const [loading, setLoading] = useState(false);
   const [accountsLoading, setAccountsLoading] = useState(false);
-  const [receiptFile, setReceiptFile] = useState<File | null>(null);
+  const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
   const [selectedAccount, setSelectedAccount] = useState<PaymentAccount | null>(
-    null
+    null,
   );
   const [storedAccounts, setStoredAccounts] = useState<PaymentAccount[]>([]);
 
@@ -515,6 +1421,7 @@ export default function PaymentReleaseModal<T = any>({
       const rate = Number(item?.unitRate || 0);
       const tax = Number(item?.tax || 0);
       const total = Number(item?.total ?? qty * rate + tax);
+
       return sum + total;
     }, 0);
   }, [approvedInvoiceItems]);
@@ -524,7 +1431,7 @@ export default function PaymentReleaseModal<T = any>({
       ...new Set(
         approvedInvoiceItems
           .map((item: any) => String(item?.vendor || "").trim())
-          .filter(Boolean)
+          .filter(Boolean),
       ),
     ] as string[];
   }, [approvedInvoiceItems]);
@@ -542,12 +1449,7 @@ export default function PaymentReleaseModal<T = any>({
     }
 
     if ((invoice as any)?.id) {
-      return [
-        "Panels",
-        "IEDGE-SYSTEM",
-        "invoiceRequests",
-        (invoice as any).id,
-      ];
+      return ["Panels", "IEDGE-SYSTEM", "invoiceRequests", (invoice as any).id];
     }
 
     return [];
@@ -579,26 +1481,41 @@ export default function PaymentReleaseModal<T = any>({
     return Array.from(map.values()).filter((acc) => acc.isActive !== false);
   }, [storedAccounts, accounts]);
 
-  const defaultInvoiceBuildUpdateData = ({
-    formData,
-    receiptUrl,
-    selectedAccount,
-    actor,
-  }: PaymentReleaseSubmitArgs<InvoiceRequest>) => {
+  const defaultInvoiceBuildUpdateData = (
+    args: PaymentReleaseSubmitArgs<InvoiceRequest>,
+  ) => {
+    const { formData, receiptUrl, selectedAccount, actor } = args;
+
+    const extendedFormData = formData as ExtendedPaymentReleaseFormValues;
+
+    const chequeNumbers = cleanChequeNumbers(
+      extendedFormData.chequeNumbers?.length
+        ? extendedFormData.chequeNumbers
+        : [extendedFormData.chequeNumber || ""],
+    );
+
+    const receiptUrls = Array.isArray((args as any).receiptUrls)
+      ? (args as any).receiptUrls
+      : receiptUrl
+        ? [receiptUrl]
+        : [];
+
     const paymentDetails: any = {
-      paymentMethod: formData.paymentMethod,
-      amount: Number(formData.amount),
+      paymentMethod: extendedFormData.paymentMethod,
+      amount: Number(extendedFormData.amount),
       vendors: invoiceApprovedVendors,
-      transactionReference: formData.transactionReference,
-      bankReceiptUrl: receiptUrl,
-      paymentNotes: formData.paymentNotes,
+      transactionReference: extendedFormData.transactionReference,
+      bankReceiptUrl: receiptUrls[0] || receiptUrl || "",
+      bankReceiptUrls: receiptUrls,
+      paymentNotes: extendedFormData.paymentNotes,
       releasedBy: actor.profileId || actor.uid,
       releasedByName: actor.displayName || actor.email || "Unknown",
       releasedAt: serverTimestamp(),
     };
 
-    if (formData.chequeNumber) {
-      paymentDetails.chequeNumber = formData.chequeNumber;
+    if (chequeNumbers.length > 0) {
+      paymentDetails.chequeNumber = chequeNumbers[0];
+      paymentDetails.chequeNumbers = chequeNumbers;
     }
 
     if (selectedAccount) {
@@ -611,11 +1528,12 @@ export default function PaymentReleaseModal<T = any>({
     };
   };
 
-  const [formData, setFormData] = useState<PaymentReleaseFormValues>({
+  const [formData, setFormData] = useState<ExtendedPaymentReleaseFormValues>({
     paymentMethod: resolvedInitialPaymentMethod,
     selectedAccountId: "",
     amount: String(resolvedAmount || 0),
     chequeNumber: "",
+    chequeNumbers: [""],
     transactionReference: "",
     paymentNotes: "",
   });
@@ -628,12 +1546,13 @@ export default function PaymentReleaseModal<T = any>({
       selectedAccountId: "",
       amount: String(resolvedAmount || 0),
       chequeNumber: "",
+      chequeNumbers: [""],
       transactionReference: "",
       paymentNotes: "",
     });
 
     setSelectedAccount(null);
-    setReceiptFile(null);
+    setReceiptFiles([]);
   }, [isOpen, resolvedAmount, resolvedInitialPaymentMethod]);
 
   useEffect(() => {
@@ -642,12 +1561,15 @@ export default function PaymentReleaseModal<T = any>({
     async function loadAccounts() {
       try {
         setAccountsLoading(true);
+
         const rows = await fetchPaymentAccounts();
+
         if (mounted) {
           setStoredAccounts(rows);
         }
       } catch (error) {
         console.error("Failed to load payment accounts:", error);
+
         if (mounted) {
           toast({
             title: "Error",
@@ -671,7 +1593,55 @@ export default function PaymentReleaseModal<T = any>({
     };
   }, [isOpen, toast]);
 
-  async function handleSubmit(e: React.FormEvent) {
+  const handleChequeNumberChange = (index: number, value: string) => {
+    setFormData((prev) => {
+      const updatedChequeNumbers = [...prev.chequeNumbers];
+      updatedChequeNumbers[index] = value;
+
+      return {
+        ...prev,
+        chequeNumbers: updatedChequeNumbers,
+        chequeNumber: updatedChequeNumbers[0] || "",
+      };
+    });
+  };
+
+  const handleAddChequeNumber = () => {
+    setFormData((prev) => ({
+      ...prev,
+      chequeNumbers: [...prev.chequeNumbers, ""],
+    }));
+  };
+
+  const handleRemoveChequeNumber = (index: number) => {
+    setFormData((prev) => {
+      const updatedChequeNumbers = prev.chequeNumbers.filter(
+        (_, chequeIndex) => chequeIndex !== index,
+      );
+
+      const safeChequeNumbers =
+        updatedChequeNumbers.length > 0 ? updatedChequeNumbers : [""];
+
+      return {
+        ...prev,
+        chequeNumbers: safeChequeNumbers,
+        chequeNumber: safeChequeNumbers[0] || "",
+      };
+    });
+  };
+
+  const handleReceiptFilesChange = (event: ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    setReceiptFiles(files);
+  };
+
+  const handleRemoveReceiptFile = (index: number) => {
+    setReceiptFiles((prev) =>
+      prev.filter((_, fileIndex) => fileIndex !== index),
+    );
+  };
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
     if (!resolvedContext) {
@@ -701,6 +1671,8 @@ export default function PaymentReleaseModal<T = any>({
       return;
     }
 
+    const normalizedChequeNumbers = cleanChequeNumbers(formData.chequeNumbers);
+
     if (formData.paymentMethod === "cheque") {
       if (!formData.selectedAccountId) {
         toast({
@@ -711,15 +1683,21 @@ export default function PaymentReleaseModal<T = any>({
         return;
       }
 
-      if (!formData.chequeNumber) {
+      if (normalizedChequeNumbers.length === 0) {
         toast({
           title: "Error",
-          description: "Please enter cheque number",
+          description: "Please enter at least one cheque number",
           variant: "destructive",
         });
         return;
       }
     }
+
+    const normalizedFormData: ExtendedPaymentReleaseFormValues = {
+      ...formData,
+      chequeNumber: normalizedChequeNumbers[0] || "",
+      chequeNumbers: normalizedChequeNumbers,
+    };
 
     try {
       setLoading(true);
@@ -727,8 +1705,14 @@ export default function PaymentReleaseModal<T = any>({
       await releasePayment({
         docPath: resolvedDocPath,
         context: resolvedContext as any,
-        formData,
-        receiptFile,
+        formData: normalizedFormData as any,
+
+        // Old support: existing releasePayment can still use this first file.
+        receiptFile: receiptFiles[0] || null,
+
+        // New support: update releasePayment to upload these if not already supported.
+        receiptFiles,
+
         selectedAccount,
         actor: {
           uid: currentUser?.uid,
@@ -738,7 +1722,7 @@ export default function PaymentReleaseModal<T = any>({
         },
         buildUpdateData: (buildUpdateData ||
           defaultInvoiceBuildUpdateData) as any,
-      });
+      } as any);
 
       toast({
         title: "Success",
@@ -749,6 +1733,7 @@ export default function PaymentReleaseModal<T = any>({
       onClose();
     } catch (error: any) {
       console.error("Failed to release payment:", error);
+
       toast({
         title: "Error",
         description: error?.message || "Failed to release payment",
@@ -759,229 +1744,567 @@ export default function PaymentReleaseModal<T = any>({
     }
   }
 
+  if (!isOpen) return null;
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="max-w-2xl">
-        <DialogHeader>
-          <DialogTitle>{title}</DialogTitle>
-        </DialogHeader>
+    <div className="fixed inset-0 z-50 min-h-screen overflow-y-auto bg-slate-50">
+      <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+          <div className="flex items-start gap-4">
+            <Button
+              type="button"
+              variant="outline"
+              size="icon"
+              className="mt-1 h-10 w-10 rounded-full border-slate-200 bg-white shadow-sm hover:bg-slate-50"
+              onClick={onClose}
+            >
+              <ArrowLeft className="h-4 w-4" />
+            </Button>
 
-        <div className="bg-muted p-4 rounded-lg mb-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
             <div>
-              <span className="text-muted-foreground">
-                {resolvedAmountLabel}:
-              </span>
-              <span className="ml-2 font-semibold">
-                Rs {Number(resolvedAmount || 0).toLocaleString()}
-              </span>
+              <div className="flex flex-wrap items-center gap-2">
+                <h1 className="text-2xl font-bold tracking-tight text-slate-950">
+                  {title}
+                </h1>
+
+                <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+                  Payment Release
+                </span>
+              </div>
+
+              <p className="mt-1 max-w-2xl text-sm text-slate-500">
+                Review payment information, select the payment method, attach
+                receipts, and release the approved amount.
+              </p>
             </div>
+          </div>
 
-            <div>
-              <span className="text-muted-foreground">
-                {resolvedPartyLabel}:
-              </span>
-              <span className="ml-2">
-                {resolvedParties.length ? resolvedParties.join(", ") : "-"}
-              </span>
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              variant="outline"
+              className="rounded-full border-slate-200 px-5"
+              onClick={onClose}
+              disabled={loading}
+            >
+              Cancel
+            </Button>
+
+            <Button
+              type="submit"
+              form="payment-release-form"
+              disabled={loading}
+              className="rounded-full bg-slate-950 px-6 text-white shadow-sm hover:bg-slate-800"
+            >
+              {loading ? (
+                <>
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                  Releasing...
+                </>
+              ) : (
+                <>
+                  <CheckCircle2 className="mr-2 h-4 w-4" />
+                  Release Payment
+                </>
+              )}
+            </Button>
+          </div>
+        </div>
+      </div>
+
+      <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {resolvedAmountLabel}
+                </p>
+                <p className="mt-2 text-2xl font-bold text-slate-950">
+                  Rs {formatPKR(resolvedAmount)}
+                </p>
+              </div>
+
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                <Wallet className="h-5 w-5" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  {resolvedPartyLabel}
+                </p>
+                <p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-950">
+                  {resolvedParties.length ? resolvedParties.join(", ") : "-"}
+                </p>
+              </div>
+
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                <Building2 className="h-5 w-5" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Payment Method
+                </p>
+                <p className="mt-2 text-sm font-semibold text-slate-950">
+                  {getPaymentMethodLabel(formData.paymentMethod)}
+                </p>
+              </div>
+
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                <CreditCard className="h-5 w-5" />
+              </div>
             </div>
           </div>
         </div>
 
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <div>
-            <Label htmlFor="amount">Release Amount</Label>
-            <Input
-              id="amount"
-              type="number"
-              value={formData.amount}
-              readOnly={resolvedAmountReadOnly}
-              className={resolvedAmountReadOnly ? "bg-muted" : ""}
-              onChange={(e) =>
-                setFormData((prev) => ({ ...prev, amount: e.target.value }))
-              }
-            />
-          </div>
+        <form
+          id="payment-release-form"
+          onSubmit={handleSubmit}
+          className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]"
+        >
+          <div className="space-y-6">
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <div className="mb-6 flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white">
+                  <Banknote className="h-5 w-5" />
+                </div>
 
-          <div>
-            <Label htmlFor="paymentMethod">Payment Method</Label>
-            <Select
-              value={formData.paymentMethod}
-              onValueChange={(value: any) =>
-                setFormData((prev) => ({ ...prev, paymentMethod: value }))
-              }
-            >
-              <SelectTrigger>
-                <SelectValue placeholder="Select payment method" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="cash">Cash</SelectItem>
-                <SelectItem value="bank_transfer">Bank Transfer</SelectItem>
-                <SelectItem value="wire">Online Transfer</SelectItem>
-                {allowCheque && <SelectItem value="cheque">Cheque</SelectItem>}
-              </SelectContent>
-            </Select>
-          </div>
-
-          {formData.paymentMethod === "cheque" && allowCheque && (
-            <>
-              <div>
-                <Label htmlFor="account">Select Account</Label>
-                <Select
-                  value={formData.selectedAccountId}
-                  onValueChange={(value) => {
-                    const account =
-                      resolvedAccounts.find((acc) => acc.id === value) || null;
-
-                    setSelectedAccount(account);
-                    setFormData((prev) => ({
-                      ...prev,
-                      selectedAccountId: value,
-                    }));
-                  }}
-                >
-                  <SelectTrigger>
-                    <SelectValue
-                      placeholder={
-                        accountsLoading
-                          ? "Loading accounts..."
-                          : "Select account"
-                      }
-                    />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {resolvedAccounts.length === 0 ? (
-                      <SelectItem value="__no_accounts__" disabled>
-                        No active accounts found
-                      </SelectItem>
-                    ) : (
-                      resolvedAccounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id}>
-                          {account.accountName || account.id}
-                        </SelectItem>
-                      ))
-                    )}
-                  </SelectContent>
-                </Select>
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">
+                    Payment Information
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Enter the release amount and payment method details.
+                  </p>
+                </div>
               </div>
 
-              {selectedAccount && (
-                <div className="bg-muted p-4 rounded-lg">
-                  <h4 className="font-medium text-foreground mb-2">
-                    Account Information
-                  </h4>
-                  <div className="grid grid-cols-2 gap-4 text-sm">
-                    <div>
-                      <span className="text-muted-foreground">
-                        Account Name:
-                      </span>
-                      <span className="text-foreground ml-2">
-                        {selectedAccount.accountName || "-"}
-                      </span>
+              <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+                <div className="space-y-2">
+                  <Label htmlFor="amount" className="text-sm text-slate-700">
+                    Release Amount
+                  </Label>
+
+                  <Input
+                    id="amount"
+                    type="number"
+                    value={formData.amount}
+                    readOnly={resolvedAmountReadOnly}
+                    className={`h-11 rounded-2xl border-slate-200 ${
+                      resolvedAmountReadOnly ? "bg-slate-100" : "bg-white"
+                    }`}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        amount: e.target.value,
+                      }))
+                    }
+                  />
+                </div>
+
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="paymentMethod"
+                    className="text-sm text-slate-700"
+                  >
+                    Payment Method
+                  </Label>
+
+                  <Select
+                    value={formData.paymentMethod}
+                    onValueChange={(value: any) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        paymentMethod: value,
+                        chequeNumbers:
+                          value === "cheque" && prev.chequeNumbers.length === 0
+                            ? [""]
+                            : prev.chequeNumbers,
+                      }))
+                    }
+                  >
+                    <SelectTrigger className="h-11 rounded-2xl border-slate-200">
+                      <SelectValue placeholder="Select payment method" />
+                    </SelectTrigger>
+
+                    <SelectContent>
+                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="bank_transfer">
+                        Bank Transfer
+                      </SelectItem>
+                      <SelectItem value="wire">Online Transfer</SelectItem>
+                      {allowCheque && (
+                        <SelectItem value="cheque">Cheque</SelectItem>
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+            </section>
+
+            {formData.paymentMethod === "cheque" && allowCheque && (
+              <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                  <div>
+                    <h2 className="text-lg font-semibold text-slate-950">
+                      Cheque Details
+                    </h2>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Select the account and add one or more cheque numbers.
+                    </p>
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    className="rounded-full border-slate-200"
+                    onClick={handleAddChequeNumber}
+                  >
+                    <Plus className="mr-2 h-4 w-4" />
+                    Add Cheque
+                  </Button>
+                </div>
+
+                <div className="space-y-5">
+                  <div className="space-y-2">
+                    <Label htmlFor="account" className="text-sm text-slate-700">
+                      Select Account
+                    </Label>
+
+                    <Select
+                      value={formData.selectedAccountId}
+                      onValueChange={(value) => {
+                        const account =
+                          resolvedAccounts.find((acc) => acc.id === value) ||
+                          null;
+
+                        setSelectedAccount(account);
+                        setFormData((prev) => ({
+                          ...prev,
+                          selectedAccountId: value,
+                        }));
+                      }}
+                    >
+                      <SelectTrigger className="h-11 rounded-2xl border-slate-200">
+                        <SelectValue
+                          placeholder={
+                            accountsLoading
+                              ? "Loading accounts..."
+                              : "Select account"
+                          }
+                        />
+                      </SelectTrigger>
+
+                      <SelectContent>
+                        {resolvedAccounts.length === 0 ? (
+                          <SelectItem value="__no_accounts__" disabled>
+                            No active accounts found
+                          </SelectItem>
+                        ) : (
+                          resolvedAccounts.map((account) => (
+                            <SelectItem key={account.id} value={account.id}>
+                              {account.accountName || account.id}
+                            </SelectItem>
+                          ))
+                        )}
+                      </SelectContent>
+                    </Select>
+                  </div>
+
+                  {selectedAccount && (
+                    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                      <h3 className="mb-4 text-sm font-semibold text-slate-950">
+                        Account Information
+                      </h3>
+
+                      <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Account Name
+                          </p>
+                          <p className="mt-1 font-semibold text-slate-900">
+                            {selectedAccount.accountName || "-"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Account Number
+                          </p>
+                          <p className="mt-1 font-semibold text-slate-900">
+                            {selectedAccount.accountNumber || "-"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Bank
+                          </p>
+                          <p className="mt-1 font-semibold text-slate-900">
+                            {selectedAccount.bankName || "-"}
+                          </p>
+                        </div>
+
+                        <div>
+                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                            Balance
+                          </p>
+                          <p className="mt-1 font-semibold text-slate-900">
+                            Rs{" "}
+                            {formatPKR(
+                              selectedAccount.currentBalance ??
+                                selectedAccount.balance ??
+                                0,
+                            )}
+                          </p>
+                        </div>
+                      </div>
                     </div>
-                    <div>
-                      <span className="text-muted-foreground">
-                        Account Number:
-                      </span>
-                      <span className="text-foreground ml-2">
-                        {selectedAccount.accountNumber || "-"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Bank:</span>
-                      <span className="text-foreground ml-2">
-                        {selectedAccount.bankName || "-"}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-muted-foreground">Balance:</span>
-                      <span className="text-foreground ml-2">
-                        {(
-                          selectedAccount.currentBalance ??
-                          selectedAccount.balance ??
-                          0
-                        ).toLocaleString()}
-                      </span>
-                    </div>
+                  )}
+
+                  <div className="space-y-3">
+                    <Label className="text-sm text-slate-700">
+                      Cheque Numbers
+                    </Label>
+
+                    {formData.chequeNumbers.map((chequeNumber, index) => (
+                      <div
+                        key={index}
+                        className="flex flex-col gap-2 sm:flex-row sm:items-center"
+                      >
+                        <Input
+                          value={chequeNumber}
+                          onChange={(e) =>
+                            handleChequeNumberChange(index, e.target.value)
+                          }
+                          placeholder={`Enter cheque number ${index + 1}`}
+                          className="h-11 rounded-2xl border-slate-200"
+                        />
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="icon"
+                          className="h-11 w-11 shrink-0 rounded-2xl border-slate-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                          onClick={() => handleRemoveChequeNumber(index)}
+                          disabled={formData.chequeNumbers.length === 1}
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              )}
+              </section>
+            )}
 
-              <div>
-                <Label htmlFor="chequeNumber">Cheque Number</Label>
-                <Input
-                  id="chequeNumber"
-                  value={formData.chequeNumber}
-                  onChange={(e) =>
-                    setFormData((prev) => ({
-                      ...prev,
-                      chequeNumber: e.target.value,
-                    }))
-                  }
-                  placeholder="Enter cheque number"
-                />
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+              <div className="mb-6 flex items-start gap-3">
+                <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                  <ReceiptText className="h-5 w-5" />
+                </div>
+
+                <div>
+                  <h2 className="text-lg font-semibold text-slate-950">
+                    Reference & Notes
+                  </h2>
+                  <p className="mt-1 text-sm text-slate-500">
+                    Add transaction reference, upload receipts, and write
+                    payment notes.
+                  </p>
+                </div>
               </div>
-            </>
-          )}
 
-          <div>
-            <Label htmlFor="transactionReference">Transaction Reference</Label>
-            <Input
-              id="transactionReference"
-              value={formData.transactionReference}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  transactionReference: e.target.value,
-                }))
-              }
-              placeholder="Enter transaction reference"
-            />
+              <div className="space-y-5">
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="transactionReference"
+                    className="text-sm text-slate-700"
+                  >
+                    Transaction Reference
+                  </Label>
+
+                  <Input
+                    id="transactionReference"
+                    value={formData.transactionReference}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        transactionReference: e.target.value,
+                      }))
+                    }
+                    placeholder="Enter transaction reference"
+                    className="h-11 rounded-2xl border-slate-200"
+                  />
+                </div>
+
+                {allowReceiptUpload && (
+                  <div className="space-y-3">
+                    <Label htmlFor="receipt" className="text-sm text-slate-700">
+                      Upload Receipt / Cheque Copies
+                    </Label>
+
+                    <label
+                      htmlFor="receipt"
+                      className="flex cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-8 text-center transition hover:border-slate-400 hover:bg-slate-100"
+                    >
+                      <FileUp className="h-8 w-8 text-slate-500" />
+
+                      <p className="mt-3 text-sm font-semibold text-slate-800">
+                        Click to upload files
+                      </p>
+
+                      <p className="mt-1 text-xs text-slate-500">
+                        JPG, PNG, or PDF. Multiple files are allowed.
+                      </p>
+
+                      <Input
+                        id="receipt"
+                        type="file"
+                        accept=".jpg,.jpeg,.png,.pdf"
+                        multiple
+                        onChange={handleReceiptFilesChange}
+                        className="hidden"
+                      />
+                    </label>
+
+                    {receiptFiles.length > 0 && (
+                      <div className="space-y-2">
+                        {receiptFiles.map((file, index) => (
+                          <div
+                            key={`${file.name}-${index}`}
+                            className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
+                          >
+                            <div className="min-w-0">
+                              <p className="truncate font-medium text-slate-900">
+                                {index + 1}. {file.name}
+                              </p>
+                              <p className="text-xs text-slate-500">
+                                {getFileSizeLabel(file.size)}
+                              </p>
+                            </div>
+
+                            <Button
+                              type="button"
+                              variant="ghost"
+                              size="icon"
+                              className="h-9 w-9 shrink-0 rounded-full text-red-600 hover:bg-red-50 hover:text-red-700"
+                              onClick={() => handleRemoveReceiptFile(index)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div className="space-y-2">
+                  <Label
+                    htmlFor="paymentNotes"
+                    className="text-sm text-slate-700"
+                  >
+                    Payment Notes
+                  </Label>
+
+                  <Textarea
+                    id="paymentNotes"
+                    rows={5}
+                    value={formData.paymentNotes}
+                    onChange={(e) =>
+                      setFormData((prev) => ({
+                        ...prev,
+                        paymentNotes: e.target.value,
+                      }))
+                    }
+                    placeholder="Add any notes..."
+                    className="rounded-2xl border-slate-200"
+                  />
+                </div>
+              </div>
+            </section>
           </div>
 
-          {allowReceiptUpload && (
-            <div>
-              <Label htmlFor="receipt">Upload Receipt / Cheque Copy</Label>
-              <Input
-                id="receipt"
-                type="file"
-                accept=".jpg,.jpeg,.png,.pdf"
-                onChange={(e) => setReceiptFile(e.target.files?.[0] || null)}
-              />
-              {receiptFile && (
-                <p className="text-green-600 mt-1">
-                  {receiptFile.name} selected
-                </p>
-              )}
-            </div>
-          )}
+          <aside className="space-y-6 lg:sticky lg:top-28 lg:self-start">
+            <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <h2 className="text-base font-semibold text-slate-950">
+                Release Summary
+              </h2>
 
-          <div>
-            <Label htmlFor="paymentNotes">Payment Notes</Label>
-            <Textarea
-              id="paymentNotes"
-              rows={3}
-              value={formData.paymentNotes}
-              onChange={(e) =>
-                setFormData((prev) => ({
-                  ...prev,
-                  paymentNotes: e.target.value,
-                }))
-              }
-              placeholder="Add any notes..."
-            />
-          </div>
+              <div className="mt-5 space-y-4 text-sm">
+                <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+                  <span className="text-slate-500">Amount</span>
+                  <span className="text-right font-semibold text-slate-950">
+                    Rs {formatPKR(formData.amount)}
+                  </span>
+                </div>
 
-          <div className="flex justify-end gap-3">
-            <Button type="button" variant="outline" onClick={onClose}>
-              Cancel
-            </Button>
-            <Button type="submit" disabled={loading}>
-              {loading ? "Releasing..." : "Release Payment"}
-            </Button>
-          </div>
+                <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+                  <span className="text-slate-500">Method</span>
+                  <span className="text-right font-semibold text-slate-950">
+                    {getPaymentMethodLabel(formData.paymentMethod)}
+                  </span>
+                </div>
+
+                <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+                  <span className="text-slate-500">Party</span>
+                  <span className="max-w-[190px] text-right font-semibold text-slate-950">
+                    {resolvedParties.length ? resolvedParties.join(", ") : "-"}
+                  </span>
+                </div>
+
+                {formData.paymentMethod === "cheque" && (
+                  <>
+                    <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+                      <span className="text-slate-500">Account</span>
+                      <span className="max-w-[190px] text-right font-semibold text-slate-950">
+                        {selectedAccount?.accountName || "-"}
+                      </span>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+                      <span className="text-slate-500">Cheques</span>
+                      <span className="text-right font-semibold text-slate-950">
+                        {cleanChequeNumbers(formData.chequeNumbers).length}
+                      </span>
+                    </div>
+                  </>
+                )}
+
+                <div className="flex items-start justify-between gap-4">
+                  <span className="text-slate-500">Files</span>
+                  <span className="text-right font-semibold text-slate-950">
+                    {receiptFiles.length}
+                  </span>
+                </div>
+              </div>
+            </section>
+
+            <section className="rounded-3xl border border-blue-100 bg-blue-50 p-5">
+              <h3 className="text-sm font-semibold text-blue-950">
+                Before releasing
+              </h3>
+
+              <ul className="mt-3 space-y-2 text-sm text-blue-800">
+                <li>Confirm the release amount is correct.</li>
+                <li>For cheque payment, add all cheque numbers.</li>
+                <li>Upload receipt or cheque copy files if available.</li>
+              </ul>
+            </section>
+          </aside>
         </form>
-      </DialogContent>
-    </Dialog>
+      </main>
+    </div>
   );
 }

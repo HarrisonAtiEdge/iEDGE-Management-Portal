@@ -1939,7 +1939,8 @@ const AVAILABLE_TABS = [
     label: "Claim Reimbursement",
     icon: "ReceiptText",
   },
-   { path: "/records", label: "Records", icon: "Archive" },
+  { path: "/records", label: "Records", icon: "Archive" },
+  { path: "/vendor-summery", label: "Vendor Summary", icon: "Receipt" },
 ];
 
 const PANEL_ID = "IEDGE-SYSTEM";

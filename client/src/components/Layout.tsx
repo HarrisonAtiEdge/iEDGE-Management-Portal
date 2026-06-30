@@ -500,9 +500,10 @@ const FINANCE_DROPDOWN: SidebarItem = {
     {
       path: "/claim-reimbursement",
       label: "Claim Reimbursement",
-      icon: "ReceiptText",  
+      icon: "ReceiptText",
     },
-     { path: "/records", label: "Records", icon: "Archive" },
+    { path: "/records", label: "Records", icon: "Archive" },
+    { path: "/vendor-summery", label: "Vendor Summary", icon: "Receipt" },
   ],
 };
 

@@ -322,6 +322,7 @@ import TicketingSettings from "./pages/Travel/TicketingSettings";
 import TravelTickets from "./pages/TravelTickets";
 import ClaimReimbursement from "@/pages/ClaimReimbursement";
 import AccountStatement from "./pages/AccountStatement";
+import VendorSummary from "./pages/VendorSummary";
 
 function AuthenticatedApp() {
   const { currentUser } = useAuth();
@@ -353,6 +354,12 @@ function AuthenticatedApp() {
         <Route path="/dashboard">
           <ProtectedRoute>
             <Dashboard />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/vendor-summery">
+          <ProtectedRoute>
+            <VendorSummary />
           </ProtectedRoute>
         </Route>
 
