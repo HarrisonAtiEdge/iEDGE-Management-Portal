@@ -1263,6 +1263,1062 @@
 //   );
 // }
 
+// import {
+//   useEffect,
+//   useMemo,
+//   useState,
+//   type ChangeEvent,
+//   type FormEvent,
+// } from "react";
+// import { serverTimestamp } from "firebase/firestore";
+// import {
+//   ArrowLeft,
+//   Banknote,
+//   Building2,
+//   CheckCircle2,
+//   CreditCard,
+//   FileUp,
+//   Loader2,
+//   Plus,
+//   ReceiptText,
+//   Trash2,
+//   Wallet,
+// } from "lucide-react";
+// import { useAuth } from "@/contexts/AuthContext";
+// import { releasePayment } from "@/lib/payments/releasePayment";
+// import { fetchPaymentAccounts } from "@/lib/payments/paymentAccounts";
+// import {
+//   PaymentAccount,
+//   PaymentReleaseFormValues,
+//   PaymentReleaseSubmitArgs,
+// } from "@/lib/payments/types";
+// import { InvoiceRequest } from "@shared/schema";
+// import { Button } from "@/components/ui/button";
+// import { Input } from "@/components/ui/input";
+// import { Label } from "@/components/ui/label";
+// import {
+//   Select,
+//   SelectContent,
+//   SelectItem,
+//   SelectTrigger,
+//   SelectValue,
+// } from "@/components/ui/select";
+// import { Textarea } from "@/components/ui/textarea";
+// import { useToast } from "@/hooks/use-toast";
+
+// interface PaymentReleaseModalProps<T = any> {
+//   isOpen: boolean;
+//   onClose: () => void;
+//   onSuccess: () => void;
+//   title?: string;
+
+//   invoice?: InvoiceRequest | null;
+
+//   context?: T | null;
+//   docPath?: ((context: T) => string[]) | string[];
+//   buildUpdateData?: (
+//     args: PaymentReleaseSubmitArgs<T>
+//   ) => Record<string, any>;
+
+//   amount?: number;
+//   amountLabel?: string;
+//   partyLabel?: string;
+//   parties?: string[];
+
+//   accounts?: PaymentAccount[];
+//   allowCheque?: boolean;
+//   allowReceiptUpload?: boolean;
+//   initialPaymentMethod?: "cash" | "cheque" | "bank_transfer" | "wire";
+//   amountReadOnly?: boolean;
+// }
+
+// type ExtendedPaymentReleaseFormValues = PaymentReleaseFormValues & {
+//   chequeNumbers: string[];
+// };
+
+// function cleanChequeNumbers(values: string[] = []) {
+//   return values.map((value) => value.trim()).filter(Boolean);
+// }
+
+// function formatPKR(value: number | string | undefined | null) {
+//   const numberValue =
+//     typeof value === "number"
+//       ? value
+//       : Number(String(value || 0).replace(/,/g, "")) || 0;
+
+//   return numberValue.toLocaleString("en-PK", {
+//     minimumFractionDigits: 2,
+//     maximumFractionDigits: 2,
+//   });
+// }
+
+// function getPaymentMethodLabel(method?: string) {
+//   switch (method) {
+//     case "cash":
+//       return "Cash";
+//     case "cheque":
+//       return "Cheque";
+//     case "bank_transfer":
+//       return "Bank Transfer";
+//     case "wire":
+//       return "Online Transfer";
+//     default:
+//       return "Not Selected";
+//   }
+// }
+
+// function getFileSizeLabel(bytes: number) {
+//   if (!bytes) return "0 KB";
+
+//   const kb = bytes / 1024;
+//   if (kb < 1024) return `${kb.toFixed(1)} KB`;
+
+//   return `${(kb / 1024).toFixed(1)} MB`;
+// }
+
+// export default function PaymentReleaseModal<T = any>({
+//   isOpen,
+//   onClose,
+//   onSuccess,
+//   title = "Release Payment",
+//   invoice = null,
+
+//   context = null,
+//   docPath,
+//   buildUpdateData,
+
+//   amount,
+//   amountLabel,
+//   partyLabel,
+//   parties,
+
+//   accounts = [],
+//   allowCheque = true,
+//   allowReceiptUpload = true,
+//   initialPaymentMethod,
+//   amountReadOnly,
+// }: PaymentReleaseModalProps<T>) {
+//   const { userProfile, currentUser } = useAuth();
+//   const { toast } = useToast();
+
+//   const [loading, setLoading] = useState(false);
+//   const [accountsLoading, setAccountsLoading] = useState(false);
+//   const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
+//   const [selectedAccount, setSelectedAccount] = useState<PaymentAccount | null>(
+//     null
+//   );
+//   const [storedAccounts, setStoredAccounts] = useState<PaymentAccount[]>([]);
+
+//   const approvedInvoiceItems = useMemo(() => {
+//     const items = Array.isArray((invoice as any)?.lineItems)
+//       ? (invoice as any).lineItems
+//       : [];
+
+//     return items.filter((item: any) => item?.status === "approved");
+//   }, [invoice]);
+
+//   const invoiceApprovedAmount = useMemo(() => {
+//     return approvedInvoiceItems.reduce((sum: number, item: any) => {
+//       const qty = Number(item?.units || 0);
+//       const rate = Number(item?.unitRate || 0);
+//       const tax = Number(item?.tax || 0);
+//       const total = Number(item?.total ?? qty * rate + tax);
+
+//       return sum + total;
+//     }, 0);
+//   }, [approvedInvoiceItems]);
+
+//   const invoiceApprovedVendors = useMemo(() => {
+//     return [
+//       ...new Set(
+//         approvedInvoiceItems
+//           .map((item: any) => String(item?.vendor || "").trim())
+//           .filter(Boolean)
+//       ),
+//     ] as string[];
+//   }, [approvedInvoiceItems]);
+
+//   const resolvedContext = (context ?? invoice ?? null) as
+//     | T
+//     | InvoiceRequest
+//     | null;
+
+//   const resolvedDocPath = useMemo(() => {
+//     if (docPath && resolvedContext) {
+//       return typeof docPath === "function"
+//         ? docPath(resolvedContext as T)
+//         : docPath;
+//     }
+
+//     if ((invoice as any)?.id) {
+//       return [
+//         "Panels",
+//         "IEDGE-SYSTEM",
+//         "invoiceRequests",
+//         (invoice as any).id,
+//       ];
+//     }
+
+//     return [];
+//   }, [docPath, resolvedContext, invoice]);
+
+//   const resolvedAmount = amount ?? (invoice ? invoiceApprovedAmount : 0);
+
+//   const resolvedParties = parties ?? (invoice ? invoiceApprovedVendors : []);
+
+//   const resolvedAmountLabel =
+//     amountLabel ?? (invoice ? "Approved Amount" : "Amount");
+
+//   const resolvedPartyLabel =
+//     partyLabel ?? (invoice ? "Approved Vendors" : "Payee");
+
+//   const resolvedInitialPaymentMethod =
+//     initialPaymentMethod ?? (invoice ? "bank_transfer" : "cash");
+
+//   const resolvedAmountReadOnly = amountReadOnly ?? !!invoice;
+
+//   const resolvedAccounts = useMemo(() => {
+//     const map = new Map<string, PaymentAccount>();
+
+//     [...storedAccounts, ...accounts].forEach((acc) => {
+//       if (!acc?.id) return;
+//       map.set(acc.id, acc);
+//     });
+
+//     return Array.from(map.values()).filter((acc) => acc.isActive !== false);
+//   }, [storedAccounts, accounts]);
+
+//   const defaultInvoiceBuildUpdateData = (
+//     args: PaymentReleaseSubmitArgs<InvoiceRequest>
+//   ) => {
+//     const { formData, receiptUrl, selectedAccount, actor } = args;
+
+//     const extendedFormData = formData as ExtendedPaymentReleaseFormValues;
+
+//     const chequeNumbers = cleanChequeNumbers(
+//       extendedFormData.chequeNumbers?.length
+//         ? extendedFormData.chequeNumbers
+//         : [extendedFormData.chequeNumber || ""]
+//     );
+
+//     const receiptUrls = Array.isArray((args as any).receiptUrls)
+//       ? (args as any).receiptUrls
+//       : receiptUrl
+//         ? [receiptUrl]
+//         : [];
+
+//     const paymentDetails: any = {
+//       paymentMethod: extendedFormData.paymentMethod,
+//       amount: Number(extendedFormData.amount),
+//       vendors: invoiceApprovedVendors,
+//       transactionReference: extendedFormData.transactionReference,
+//       bankReceiptUrl: receiptUrls[0] || receiptUrl || "",
+//       bankReceiptUrls: receiptUrls,
+//       paymentNotes: extendedFormData.paymentNotes,
+//       releasedBy: actor.profileId || actor.uid,
+//       releasedByName: actor.displayName || actor.email || "Unknown",
+//       releasedAt: serverTimestamp(),
+//     };
+
+//     if (chequeNumbers.length > 0) {
+//       paymentDetails.chequeNumber = chequeNumbers[0];
+//       paymentDetails.chequeNumbers = chequeNumbers;
+//     }
+
+//     if (selectedAccount) {
+//       paymentDetails.selectedAccount = selectedAccount;
+//     }
+
+//     return {
+//       status: "payment_released",
+//       paymentDetails,
+//     };
+//   };
+
+//   const [formData, setFormData] = useState<ExtendedPaymentReleaseFormValues>({
+//     paymentMethod: resolvedInitialPaymentMethod,
+//     selectedAccountId: "",
+//     amount: String(resolvedAmount || 0),
+//     chequeNumber: "",
+//     chequeNumbers: [""],
+//     transactionReference: "",
+//     paymentNotes: "",
+//   });
+
+//   useEffect(() => {
+//     if (!isOpen) return;
+
+//     setFormData({
+//       paymentMethod: resolvedInitialPaymentMethod,
+//       selectedAccountId: "",
+//       amount: String(resolvedAmount || 0),
+//       chequeNumber: "",
+//       chequeNumbers: [""],
+//       transactionReference: "",
+//       paymentNotes: "",
+//     });
+
+//     setSelectedAccount(null);
+//     setReceiptFiles([]);
+//   }, [isOpen, resolvedAmount, resolvedInitialPaymentMethod]);
+
+//   useEffect(() => {
+//     let mounted = true;
+
+//     async function loadAccounts() {
+//       try {
+//         setAccountsLoading(true);
+
+//         const rows = await fetchPaymentAccounts();
+
+//         if (mounted) {
+//           setStoredAccounts(rows);
+//         }
+//       } catch (error) {
+//         console.error("Failed to load payment accounts:", error);
+
+//         if (mounted) {
+//           toast({
+//             title: "Error",
+//             description: "Failed to load payment accounts",
+//             variant: "destructive",
+//           });
+//         }
+//       } finally {
+//         if (mounted) {
+//           setAccountsLoading(false);
+//         }
+//       }
+//     }
+
+//     if (isOpen) {
+//       loadAccounts();
+//     }
+
+//     return () => {
+//       mounted = false;
+//     };
+//   }, [isOpen, toast]);
+
+//   const handleChequeNumberChange = (index: number, value: string) => {
+//     setFormData((prev) => {
+//       const updatedChequeNumbers = [...prev.chequeNumbers];
+//       updatedChequeNumbers[index] = value;
+
+//       return {
+//         ...prev,
+//         chequeNumbers: updatedChequeNumbers,
+//         chequeNumber: updatedChequeNumbers[0] || "",
+//       };
+//     });
+//   };
+
+//   const handleAddChequeNumber = () => {
+//     setFormData((prev) => ({
+//       ...prev,
+//       chequeNumbers: [...prev.chequeNumbers, ""],
+//     }));
+//   };
+
+//   const handleRemoveChequeNumber = (index: number) => {
+//     setFormData((prev) => {
+//       const updatedChequeNumbers = prev.chequeNumbers.filter(
+//         (_, chequeIndex) => chequeIndex !== index
+//       );
+
+//       const safeChequeNumbers =
+//         updatedChequeNumbers.length > 0 ? updatedChequeNumbers : [""];
+
+//       return {
+//         ...prev,
+//         chequeNumbers: safeChequeNumbers,
+//         chequeNumber: safeChequeNumbers[0] || "",
+//       };
+//     });
+//   };
+
+//   const handleReceiptFilesChange = (event: ChangeEvent<HTMLInputElement>) => {
+//     const files = Array.from(event.target.files || []);
+//     setReceiptFiles(files);
+//   };
+
+//   const handleRemoveReceiptFile = (index: number) => {
+//     setReceiptFiles((prev) =>
+//       prev.filter((_, fileIndex) => fileIndex !== index)
+//     );
+//   };
+
+//   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+//     e.preventDefault();
+
+//     if (!resolvedContext) {
+//       toast({
+//         title: "Error",
+//         description: "No record selected",
+//         variant: "destructive",
+//       });
+//       return;
+//     }
+
+//     if (!formData.paymentMethod) {
+//       toast({
+//         title: "Error",
+//         description: "Please select a payment method",
+//         variant: "destructive",
+//       });
+//       return;
+//     }
+
+//     if (!formData.amount || Number(formData.amount) <= 0) {
+//       toast({
+//         title: "Error",
+//         description: "Please enter a valid amount",
+//         variant: "destructive",
+//       });
+//       return;
+//     }
+
+//     const normalizedChequeNumbers = cleanChequeNumbers(formData.chequeNumbers);
+
+//     if (formData.paymentMethod === "cheque") {
+//       if (!formData.selectedAccountId) {
+//         toast({
+//           title: "Error",
+//           description: "Please select an account",
+//           variant: "destructive",
+//         });
+//         return;
+//       }
+
+//       if (normalizedChequeNumbers.length === 0) {
+//         toast({
+//           title: "Error",
+//           description: "Please enter at least one cheque number",
+//           variant: "destructive",
+//         });
+//         return;
+//       }
+//     }
+
+//     const normalizedFormData: ExtendedPaymentReleaseFormValues = {
+//       ...formData,
+//       chequeNumber: normalizedChequeNumbers[0] || "",
+//       chequeNumbers: normalizedChequeNumbers,
+//     };
+
+//     try {
+//       setLoading(true);
+
+//       await releasePayment({
+//         docPath: resolvedDocPath,
+//         context: resolvedContext as any,
+//         formData: normalizedFormData as any,
+
+//         // Old support: existing releasePayment can still use this first file.
+//         receiptFile: receiptFiles[0] || null,
+
+//         // New support: update releasePayment to upload these if not already supported.
+//         receiptFiles,
+
+//         selectedAccount,
+//         actor: {
+//           uid: currentUser?.uid,
+//           email: currentUser?.email,
+//           displayName: userProfile?.displayName || currentUser?.email,
+//           profileId: userProfile?.id,
+//         },
+//         buildUpdateData: (buildUpdateData ||
+//           defaultInvoiceBuildUpdateData) as any,
+//       } as any);
+
+//       toast({
+//         title: "Success",
+//         description: "Payment released successfully",
+//       });
+
+//       onSuccess();
+//       onClose();
+//     } catch (error: any) {
+//       console.error("Failed to release payment:", error);
+
+//       toast({
+//         title: "Error",
+//         description: error?.message || "Failed to release payment",
+//         variant: "destructive",
+//       });
+//     } finally {
+//       setLoading(false);
+//     }
+//   }
+
+//   if (!isOpen) return null;
+
+//   return (
+//     <div className="fixed inset-0 z-50 min-h-screen overflow-y-auto bg-slate-50">
+//       <div className="sticky top-0 z-20 border-b border-slate-200 bg-white/90 backdrop-blur-xl">
+//         <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-4 sm:px-6 lg:flex-row lg:items-center lg:justify-between lg:px-8">
+//           <div className="flex items-start gap-4">
+//             <Button
+//               type="button"
+//               variant="outline"
+//               size="icon"
+//               className="mt-1 h-10 w-10 rounded-full border-slate-200 bg-white shadow-sm hover:bg-slate-50"
+//               onClick={onClose}
+//             >
+//               <ArrowLeft className="h-4 w-4" />
+//             </Button>
+
+//             <div>
+//               <div className="flex flex-wrap items-center gap-2">
+//                 <h1 className="text-2xl font-bold tracking-tight text-slate-950">
+//                   {title}
+//                 </h1>
+
+//                 <span className="rounded-full border border-emerald-200 bg-emerald-50 px-3 py-1 text-xs font-semibold text-emerald-700">
+//                   Payment Release
+//                 </span>
+//               </div>
+
+//               <p className="mt-1 max-w-2xl text-sm text-slate-500">
+//                 Review payment information, select the payment method, attach
+//                 receipts, and release the approved amount.
+//               </p>
+//             </div>
+//           </div>
+
+//           <div className="flex flex-wrap gap-2">
+//             <Button
+//               type="button"
+//               variant="outline"
+//               className="rounded-full border-slate-200 px-5"
+//               onClick={onClose}
+//               disabled={loading}
+//             >
+//               Cancel
+//             </Button>
+
+//             <Button
+//               type="submit"
+//               form="payment-release-form"
+//               disabled={loading}
+//               className="rounded-full bg-slate-950 px-6 text-white shadow-sm hover:bg-slate-800"
+//             >
+//               {loading ? (
+//                 <>
+//                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+//                   Releasing...
+//                 </>
+//               ) : (
+//                 <>
+//                   <CheckCircle2 className="mr-2 h-4 w-4" />
+//                   Release Payment
+//                 </>
+//               )}
+//             </Button>
+//           </div>
+//         </div>
+//       </div>
+
+//       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
+//         <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+//           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+//             <div className="flex items-center justify-between gap-4">
+//               <div>
+//                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                   {resolvedAmountLabel}
+//                 </p>
+//                 <p className="mt-2 text-2xl font-bold text-slate-950">
+//                   Rs {formatPKR(resolvedAmount)}
+//                 </p>
+//               </div>
+
+//               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+//                 <Wallet className="h-5 w-5" />
+//               </div>
+//             </div>
+//           </div>
+
+//           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+//             <div className="flex items-center justify-between gap-4">
+//               <div>
+//                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                   {resolvedPartyLabel}
+//                 </p>
+//                 <p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-950">
+//                   {resolvedParties.length ? resolvedParties.join(", ") : "-"}
+//                 </p>
+//               </div>
+
+//               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+//                 <Building2 className="h-5 w-5" />
+//               </div>
+//             </div>
+//           </div>
+
+//           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+//             <div className="flex items-center justify-between gap-4">
+//               <div>
+//                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                   Payment Method
+//                 </p>
+//                 <p className="mt-2 text-sm font-semibold text-slate-950">
+//                   {getPaymentMethodLabel(formData.paymentMethod)}
+//                 </p>
+//               </div>
+
+//               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+//                 <CreditCard className="h-5 w-5" />
+//               </div>
+//             </div>
+//           </div>
+//         </div>
+
+//         <form
+//           id="payment-release-form"
+//           onSubmit={handleSubmit}
+//           className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_360px]"
+//         >
+//           <div className="space-y-6">
+//             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+//               <div className="mb-6 flex items-start gap-3">
+//                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white">
+//                   <Banknote className="h-5 w-5" />
+//                 </div>
+
+//                 <div>
+//                   <h2 className="text-lg font-semibold text-slate-950">
+//                     Payment Information
+//                   </h2>
+//                   <p className="mt-1 text-sm text-slate-500">
+//                     Enter the release amount and payment method details.
+//                   </p>
+//                 </div>
+//               </div>
+
+//               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+//                 <div className="space-y-2">
+//                   <Label htmlFor="amount" className="text-sm text-slate-700">
+//                     Release Amount
+//                   </Label>
+
+//                   <Input
+//                     id="amount"
+//                     type="number"
+//                     value={formData.amount}
+//                     readOnly={resolvedAmountReadOnly}
+//                     className={`h-11 rounded-2xl border-slate-200 ${
+//                       resolvedAmountReadOnly ? "bg-slate-100" : "bg-white"
+//                     }`}
+//                     onChange={(e) =>
+//                       setFormData((prev) => ({
+//                         ...prev,
+//                         amount: e.target.value,
+//                       }))
+//                     }
+//                   />
+//                 </div>
+
+//                 <div className="space-y-2">
+//                   <Label
+//                     htmlFor="paymentMethod"
+//                     className="text-sm text-slate-700"
+//                   >
+//                     Payment Method
+//                   </Label>
+
+//                   <Select
+//                     value={formData.paymentMethod}
+//                     onValueChange={(value: any) =>
+//                       setFormData((prev) => ({
+//                         ...prev,
+//                         paymentMethod: value,
+//                         chequeNumbers:
+//                           value === "cheque" &&
+//                           prev.chequeNumbers.length === 0
+//                             ? [""]
+//                             : prev.chequeNumbers,
+//                       }))
+//                     }
+//                   >
+//                     <SelectTrigger className="h-11 rounded-2xl border-slate-200">
+//                       <SelectValue placeholder="Select payment method" />
+//                     </SelectTrigger>
+
+//                     <SelectContent>
+//                       <SelectItem value="cash">Cash</SelectItem>
+//                       <SelectItem value="bank_transfer">
+//                         Bank Transfer
+//                       </SelectItem>
+//                       <SelectItem value="wire">Online Transfer</SelectItem>
+//                       {allowCheque && (
+//                         <SelectItem value="cheque">Cheque</SelectItem>
+//                       )}
+//                     </SelectContent>
+//                   </Select>
+//                 </div>
+//               </div>
+//             </section>
+
+//             {formData.paymentMethod === "cheque" && allowCheque && (
+//               <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+//                 <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+//                   <div>
+//                     <h2 className="text-lg font-semibold text-slate-950">
+//                       Cheque Details
+//                     </h2>
+//                     <p className="mt-1 text-sm text-slate-500">
+//                       Select the account and add one or more cheque numbers.
+//                     </p>
+//                   </div>
+
+//                   <Button
+//                     type="button"
+//                     variant="outline"
+//                     size="sm"
+//                     className="rounded-full border-slate-200"
+//                     onClick={handleAddChequeNumber}
+//                   >
+//                     <Plus className="mr-2 h-4 w-4" />
+//                     Add Cheque
+//                   </Button>
+//                 </div>
+
+//                 <div className="space-y-5">
+//                   <div className="space-y-2">
+//                     <Label htmlFor="account" className="text-sm text-slate-700">
+//                       Select Account
+//                     </Label>
+
+//                     <Select
+//                       value={formData.selectedAccountId}
+//                       onValueChange={(value) => {
+//                         const account =
+//                           resolvedAccounts.find((acc) => acc.id === value) ||
+//                           null;
+
+//                         setSelectedAccount(account);
+//                         setFormData((prev) => ({
+//                           ...prev,
+//                           selectedAccountId: value,
+//                         }));
+//                       }}
+//                     >
+//                       <SelectTrigger className="h-11 rounded-2xl border-slate-200">
+//                         <SelectValue
+//                           placeholder={
+//                             accountsLoading
+//                               ? "Loading accounts..."
+//                               : "Select account"
+//                           }
+//                         />
+//                       </SelectTrigger>
+
+//                       <SelectContent>
+//                         {resolvedAccounts.length === 0 ? (
+//                           <SelectItem value="__no_accounts__" disabled>
+//                             No active accounts found
+//                           </SelectItem>
+//                         ) : (
+//                           resolvedAccounts.map((account) => (
+//                             <SelectItem key={account.id} value={account.id}>
+//                               {account.accountName || account.id}
+//                             </SelectItem>
+//                           ))
+//                         )}
+//                       </SelectContent>
+//                     </Select>
+//                   </div>
+
+//                   {selectedAccount && (
+//                     <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+//                       <h3 className="mb-4 text-sm font-semibold text-slate-950">
+//                         Account Information
+//                       </h3>
+
+//                       <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
+//                         <div>
+//                           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+//                             Account Name
+//                           </p>
+//                           <p className="mt-1 font-semibold text-slate-900">
+//                             {selectedAccount.accountName || "-"}
+//                           </p>
+//                         </div>
+
+//                         <div>
+//                           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+//                             Account Number
+//                           </p>
+//                           <p className="mt-1 font-semibold text-slate-900">
+//                             {selectedAccount.accountNumber || "-"}
+//                           </p>
+//                         </div>
+
+//                         <div>
+//                           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+//                             Bank
+//                           </p>
+//                           <p className="mt-1 font-semibold text-slate-900">
+//                             {selectedAccount.bankName || "-"}
+//                           </p>
+//                         </div>
+
+//                         <div>
+//                           <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+//                             Balance
+//                           </p>
+//                           <p className="mt-1 font-semibold text-slate-900">
+//                             Rs{" "}
+//                             {formatPKR(
+//                               selectedAccount.currentBalance ??
+//                                 selectedAccount.balance ??
+//                                 0
+//                             )}
+//                           </p>
+//                         </div>
+//                       </div>
+//                     </div>
+//                   )}
+
+//                   <div className="space-y-3">
+//                     <Label className="text-sm text-slate-700">
+//                       Cheque Numbers
+//                     </Label>
+
+//                     {formData.chequeNumbers.map((chequeNumber, index) => (
+//                       <div
+//                         key={index}
+//                         className="flex flex-col gap-2 sm:flex-row sm:items-center"
+//                       >
+//                         <Input
+//                           value={chequeNumber}
+//                           onChange={(e) =>
+//                             handleChequeNumberChange(index, e.target.value)
+//                           }
+//                           placeholder={`Enter cheque number ${index + 1}`}
+//                           className="h-11 rounded-2xl border-slate-200"
+//                         />
+
+//                         <Button
+//                           type="button"
+//                           variant="outline"
+//                           size="icon"
+//                           className="h-11 w-11 shrink-0 rounded-2xl border-slate-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+//                           onClick={() => handleRemoveChequeNumber(index)}
+//                           disabled={formData.chequeNumbers.length === 1}
+//                         >
+//                           <Trash2 className="h-4 w-4" />
+//                         </Button>
+//                       </div>
+//                     ))}
+//                   </div>
+//                 </div>
+//               </section>
+//             )}
+
+//             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+//               <div className="mb-6 flex items-start gap-3">
+//                 <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+//                   <ReceiptText className="h-5 w-5" />
+//                 </div>
+
+//                 <div>
+//                   <h2 className="text-lg font-semibold text-slate-950">
+//                     Reference & Notes
+//                   </h2>
+//                   <p className="mt-1 text-sm text-slate-500">
+//                     Add transaction reference, upload receipts, and write
+//                     payment notes.
+//                   </p>
+//                 </div>
+//               </div>
+
+//               <div className="space-y-5">
+//                 <div className="space-y-2">
+//                   <Label
+//                     htmlFor="transactionReference"
+//                     className="text-sm text-slate-700"
+//                   >
+//                     Transaction Reference
+//                   </Label>
+
+//                   <Input
+//                     id="transactionReference"
+//                     value={formData.transactionReference}
+//                     onChange={(e) =>
+//                       setFormData((prev) => ({
+//                         ...prev,
+//                         transactionReference: e.target.value,
+//                       }))
+//                     }
+//                     placeholder="Enter transaction reference"
+//                     className="h-11 rounded-2xl border-slate-200"
+//                   />
+//                 </div>
+
+//                 {allowReceiptUpload && (
+//                   <div className="space-y-3">
+//                     <Label htmlFor="receipt" className="text-sm text-slate-700">
+//                       Upload Receipt / Cheque Copies
+//                     </Label>
+
+//                     <label
+//                       htmlFor="receipt"
+//                       className="flex cursor-pointer flex-col items-center justify-center rounded-3xl border border-dashed border-slate-300 bg-slate-50 px-6 py-8 text-center transition hover:border-slate-400 hover:bg-slate-100"
+//                     >
+//                       <FileUp className="h-8 w-8 text-slate-500" />
+
+//                       <p className="mt-3 text-sm font-semibold text-slate-800">
+//                         Click to upload files
+//                       </p>
+
+//                       <p className="mt-1 text-xs text-slate-500">
+//                         JPG, PNG, or PDF. Multiple files are allowed.
+//                       </p>
+
+//                       <Input
+//                         id="receipt"
+//                         type="file"
+//                         accept=".jpg,.jpeg,.png,.pdf"
+//                         multiple
+//                         onChange={handleReceiptFilesChange}
+//                         className="hidden"
+//                       />
+//                     </label>
+
+//                     {receiptFiles.length > 0 && (
+//                       <div className="space-y-2">
+//                         {receiptFiles.map((file, index) => (
+//                           <div
+//                             key={`${file.name}-${index}`}
+//                             className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
+//                           >
+//                             <div className="min-w-0">
+//                               <p className="truncate font-medium text-slate-900">
+//                                 {index + 1}. {file.name}
+//                               </p>
+//                               <p className="text-xs text-slate-500">
+//                                 {getFileSizeLabel(file.size)}
+//                               </p>
+//                             </div>
+
+//                             <Button
+//                               type="button"
+//                               variant="ghost"
+//                               size="icon"
+//                               className="h-9 w-9 shrink-0 rounded-full text-red-600 hover:bg-red-50 hover:text-red-700"
+//                               onClick={() => handleRemoveReceiptFile(index)}
+//                             >
+//                               <Trash2 className="h-4 w-4" />
+//                             </Button>
+//                           </div>
+//                         ))}
+//                       </div>
+//                     )}
+//                   </div>
+//                 )}
+
+//                 <div className="space-y-2">
+//                   <Label
+//                     htmlFor="paymentNotes"
+//                     className="text-sm text-slate-700"
+//                   >
+//                     Payment Notes
+//                   </Label>
+
+//                   <Textarea
+//                     id="paymentNotes"
+//                     rows={5}
+//                     value={formData.paymentNotes}
+//                     onChange={(e) =>
+//                       setFormData((prev) => ({
+//                         ...prev,
+//                         paymentNotes: e.target.value,
+//                       }))
+//                     }
+//                     placeholder="Add any notes..."
+//                     className="rounded-2xl border-slate-200"
+//                   />
+//                 </div>
+//               </div>
+//             </section>
+//           </div>
+
+//           <aside className="space-y-6 lg:sticky lg:top-28 lg:self-start">
+//             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+//               <h2 className="text-base font-semibold text-slate-950">
+//                 Release Summary
+//               </h2>
+
+//               <div className="mt-5 space-y-4 text-sm">
+//                 <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+//                   <span className="text-slate-500">Amount</span>
+//                   <span className="text-right font-semibold text-slate-950">
+//                     Rs {formatPKR(formData.amount)}
+//                   </span>
+//                 </div>
+
+//                 <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+//                   <span className="text-slate-500">Method</span>
+//                   <span className="text-right font-semibold text-slate-950">
+//                     {getPaymentMethodLabel(formData.paymentMethod)}
+//                   </span>
+//                 </div>
+
+//                 <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+//                   <span className="text-slate-500">Party</span>
+//                   <span className="max-w-[190px] text-right font-semibold text-slate-950">
+//                     {resolvedParties.length
+//                       ? resolvedParties.join(", ")
+//                       : "-"}
+//                   </span>
+//                 </div>
+
+//                 {formData.paymentMethod === "cheque" && (
+//                   <>
+//                     <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+//                       <span className="text-slate-500">Account</span>
+//                       <span className="max-w-[190px] text-right font-semibold text-slate-950">
+//                         {selectedAccount?.accountName || "-"}
+//                       </span>
+//                     </div>
+
+//                     <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+//                       <span className="text-slate-500">Cheques</span>
+//                       <span className="text-right font-semibold text-slate-950">
+//                         {cleanChequeNumbers(formData.chequeNumbers).length}
+//                       </span>
+//                     </div>
+//                   </>
+//                 )}
+
+//                 <div className="flex items-start justify-between gap-4">
+//                   <span className="text-slate-500">Files</span>
+//                   <span className="text-right font-semibold text-slate-950">
+//                     {receiptFiles.length}
+//                   </span>
+//                 </div>
+//               </div>
+//             </section>
+
+//             <section className="rounded-3xl border border-blue-100 bg-blue-50 p-5">
+//               <h3 className="text-sm font-semibold text-blue-950">
+//                 Before releasing
+//               </h3>
+
+//               <ul className="mt-3 space-y-2 text-sm text-blue-800">
+//                 <li>Confirm the release amount is correct.</li>
+//                 <li>For cheque payment, add all cheque numbers.</li>
+//                 <li>Upload receipt or cheque copy files if available.</li>
+//               </ul>
+//             </section>
+//           </aside>
+//         </form>
+//       </main>
+//     </div>
+//   );
+// }
+
 import {
   useEffect,
   useMemo,
@@ -1350,6 +2406,101 @@ function formatPKR(value: number | string | undefined | null) {
   });
 }
 
+function safeNumber(value: any) {
+  const parsed = Number(String(value ?? 0).replace(/,/g, ""));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function roundMoney(value: any) {
+  return Math.round(safeNumber(value) * 100) / 100;
+}
+
+function getPaymentReleaseAmount(entry: any) {
+  return roundMoney(
+    entry?.amount ??
+      entry?.releaseAmount ??
+      entry?.releasedAmount ??
+      entry?.paymentAmount ??
+      0,
+  );
+}
+
+function getPaymentReleaseHistory(source: any): any[] {
+  const history = Array.isArray(source?.paymentReleaseHistory)
+    ? source.paymentReleaseHistory
+    : [];
+
+  if (history.length > 0) {
+    return history.filter((entry: any) => getPaymentReleaseAmount(entry) > 0);
+  }
+
+  // Backward compatibility for old records that only stored one paymentDetails object.
+  const legacyPayment = source?.paymentDetails || source?.latestPaymentRelease;
+  if (legacyPayment && getPaymentReleaseAmount(legacyPayment) > 0) {
+    return [
+      {
+        ...legacyPayment,
+        releasedAt:
+          legacyPayment?.releasedAt ||
+          source?.paymentReleasedAt ||
+          source?.releasePaymentAt ||
+          source?.updatedAt ||
+          null,
+      },
+    ];
+  }
+
+  return [];
+}
+
+function getTotalReleasedAmount(source: any) {
+  return roundMoney(
+    getPaymentReleaseHistory(source).reduce(
+      (sum, entry) => sum + getPaymentReleaseAmount(entry),
+      0,
+    ),
+  );
+}
+
+function getApprovedAmountFromRecord(source: any, fallback = 0) {
+  return roundMoney(
+    source?.approvedAmount ??
+      source?.totalApprovedAmount ??
+      source?.approvedTotal ??
+      source?.totalAmount ??
+      source?.amount ??
+      fallback,
+  );
+}
+
+function getRemainingReleaseAmount(source: any, fallbackApproved = 0) {
+  const approvedAmount = getApprovedAmountFromRecord(source, fallbackApproved);
+  const releasedAmount = getTotalReleasedAmount(source);
+  return roundMoney(Math.max(approvedAmount - releasedAmount, 0));
+}
+
+function getReleaseDateLabel(value: any) {
+  if (!value) return "-";
+
+  let date: Date | null = null;
+
+  if (value instanceof Date) date = value;
+  else if (typeof value?.toDate === "function") date = value.toDate();
+  else if (typeof value?.seconds === "number")
+    date = new Date(value.seconds * 1000);
+  else date = new Date(value);
+
+  if (!date || Number.isNaN(date.getTime())) return "-";
+
+  return date.toLocaleString("en-PK", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+}
+
 function getPaymentMethodLabel(method?: string) {
   switch (method) {
     case "cash":
@@ -1415,26 +2566,64 @@ export default function PaymentReleaseModal<T = any>({
     return items.filter((item: any) => item?.status === "approved");
   }, [invoice]);
 
-  const invoiceApprovedAmount = useMemo(() => {
-    return approvedInvoiceItems.reduce((sum: number, item: any) => {
-      const qty = Number(item?.units || 0);
-      const rate = Number(item?.unitRate || 0);
-      const tax = Number(item?.tax || 0);
-      const total = Number(item?.total ?? qty * rate + tax);
+  const approvedLineItemsAmount = useMemo(() => {
+    return roundMoney(
+      approvedInvoiceItems.reduce((sum: number, item: any) => {
+        const qty = Number(item?.units || 0);
+        const rate = Number(item?.unitRate || 0);
+        const tax = Number(item?.tax || 0);
+        const total = Number(item?.total ?? qty * rate + tax);
 
-      return sum + total;
-    }, 0);
+        return sum + total;
+      }, 0),
+    );
   }, [approvedInvoiceItems]);
 
+  const invoiceApprovedAmount = useMemo(() => {
+    return getApprovedAmountFromRecord(invoice, approvedLineItemsAmount);
+  }, [invoice, approvedLineItemsAmount]);
+
+  const paymentReleaseHistory = useMemo(() => {
+    return getPaymentReleaseHistory(invoice);
+  }, [invoice]);
+
+  const totalReleasedAmount = useMemo(() => {
+    return getTotalReleasedAmount(invoice);
+  }, [invoice]);
+
+  const remainingReleaseAmount = useMemo(() => {
+    return getRemainingReleaseAmount(invoice, invoiceApprovedAmount);
+  }, [invoice, invoiceApprovedAmount]);
+
   const invoiceApprovedVendors = useMemo(() => {
-    return [
+    const vendors = [
       ...new Set(
         approvedInvoiceItems
-          .map((item: any) => String(item?.vendor || "").trim())
+          .map((item: any) =>
+            String(
+              item?.vendor ||
+                item?.vendorName ||
+                item?.supplier ||
+                item?.supplierName ||
+                "",
+            ).trim(),
+          )
           .filter(Boolean),
       ),
     ] as string[];
-  }, [approvedInvoiceItems]);
+
+    if (vendors.length > 0) return vendors;
+
+    const fallbackVendor = String(
+      (invoice as any)?.vendorName ||
+        (invoice as any)?.supplierName ||
+        (invoice as any)?.clientName ||
+        (invoice as any)?.partyName ||
+        "",
+    ).trim();
+
+    return fallbackVendor ? [fallbackVendor] : [];
+  }, [approvedInvoiceItems, invoice]);
 
   const resolvedContext = (context ?? invoice ?? null) as
     | T
@@ -1455,12 +2644,12 @@ export default function PaymentReleaseModal<T = any>({
     return [];
   }, [docPath, resolvedContext, invoice]);
 
-  const resolvedAmount = amount ?? (invoice ? invoiceApprovedAmount : 0);
+  const resolvedAmount = amount ?? (invoice ? remainingReleaseAmount : 0);
 
   const resolvedParties = parties ?? (invoice ? invoiceApprovedVendors : []);
 
   const resolvedAmountLabel =
-    amountLabel ?? (invoice ? "Approved Amount" : "Amount");
+    amountLabel ?? (invoice ? "Remaining Balance" : "Amount");
 
   const resolvedPartyLabel =
     partyLabel ?? (invoice ? "Approved Vendors" : "Payee");
@@ -1468,7 +2657,7 @@ export default function PaymentReleaseModal<T = any>({
   const resolvedInitialPaymentMethod =
     initialPaymentMethod ?? (invoice ? "bank_transfer" : "cash");
 
-  const resolvedAmountReadOnly = amountReadOnly ?? !!invoice;
+  const resolvedAmountReadOnly = amountReadOnly ?? false;
 
   const resolvedAccounts = useMemo(() => {
     const map = new Map<string, PaymentAccount>();
@@ -1486,7 +2675,26 @@ export default function PaymentReleaseModal<T = any>({
   ) => {
     const { formData, receiptUrl, selectedAccount, actor } = args;
 
+    const sourceRecord = ((args as any).context || invoice || {}) as any;
     const extendedFormData = formData as ExtendedPaymentReleaseFormValues;
+
+    const releaseAmount = roundMoney(extendedFormData.amount);
+    const approvedAmount = getApprovedAmountFromRecord(
+      sourceRecord,
+      invoiceApprovedAmount || releaseAmount,
+    );
+    const existingHistory = getPaymentReleaseHistory(sourceRecord);
+    const releasedBefore = roundMoney(
+      existingHistory.reduce(
+        (sum, entry) => sum + getPaymentReleaseAmount(entry),
+        0,
+      ),
+    );
+    const releasedAfter = roundMoney(releasedBefore + releaseAmount);
+    const remainingAfter = roundMoney(
+      Math.max(approvedAmount - releasedAfter, 0),
+    );
+    const isFullyReleased = approvedAmount > 0 && remainingAfter <= 0.009;
 
     const chequeNumbers = cleanChequeNumbers(
       extendedFormData.chequeNumbers?.length
@@ -1500,32 +2708,70 @@ export default function PaymentReleaseModal<T = any>({
         ? [receiptUrl]
         : [];
 
-    const paymentDetails: any = {
+    const releaseEntry: any = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      releaseType:
+        releasedBefore <= 0
+          ? isFullyReleased
+            ? "full"
+            : "advance"
+          : isFullyReleased
+            ? "final"
+            : "partial",
       paymentMethod: extendedFormData.paymentMethod,
-      amount: Number(extendedFormData.amount),
+      amount: releaseAmount,
+      approvedAmount,
+      releasedBefore,
+      releasedAfter,
+      remainingAfter,
       vendors: invoiceApprovedVendors,
       transactionReference: extendedFormData.transactionReference,
       bankReceiptUrl: receiptUrls[0] || receiptUrl || "",
       bankReceiptUrls: receiptUrls,
       paymentNotes: extendedFormData.paymentNotes,
-      releasedBy: actor.profileId || actor.uid,
+      releasedBy: actor.profileId || actor.uid || "",
       releasedByName: actor.displayName || actor.email || "Unknown",
-      releasedAt: serverTimestamp(),
+      releasedByEmail: actor.email || "",
+      releasedAt: new Date(),
     };
 
     if (chequeNumbers.length > 0) {
-      paymentDetails.chequeNumber = chequeNumbers[0];
-      paymentDetails.chequeNumbers = chequeNumbers;
+      releaseEntry.chequeNumber = chequeNumbers[0];
+      releaseEntry.chequeNumbers = chequeNumbers;
     }
 
     if (selectedAccount) {
-      paymentDetails.selectedAccount = selectedAccount;
+      releaseEntry.selectedAccount = selectedAccount;
+      releaseEntry.selectedAccountId = selectedAccount.id || "";
+      releaseEntry.selectedAccountName = selectedAccount.accountName || "";
     }
 
-    return {
-      status: "payment_released",
-      paymentDetails,
+    const updateData: Record<string, any> = {
+      status: isFullyReleased
+        ? "payment_released"
+        : "payment_partially_released",
+      paymentStatus: isFullyReleased ? "released" : "partial",
+      paymentReleased: isFullyReleased,
+      paymentPartiallyReleased: !isFullyReleased,
+      releasePaymentCreated: true,
+      totalApprovedAmount: approvedAmount,
+      totalReleasedAmount: releasedAfter,
+      remainingReleaseAmount: remainingAfter,
+      latestPaymentRelease: releaseEntry,
+      paymentDetails: releaseEntry,
+      paymentReleaseHistory: [...existingHistory, releaseEntry],
+      updatedAt: serverTimestamp(),
     };
+
+    if (isFullyReleased) {
+      updateData.paymentReleasedAt = serverTimestamp();
+      updateData.releasePaymentAt = serverTimestamp();
+      updateData.paymentFullyReleasedAt = serverTimestamp();
+    } else {
+      updateData.partialPaymentReleasedAt = serverTimestamp();
+    }
+
+    return updateData;
   };
 
   const [formData, setFormData] = useState<ExtendedPaymentReleaseFormValues>({
@@ -1662,10 +2908,21 @@ export default function PaymentReleaseModal<T = any>({
       return;
     }
 
-    if (!formData.amount || Number(formData.amount) <= 0) {
+    const requestedReleaseAmount = roundMoney(formData.amount);
+
+    if (!formData.amount || requestedReleaseAmount <= 0) {
       toast({
         title: "Error",
         description: "Please enter a valid amount",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (invoice && requestedReleaseAmount > remainingReleaseAmount + 0.009) {
+      toast({
+        title: "Error",
+        description: `Release amount cannot exceed the remaining balance of Rs ${formatPKR(remainingReleaseAmount)}.`,
         variant: "destructive",
       });
       return;
@@ -1774,7 +3031,7 @@ export default function PaymentReleaseModal<T = any>({
 
               <p className="mt-1 max-w-2xl text-sm text-slate-500">
                 Review payment information, select the payment method, attach
-                receipts, and release the approved amount.
+                receipts, and release the remaining amount.
               </p>
             </div>
           </div>
@@ -1813,15 +3070,16 @@ export default function PaymentReleaseModal<T = any>({
       </div>
 
       <main className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-3">
+        <div className="mb-6 grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
           <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {resolvedAmountLabel}
+                  Total Approved Amount
                 </p>
                 <p className="mt-2 text-2xl font-bold text-slate-950">
-                  Rs {formatPKR(resolvedAmount)}
+                  Rs{" "}
+                  {formatPKR(invoice ? invoiceApprovedAmount : resolvedAmount)}
                 </p>
               </div>
 
@@ -1835,15 +3093,33 @@ export default function PaymentReleaseModal<T = any>({
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {resolvedPartyLabel}
+                  Released So Far
                 </p>
-                <p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-950">
-                  {resolvedParties.length ? resolvedParties.join(", ") : "-"}
+                <p className="mt-2 text-2xl font-bold text-slate-950">
+                  Rs {formatPKR(invoice ? totalReleasedAmount : 0)}
                 </p>
               </div>
 
               <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
-                <Building2 className="h-5 w-5" />
+                <CheckCircle2 className="h-5 w-5" />
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  Remaining Balance
+                </p>
+                <p className="mt-2 text-2xl font-bold text-slate-950">
+                  Rs{" "}
+                  {formatPKR(invoice ? remainingReleaseAmount : resolvedAmount)}
+                </p>
+              </div>
+
+              <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-slate-100 text-slate-700">
+                <Banknote className="h-5 w-5" />
               </div>
             </div>
           </div>
@@ -1865,6 +3141,46 @@ export default function PaymentReleaseModal<T = any>({
             </div>
           </div>
         </div>
+
+        {invoice && invoiceApprovedAmount > 0 && (
+          <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="text-sm font-semibold text-slate-950">
+                  Payment Release Progress
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Rs {formatPKR(totalReleasedAmount)} released from Rs{" "}
+                  {formatPKR(invoiceApprovedAmount)}.
+                </p>
+              </div>
+              <p className="text-sm font-semibold text-slate-950">
+                {Math.min(
+                  100,
+                  Math.round(
+                    (totalReleasedAmount / invoiceApprovedAmount) * 100,
+                  ),
+                )}
+                %
+              </p>
+            </div>
+
+            <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
+              <div
+                className="h-full rounded-full bg-slate-950 transition-all"
+                style={{
+                  width: `${Math.min(
+                    100,
+                    Math.max(
+                      0,
+                      (totalReleasedAmount / invoiceApprovedAmount) * 100,
+                    ),
+                  )}%`,
+                }}
+              />
+            </div>
+          </div>
+        )}
 
         <form
           id="payment-release-form"
@@ -1897,6 +3213,9 @@ export default function PaymentReleaseModal<T = any>({
                   <Input
                     id="amount"
                     type="number"
+                    min="0"
+                    step="0.01"
+                    max={invoice ? remainingReleaseAmount : undefined}
                     value={formData.amount}
                     readOnly={resolvedAmountReadOnly}
                     className={`h-11 rounded-2xl border-slate-200 ${
@@ -1909,6 +3228,13 @@ export default function PaymentReleaseModal<T = any>({
                       }))
                     }
                   />
+
+                  {invoice && (
+                    <p className="text-xs text-slate-500">
+                      You can release any amount up to Rs{" "}
+                      {formatPKR(remainingReleaseAmount)}.
+                    </p>
+                  )}
                 </div>
 
                 <div className="space-y-2">
@@ -2243,12 +3569,45 @@ export default function PaymentReleaseModal<T = any>({
               </h2>
 
               <div className="mt-5 space-y-4 text-sm">
+                {invoice && (
+                  <>
+                    <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+                      <span className="text-slate-500">Approved</span>
+                      <span className="text-right font-semibold text-slate-950">
+                        Rs {formatPKR(invoiceApprovedAmount)}
+                      </span>
+                    </div>
+
+                    <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+                      <span className="text-slate-500">Released Before</span>
+                      <span className="text-right font-semibold text-slate-950">
+                        Rs {formatPKR(totalReleasedAmount)}
+                      </span>
+                    </div>
+                  </>
+                )}
+
                 <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-                  <span className="text-slate-500">Amount</span>
+                  <span className="text-slate-500">This Release</span>
                   <span className="text-right font-semibold text-slate-950">
                     Rs {formatPKR(formData.amount)}
                   </span>
                 </div>
+
+                {invoice && (
+                  <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
+                    <span className="text-slate-500">Balance After</span>
+                    <span className="text-right font-semibold text-slate-950">
+                      Rs{" "}
+                      {formatPKR(
+                        Math.max(
+                          remainingReleaseAmount - safeNumber(formData.amount),
+                          0,
+                        ),
+                      )}
+                    </span>
+                  </div>
+                )}
 
                 <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
                   <span className="text-slate-500">Method</span>
@@ -2290,6 +3649,57 @@ export default function PaymentReleaseModal<T = any>({
                 </div>
               </div>
             </section>
+
+            {paymentReleaseHistory.length > 0 && (
+              <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h2 className="text-base font-semibold text-slate-950">
+                  Payment Release History
+                </h2>
+
+                <div className="mt-4 space-y-3">
+                  {[...paymentReleaseHistory]
+                    .reverse()
+                    .map((entry: any, index: number) => (
+                      <div
+                        key={
+                          entry?.id ||
+                          `${entry?.releasedAt || "release"}-${index}`
+                        }
+                        className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm"
+                      >
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <p className="font-semibold text-slate-950">
+                              Rs {formatPKR(getPaymentReleaseAmount(entry))}
+                            </p>
+                            <p className="mt-1 text-xs text-slate-500">
+                              {getPaymentMethodLabel(entry?.paymentMethod)} •{" "}
+                              {getReleaseDateLabel(entry?.releasedAt)}
+                            </p>
+                          </div>
+                          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
+                            {entry?.releaseType || "release"}
+                          </span>
+                        </div>
+
+                        <div className="mt-3 space-y-1 text-xs text-slate-500">
+                          <p>Released By: {entry?.releasedByName || "-"}</p>
+                          {entry?.transactionReference && (
+                            <p>Reference: {entry.transactionReference}</p>
+                          )}
+                          {Array.isArray(entry?.chequeNumbers) &&
+                            entry.chequeNumbers.length > 0 && (
+                              <p>Cheques: {entry.chequeNumbers.join(", ")}</p>
+                            )}
+                          {entry?.paymentNotes && (
+                            <p>Notes: {entry.paymentNotes}</p>
+                          )}
+                        </div>
+                      </div>
+                    ))}
+                </div>
+              </section>
+            )}
 
             <section className="rounded-3xl border border-blue-100 bg-blue-50 p-5">
               <h3 className="text-sm font-semibold text-blue-950">
