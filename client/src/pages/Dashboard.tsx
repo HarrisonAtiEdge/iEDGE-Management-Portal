@@ -1,351 +1,2265 @@
-import { useState, useEffect } from "react";
-import { useAuth } from "@/contexts/AuthContext";
+import {
+  useCallback,
+  useEffect,
+  useMemo,
+  useState,
+  type ReactNode,
+} from "react";
 import {
   collection,
-  query,
-  where,
+  collectionGroup,
+  doc,
+  getDoc,
   getDocs,
-  orderBy,
-  limit,
+  onSnapshot,
+  type DocumentData,
+  type QueryDocumentSnapshot,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import { useAuth } from "@/contexts/AuthContext";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import InvoiceRequestModal from "@/components/BudgetRequestModal";
-import { InvoiceRequest } from "@shared/schema";
+import {
+  Activity,
+  AlertTriangle,
+  ArrowDownRight,
+  ArrowUpRight,
+  BadgeCheck,
+  Banknote,
+  BarChart3,
+  Building2,
+  CalendarClock,
+  CheckCircle2,
+  CircleDollarSign,
+  Clock3,
+  CreditCard,
+  FileCheck2,
+  FileSpreadsheet,
+  FileText,
+  Landmark,
+  ListChecks,
+  PackageCheck,
+  Plus,
+  ReceiptText,
+  RefreshCcw,
+  TrendingUp,
+  Users,
+  Wallet,
+  XCircle,
+  type LucideIcon,
+} from "lucide-react";
+import {
+  Area,
+  AreaChart,
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  ResponsiveContainer,
+  Tooltip,
+  XAxis,
+  YAxis,
+} from "recharts";
 
-interface DashboardStats {
-  pending: number;
-  approved: number;
-  totalAmount: number;
-  avgProcessing: string;
+const PANEL_ID = "IEDGE-SYSTEM";
+
+type AnyRow = Record<string, any> & { id: string };
+
+type ActivityItem = {
+  id: string;
+  module: string;
+  title: string;
+  description: string;
+  status: string;
+  date: Date | null;
+};
+
+type MoneyEvent = {
+  date: Date | null;
+  amount: number;
+};
+
+type DashboardData = {
+  invoiceRequests: AnyRow[];
+  estimates: AnyRow[];
+  estimateInvoices: AnyRow[];
+  payments: AnyRow[];
+  expenseSheets: AnyRow[];
+  directClaims: AnyRow[];
+  meetingClaims: AnyRow[];
+  records: AnyRow[];
+  purchaseOrders: AnyRow[];
+  manualEntries: AnyRow[];
+  openingBalance: number;
+};
+
+const EMPTY_DATA: DashboardData = {
+  invoiceRequests: [],
+  estimates: [],
+  estimateInvoices: [],
+  payments: [],
+  expenseSheets: [],
+  directClaims: [],
+  meetingClaims: [],
+  records: [],
+  purchaseOrders: [],
+  manualEntries: [],
+  openingBalance: 0,
+};
+
+const normalizeText = (value: any) =>
+  String(value || "")
+    .trim()
+    .toLowerCase();
+
+const safeNumber = (value: any): number => {
+  if (value === null || value === undefined || value === "") return 0;
+
+  const parsed =
+    typeof value === "number" ? value : Number(String(value).replace(/,/g, ""));
+
+  return Number.isFinite(parsed) ? parsed : 0;
+};
+
+const firstText = (...values: any[]): string => {
+  for (const value of values) {
+    if (value === null || value === undefined || typeof value === "object") {
+      continue;
+    }
+
+    const text = String(value).trim();
+    if (text) return text;
+  }
+
+  return "";
+};
+
+const toDate = (value: any): Date | null => {
+  if (!value) return null;
+
+  try {
+    if (value instanceof Date) {
+      return Number.isNaN(value.getTime()) ? null : value;
+    }
+
+    if (typeof value?.toDate === "function") {
+      const date = value.toDate();
+      return Number.isNaN(date?.getTime?.()) ? null : date;
+    }
+
+    if (typeof value?.seconds === "number") {
+      const date = new Date(value.seconds * 1000);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    if (typeof value === "string") {
+      const trimmed = value.trim();
+
+      const ymd = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
+      if (ymd) {
+        const date = new Date(
+          Number(ymd[1]),
+          Number(ymd[2]) - 1,
+          Number(ymd[3]),
+        );
+        return Number.isNaN(date.getTime()) ? null : date;
+      }
+
+      const dmy = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
+      if (dmy) {
+        const date = new Date(
+          Number(dmy[3]),
+          Number(dmy[2]) - 1,
+          Number(dmy[1]),
+        );
+        return Number.isNaN(date.getTime()) ? null : date;
+      }
+    }
+
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? null : date;
+  } catch {
+    return null;
+  }
+};
+
+const getEntityDate = (source: any): Date | null =>
+  toDate(source?.paymentReleasedAt) ||
+  toDate(source?.releasePaymentAt) ||
+  toDate(source?.releasedAt) ||
+  toDate(source?.paymentDate) ||
+  toDate(source?.submittedAt) ||
+  toDate(source?.createdAt) ||
+  toDate(source?.updatedAt) ||
+  toDate(source?.invoiceDate) ||
+  toDate(source?.date) ||
+  toDate(source?.issueDate) ||
+  null;
+
+const getRequestDate = (source: any): Date | null =>
+  toDate(source?.submitDate) ||
+  toDate(source?.submittedAt) ||
+  toDate(source?.submissionDate) ||
+  toDate(source?.requestDate) ||
+  toDate(source?.createdAt) ||
+  toDate(source?.date) ||
+  toDate(source?.updatedAt) ||
+  null;
+
+const formatPKR = (value: any): string =>
+  `Rs ${safeNumber(value).toLocaleString("en-PK", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: 2,
+  })}`;
+
+const formatCompactPKR = (value: any): string => {
+  const number = safeNumber(value);
+
+  if (Math.abs(number) >= 1_000_000_000) {
+    return `Rs ${(number / 1_000_000_000).toFixed(1)}B`;
+  }
+
+  if (Math.abs(number) >= 1_000_000) {
+    return `Rs ${(number / 1_000_000).toFixed(1)}M`;
+  }
+
+  if (Math.abs(number) >= 1_000) {
+    return `Rs ${(number / 1_000).toFixed(1)}K`;
+  }
+
+  return formatPKR(number);
+};
+
+const formatRelativeTime = (date: Date | null): string => {
+  if (!date) return "Date unavailable";
+
+  const diffMinutes = Math.floor((Date.now() - date.getTime()) / 60_000);
+
+  if (diffMinutes < 1) return "Just now";
+  if (diffMinutes < 60) return `${diffMinutes} min ago`;
+  if (diffMinutes < 1_440) return `${Math.floor(diffMinutes / 60)} hr ago`;
+  if (diffMinutes < 10_080)
+    return `${Math.floor(diffMinutes / 1_440)} days ago`;
+
+  return date.toLocaleDateString("en-PK", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+};
+
+const humanize = (value: any): string =>
+  String(value || "Unknown")
+    .replace(/_/g, " ")
+    .replace(/\b\w/g, (letter) => letter.toUpperCase());
+
+const getApprovedRequestAmount = (request: any): number =>
+  safeNumber(
+    request?.approvedAmount ??
+      request?.totalApprovedAmount ??
+      request?.approvedTotal ??
+      request?.totalAmount ??
+      request?.amount,
+  );
+
+const getReleaseAmount = (entry: any): number =>
+  safeNumber(
+    entry?.amount ??
+      entry?.releaseAmount ??
+      entry?.releasedAmount ??
+      entry?.paymentAmount,
+  );
+
+const getPaymentReleaseHistory = (request: any): any[] => {
+  const history = Array.isArray(request?.paymentReleaseHistory)
+    ? request.paymentReleaseHistory
+    : [];
+
+  const validHistory = history.filter(
+    (entry: any) => getReleaseAmount(entry) > 0,
+  );
+
+  if (validHistory.length > 0) return validHistory;
+
+  const legacy = request?.paymentDetails || request?.latestPaymentRelease;
+  if (legacy && getReleaseAmount(legacy) > 0) {
+    return [
+      {
+        ...legacy,
+        releasedAt:
+          legacy?.releasedAt ||
+          request?.paymentReleasedAt ||
+          request?.releasePaymentAt ||
+          request?.updatedAt,
+      },
+    ];
+  }
+
+  return [];
+};
+
+const getReleasedRequestAmount = (request: any): number => {
+  const explicit = safeNumber(request?.totalReleasedAmount);
+  if (explicit > 0) return explicit;
+
+  const historyTotal = getPaymentReleaseHistory(request).reduce(
+    (sum, entry) => sum + getReleaseAmount(entry),
+    0,
+  );
+
+  if (historyTotal > 0) return historyTotal;
+
+  const status = normalizeText(request?.status);
+  if (
+    ["payment_released", "released"].includes(status) ||
+    request?.paymentReleased === true
+  ) {
+    return getApprovedRequestAmount(request);
+  }
+
+  return safeNumber(
+    request?.releasedAmount ?? request?.paidAmount ?? request?.paymentAmount,
+  );
+};
+
+const getRemainingRequestAmount = (request: any): number => {
+  if (
+    request?.remainingReleaseAmount !== undefined &&
+    request?.remainingReleaseAmount !== null
+  ) {
+    return Math.max(safeNumber(request.remainingReleaseAmount), 0);
+  }
+
+  return Math.max(
+    getApprovedRequestAmount(request) - getReleasedRequestAmount(request),
+    0,
+  );
+};
+
+const isFullyReleased = (request: any): boolean => {
+  const approved = getApprovedRequestAmount(request);
+  const released = getReleasedRequestAmount(request);
+  const remaining = getRemainingRequestAmount(request);
+  const status = normalizeText(request?.status);
+
+  if (approved > 0 && (remaining <= 0.009 || released >= approved - 0.009)) {
+    return true;
+  }
+
+  return ["payment_released", "released"].includes(status);
+};
+
+const isPartiallyReleased = (request: any): boolean =>
+  getReleasedRequestAmount(request) > 0 && !isFullyReleased(request);
+
+const getInvoiceStatus = (invoice: any): string => {
+  const raw = normalizeText(invoice?.status || invoice?.paymentStatus);
+
+  if (raw === "paid") return "paid";
+  if (["partially paid", "partially_paid", "partial"].includes(raw)) {
+    return "partial";
+  }
+
+  return "unpaid";
+};
+
+const getClaimStatus = (claim: any): string => {
+  const status = normalizeText(claim?.status || claim?.approvalStatus);
+
+  if (status === "approved") return "approved";
+  if (status === "rejected") return "rejected";
+  return "pending";
+};
+
+const getClaimAmount = (claim: any): number =>
+  safeNumber(
+    claim?.claimAmount ??
+      claim?.amount ??
+      claim?.approvedAmount ??
+      claim?.paidAmount,
+  );
+
+const getClaimPaidAmount = (claim: any): number => {
+  if (normalizeText(claim?.paymentStatus) !== "paid") return 0;
+
+  return safeNumber(
+    claim?.paidAmount ??
+      claim?.approvedAmount ??
+      claim?.claimAmount ??
+      claim?.amount,
+  );
+};
+
+const getExpenseAmount = (expense: any): number =>
+  safeNumber(expense?.totalAmount ?? expense?.amount);
+
+const getPurchaseOrderAmount = (purchaseOrder: any): number =>
+  safeNumber(
+    purchaseOrder?.totalAmount ?? purchaseOrder?.total ?? purchaseOrder?.amount,
+  );
+
+const getEstimateAmount = (estimate: any): number =>
+  safeNumber(estimate?.total ?? estimate?.totalAmount ?? estimate?.amount);
+
+const getEstimateInvoiceAmount = (invoice: any): number =>
+  safeNumber(invoice?.total ?? invoice?.totalAmount ?? invoice?.amount);
+
+const getVendorNames = (request: any): string[] => {
+  const names = new Set<string>();
+
+  const direct = firstText(
+    request?.vendorName,
+    request?.supplierName,
+    request?.payeeName,
+    request?.payee,
+  );
+  if (direct) names.add(direct);
+
+  const items = [
+    ...(Array.isArray(request?.approvalItems) ? request.approvalItems : []),
+    ...(Array.isArray(request?.lineItems) ? request.lineItems : []),
+    ...(Array.isArray(request?.items) ? request.items : []),
+  ];
+
+  items.forEach((item: any) => {
+    const name = firstText(
+      item?.vendor,
+      item?.vendorName,
+      item?.supplier,
+      item?.supplierName,
+      item?.original?.vendor,
+      item?.original?.supplier,
+    );
+
+    if (name) names.add(name);
+  });
+
+  return Array.from(names);
+};
+
+const isOverdueDate = (value: any): boolean => {
+  const date = toDate(value);
+  if (!date) return false;
+
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  date.setHours(0, 0, 0, 0);
+
+  return date < today;
+};
+
+const snapshotToRows = (snapshot: {
+  docs: QueryDocumentSnapshot<DocumentData>[];
+}): AnyRow[] =>
+  snapshot.docs.map((document) => ({
+    id: document.id,
+    ...document.data(),
+  }));
+
+function MetricCard({
+  title,
+  value,
+  subtitle,
+  icon: Icon,
+  tone = "slate",
+  trend,
+}: {
+  title: string;
+  value: string;
+  subtitle: string;
+  icon: LucideIcon;
+  tone?: "slate" | "emerald" | "blue" | "amber" | "rose" | "violet";
+  trend?: "up" | "down";
+}) {
+  const toneClasses = {
+    slate: "bg-slate-100 text-slate-700",
+    emerald: "bg-emerald-50 text-emerald-700",
+    blue: "bg-blue-50 text-blue-700",
+    amber: "bg-amber-50 text-amber-700",
+    rose: "bg-rose-50 text-rose-700",
+    violet: "bg-violet-50 text-violet-700",
+  };
+
+  return (
+    <Card className="overflow-hidden rounded-3xl border-slate-200 bg-white shadow-sm">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
+              {title}
+            </p>
+            <p className="mt-3 truncate text-2xl font-black tracking-tight text-slate-950 xl:text-3xl">
+              {value}
+            </p>
+          </div>
+
+          <div
+            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${toneClasses[tone]}`}
+          >
+            <Icon className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-3">
+          {trend === "up" && (
+            <ArrowUpRight className="h-4 w-4 text-emerald-600" />
+          )}
+          {trend === "down" && (
+            <ArrowDownRight className="h-4 w-4 text-rose-600" />
+          )}
+          <p className="truncate text-xs font-medium text-slate-500">
+            {subtitle}
+          </p>
+        </div>
+      </CardContent>
+    </Card>
+  );
 }
 
-interface RecentActivity {
-  id: string;
+function AlertCard({
+  title,
+  value,
+  description,
+  icon,
+  tone,
+}: {
+  title: string;
+  value: string;
   description: string;
-  timestamp: string;
-  status: string;
+  icon: ReactNode;
+  tone: "amber" | "blue" | "rose" | "emerald";
+}) {
+  const classes = {
+    amber: "border-amber-200 bg-amber-50/70 text-amber-800",
+    blue: "border-blue-200 bg-blue-50/70 text-blue-800",
+    rose: "border-rose-200 bg-rose-50/70 text-rose-800",
+    emerald: "border-emerald-200 bg-emerald-50/70 text-emerald-800",
+  };
+
+  return (
+    <div className={`rounded-2xl border p-4 ${classes[tone]}`}>
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.14em] opacity-70">
+            {title}
+          </p>
+          <p className="mt-2 text-2xl font-black">{value}</p>
+          <p className="mt-1 text-xs font-medium leading-5 opacity-75">
+            {description}
+          </p>
+        </div>
+        <div className="rounded-xl bg-white/70 p-2.5 shadow-sm">{icon}</div>
+      </div>
+    </div>
+  );
+}
+
+function ModuleCard({
+  title,
+  subtitle,
+  icon: Icon,
+  items,
+}: {
+  title: string;
+  subtitle: string;
+  icon: LucideIcon;
+  items: Array<{ label: string; value: string; className?: string }>;
+}) {
+  return (
+    <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
+      <CardContent className="p-5">
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h3 className="font-black text-slate-950">{title}</h3>
+            <p className="mt-1 text-xs leading-5 text-slate-500">{subtitle}</p>
+          </div>
+          <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
+            <Icon className="h-5 w-5" />
+          </div>
+        </div>
+
+        <div className="mt-5 space-y-3">
+          {items.map((item) => (
+            <div
+              key={item.label}
+              className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 last:border-0 last:pb-0"
+            >
+              <span className="text-sm font-medium text-slate-500">
+                {item.label}
+              </span>
+              <span
+                className={`text-sm font-black text-slate-950 ${item.className || ""}`}
+              >
+                {item.value}
+              </span>
+            </div>
+          ))}
+        </div>
+      </CardContent>
+    </Card>
+  );
+}
+
+function StatusBadge({ status }: { status: string }) {
+  const normalized = normalizeText(status);
+
+  const classes = normalized.includes("partial")
+    ? "border-blue-200 bg-blue-50 text-blue-700"
+    : normalized.includes("paid") ||
+        normalized.includes("approved") ||
+        normalized.includes("released")
+      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+      : normalized.includes("reject") || normalized.includes("cancel")
+        ? "border-rose-200 bg-rose-50 text-rose-700"
+        : normalized.includes("pending") ||
+            normalized.includes("unpaid") ||
+            normalized.includes("open")
+          ? "border-amber-200 bg-amber-50 text-amber-700"
+          : "border-slate-200 bg-slate-50 text-slate-600";
+
+  return (
+    <span
+      className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${classes}`}
+    >
+      {humanize(status)}
+    </span>
+  );
 }
 
 export default function Dashboard() {
   const { userProfile } = useAuth();
-  const [stats, setStats] = useState<DashboardStats>({
-    pending: 0,
-    approved: 0,
-    totalAmount: 0,
-    avgProcessing: "0 days",
-  });
-  const [recentActivity, setRecentActivity] = useState<RecentActivity[]>([]);
-  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
+
+  const [data, setData] = useState<DashboardData>(EMPTY_DATA);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [unavailableModules, setUnavailableModules] = useState<string[]>([]);
+  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
 
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
+  const loadDashboardData = useCallback(async (silent = false) => {
+    if (silent) setRefreshing(true);
+    else setLoading(true);
 
-  async function loadDashboardData() {
+    const unavailable = new Set<string>();
+
+    const readCollection = async (
+      path: string[],
+      label: string,
+    ): Promise<AnyRow[]> => {
+      try {
+        const snapshot = await getDocs(
+          collection(db, path[0], ...path.slice(1)),
+        );
+        return snapshotToRows(snapshot as any);
+      } catch (error) {
+        console.warn(`Dashboard could not read ${label}:`, error);
+        unavailable.add(label);
+        return [];
+      }
+    };
+
     try {
-      setLoading(true);
+      const [
+        invoiceRequests,
+        estimates,
+        estimateInvoices,
+        payments,
+        expenseSheets,
+        directClaims,
+        records,
+        poRows,
+        purchaseOrderRows,
+        manualEntries,
+      ] = await Promise.all([
+        readCollection(
+          ["Panels", PANEL_ID, "invoiceRequests"],
+          "Budget Requests",
+        ),
+        readCollection(["Panels", PANEL_ID, "estimates"], "Estimates"),
+        readCollection(
+          ["Panels", PANEL_ID, "estimateInvoices"],
+          "Estimate Invoices",
+        ),
+        readCollection(["Panels", PANEL_ID, "payments"], "Payments"),
+        readCollection(
+          ["Panels", PANEL_ID, "expenseSheets"],
+          "Budget Expenses",
+        ),
+        readCollection(
+          ["Panels", PANEL_ID, "claimReimbursements"],
+          "Reimbursements",
+        ),
+        readCollection(["Panels", PANEL_ID, "Record"], "Records"),
+        readCollection(["Panels", PANEL_ID, "PO"], "Purchase Orders"),
+        readCollection(
+          ["Panels", PANEL_ID, "purchaseOrders"],
+          "Legacy Purchase Orders",
+        ),
+        readCollection(
+          ["Panels", PANEL_ID, "accountStatementManualEntries"],
+          "Manual Statement Entries",
+        ),
+      ]);
 
-      // Load invoices for stats
-      const invoicesQuery = query(collection(db, "invoiceRequests"));
-      const invoicesSnapshot = await getDocs(invoicesQuery);
+      let openingBalance = 0;
+      try {
+        const settingsSnapshot = await getDoc(
+          doc(db, "Panels", PANEL_ID, "accountStatementSettings", "main"),
+        );
 
-      let pendingCount = 0;
-      let approvedCount = 0;
-      let totalAmount = 0;
+        openingBalance = settingsSnapshot.exists()
+          ? safeNumber(settingsSnapshot.data()?.openingBalance)
+          : 0;
+      } catch (error) {
+        console.warn(
+          "Dashboard could not read Account Statement settings:",
+          error,
+        );
+        unavailable.add("Account Statement Settings");
+      }
 
-      invoicesSnapshot.forEach((doc) => {
-        const data = doc.data();
-        if (data.status === "approved" || data.status === "payment_released") {
-          approvedCount++;
-        } else {
-          pendingCount++;
-        }
-        totalAmount += data.amount;
+      let meetingClaims: AnyRow[] = [];
+      try {
+        const meetingSnapshot = await getDocs(
+          collectionGroup(db, "meetingUpdates"),
+        );
+
+        meetingClaims = meetingSnapshot.docs
+          .map((meetingDocument) => ({
+            id: meetingDocument.id,
+            path: meetingDocument.ref.path,
+            ...meetingDocument.data(),
+          }))
+          .filter((meeting: any) => meeting?.reimbursement?.enabled)
+          .map((meeting: any) => ({
+            id: meeting.id,
+            path: meeting.path,
+            ...meeting.reimbursement,
+            personName:
+              meeting.reimbursement?.approvalSubmittedByName ||
+              meeting.reimbursement?.personName ||
+              meeting.personName ||
+              "Unknown",
+            submittedAt:
+              meeting.reimbursement?.approvalSubmittedAt ||
+              meeting.reimbursement?.submittedAt ||
+              meeting.submittedAt ||
+              meeting.createdAt ||
+              null,
+            meetingUpdatedAt: meeting.updatedAt || null,
+          }));
+      } catch (error) {
+        console.warn("Dashboard could not read nested reimbursements:", error);
+        unavailable.add("Nested Reimbursements");
+      }
+
+      const poMap = new Map<string, AnyRow>();
+      [...poRows, ...purchaseOrderRows].forEach((purchaseOrder) => {
+        const key = firstText(
+          purchaseOrder?.poNumber,
+          purchaseOrder?.purchaseOrderNumber,
+          purchaseOrder?.id,
+        );
+
+        if (!poMap.has(key)) poMap.set(key, purchaseOrder);
       });
 
-      setStats({
-        pending: pendingCount,
-        approved: approvedCount,
-        totalAmount,
-        avgProcessing: "2.4 days", // This would be calculated based on actual data
+      setData({
+        invoiceRequests,
+        estimates,
+        estimateInvoices,
+        payments,
+        expenseSheets,
+        directClaims,
+        meetingClaims,
+        records,
+        purchaseOrders: Array.from(poMap.values()),
+        manualEntries,
+        openingBalance,
       });
 
-      // Load recent activity
-      const recentQuery = query(
-        collection(db, "invoiceRequests"),
-        orderBy("submittedAt", "desc"),
-        limit(5),
-      );
-      const recentSnapshot = await getDocs(recentQuery);
-
-      const activities: RecentActivity[] = [];
-      recentSnapshot.forEach((doc) => {
-        const data = doc.data();
-        activities.push({
-          id: doc.id,
-          description: `Invoice #${data.invoiceNumber} ${getStatusDescription(data.status)}`,
-          timestamp: formatTimestamp(data.submittedAt?.toDate()),
-          status: data.status,
-        });
-      });
-
-      setRecentActivity(activities);
+      setUnavailableModules(Array.from(unavailable));
+      setLastUpdated(new Date());
     } catch (error) {
       console.error("Failed to load dashboard data:", error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  }
+  }, []);
 
-  function getStatusDescription(status: string): string {
-    switch (status) {
-      case "pending_operational_admin":
-        return "awaiting operational admin review";
-      case "pending_main_admin":
-        return "awaiting main admin approval";
-      case "pending_finance":
-        return "awaiting finance approval";
-      case "approved":
-        return "approved";
-      case "payment_released":
-        return "payment released";
-      case "rejected":
-        return "rejected";
-      default:
-        return "submitted";
-    }
-  }
+  useEffect(() => {
+    loadDashboardData();
+  }, [loadDashboardData]);
 
-  function formatTimestamp(date: Date): string {
-    if (!date) return "Unknown";
+  useEffect(() => {
+    const watchedCollections = [
+      "invoiceRequests",
+      "estimates",
+      "estimateInvoices",
+      "payments",
+      "expenseSheets",
+      "claimReimbursements",
+      "Record",
+      "PO",
+      "purchaseOrders",
+      "accountStatementManualEntries",
+    ];
+
+    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
+    const initialSnapshots = new Set<string>();
+
+    const unsubscribers = watchedCollections.map((collectionName) =>
+      onSnapshot(
+        collection(db, "Panels", PANEL_ID, collectionName),
+        () => {
+          if (!initialSnapshots.has(collectionName)) {
+            initialSnapshots.add(collectionName);
+            return;
+          }
+
+          if (refreshTimer) clearTimeout(refreshTimer);
+          refreshTimer = setTimeout(() => loadDashboardData(true), 700);
+        },
+        (error) => {
+          console.warn(
+            `Dashboard listener failed for ${collectionName}:`,
+            error,
+          );
+        },
+      ),
+    );
+
+    return () => {
+      if (refreshTimer) clearTimeout(refreshTimer);
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [loadDashboardData]);
+
+  const summary = useMemo(() => {
     const now = new Date();
-    const diff = Math.floor((now.getTime() - date.getTime()) / 1000 / 60); // minutes
+    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
 
-    if (diff < 1) return "Just now";
-    if (diff < 60) return `${diff} minutes ago`;
-    if (diff < 1440) return `${Math.floor(diff / 60)} hours ago`;
-    return `${Math.floor(diff / 1440)} days ago`;
-  }
+    const incomeEvents: MoneyEvent[] = [];
+    const expenseEvents: MoneyEvent[] = [];
 
-  function getStatusColor(status: string): string {
-    switch (status) {
-      case "approved":
-      case "payment_released":
-        return "bg-green-100 text-green-800";
-      case "rejected":
-        return "bg-red-100 text-red-800";
-      case "pending_operational_admin":
-      case "pending_main_admin":
-      case "pending_finance":
-        return "bg-yellow-100 text-yellow-800";
-      default:
-        return "bg-blue-100 text-blue-800";
+    data.payments.forEach((payment) => {
+      const amount = safeNumber(payment?.amount);
+      const date =
+        toDate(payment?.paymentDate) ||
+        toDate(payment?.createdAt) ||
+        toDate(payment?.updatedAt);
+
+      if (amount > 0) incomeEvents.push({ amount, date });
+
+      const taxDebit =
+        safeNumber(payment?.whtAmount) + safeNumber(payment?.sstAmount);
+      if (taxDebit > 0) expenseEvents.push({ amount: taxDebit, date });
+    });
+
+    data.invoiceRequests.forEach((request) => {
+      const history = getPaymentReleaseHistory(request);
+
+      if (history.length > 0) {
+        history.forEach((release) => {
+          const amount = getReleaseAmount(release);
+          if (amount <= 0) return;
+
+          expenseEvents.push({
+            amount,
+            date:
+              toDate(release?.releasedAt) ||
+              toDate(release?.createdAt) ||
+              getEntityDate(request),
+          });
+        });
+      } else {
+        const releasedAmount = getReleasedRequestAmount(request);
+        if (releasedAmount > 0) {
+          expenseEvents.push({
+            amount: releasedAmount,
+            date: getEntityDate(request),
+          });
+        }
+      }
+    });
+
+    data.directClaims.forEach((claim) => {
+      const paidAmount = getClaimPaidAmount(claim);
+      if (paidAmount > 0) {
+        expenseEvents.push({
+          amount: paidAmount,
+          date:
+            toDate(claim?.paymentReleasedAt) ||
+            toDate(claim?.updatedAt) ||
+            getEntityDate(claim),
+        });
+      }
+    });
+
+    data.meetingClaims.forEach((claim) => {
+      const paidAmount = getClaimPaidAmount(claim);
+      if (paidAmount > 0) {
+        expenseEvents.push({
+          amount: paidAmount,
+          date:
+            toDate(claim?.paymentReleasedAt) ||
+            toDate(claim?.updatedAt) ||
+            toDate(claim?.meetingUpdatedAt) ||
+            getEntityDate(claim),
+        });
+      }
+    });
+
+    data.records.forEach((record) => {
+      const chequeAmount = safeNumber(record?.chequeAmount);
+      if (chequeAmount > 0) {
+        expenseEvents.push({
+          amount: chequeAmount,
+          date: getEntityDate(record),
+        });
+      }
+    });
+
+    data.manualEntries.forEach((entry) => {
+      const date = toDate(entry?.date) || getEntityDate(entry);
+      const debit = safeNumber(entry?.debit);
+      const credit = safeNumber(entry?.credit);
+
+      if (debit > 0) expenseEvents.push({ amount: debit, date });
+      if (credit > 0) incomeEvents.push({ amount: credit, date });
+    });
+
+    const totalIncome = incomeEvents.reduce(
+      (sum, item) => sum + item.amount,
+      0,
+    );
+    const totalExpense = expenseEvents.reduce(
+      (sum, item) => sum + item.amount,
+      0,
+    );
+    const balance = data.openingBalance + totalIncome - totalExpense;
+
+    const monthIncome = incomeEvents
+      .filter((item) => item.date && item.date >= monthStart)
+      .reduce((sum, item) => sum + item.amount, 0);
+
+    const monthExpense = expenseEvents
+      .filter((item) => item.date && item.date >= monthStart)
+      .reduce((sum, item) => sum + item.amount, 0);
+
+    const budgetTotalAmount = data.invoiceRequests.reduce(
+      (sum, request) => sum + getApprovedRequestAmount(request),
+      0,
+    );
+    const budgetReleasedAmount = data.invoiceRequests.reduce(
+      (sum, request) => sum + getReleasedRequestAmount(request),
+      0,
+    );
+    const budgetRemainingAmount = data.invoiceRequests.reduce(
+      (sum, request) => sum + getRemainingRequestAmount(request),
+      0,
+    );
+
+    const budgetPendingAdmin = data.invoiceRequests.filter((request) =>
+      [
+        "pending_operational_admin",
+        "pending_main_admin",
+        "pending_admin",
+      ].includes(normalizeText(request?.status)),
+    ).length;
+
+    const budgetPendingFinance = data.invoiceRequests.filter(
+      (request) => normalizeText(request?.status) === "pending_finance",
+    ).length;
+
+    const budgetReadyForPayment = data.invoiceRequests.filter((request) => {
+      const status = normalizeText(request?.status);
+      return (
+        [
+          "approved",
+          "po_created",
+          "po_submitted",
+          "po_approved",
+          "po_issued",
+          "ready_for_payment",
+          "payment_partially_released",
+        ].includes(status) && !isFullyReleased(request)
+      );
+    }).length;
+
+    const budgetPartial =
+      data.invoiceRequests.filter(isPartiallyReleased).length;
+    const budgetReleased = data.invoiceRequests.filter(isFullyReleased).length;
+    const budgetRejected = data.invoiceRequests.filter((request) =>
+      ["rejected", "returned_to_creator", "changes_requested"].includes(
+        normalizeText(request?.status),
+      ),
+    ).length;
+
+    const estimateTotalAmount = data.estimates.reduce(
+      (sum, estimate) => sum + getEstimateAmount(estimate),
+      0,
+    );
+
+    const estimateApproved = data.estimates.filter(
+      (estimate) => normalizeText(estimate?.status) === "approved",
+    ).length;
+
+    const estimateInvoiced = data.estimates.filter((estimate) =>
+      ["invoiced", "payment received"].includes(
+        normalizeText(estimate?.status),
+      ),
+    ).length;
+
+    const invoiceTotalAmount = data.estimateInvoices.reduce(
+      (sum, invoice) => sum + getEstimateInvoiceAmount(invoice),
+      0,
+    );
+
+    const paidInvoices = data.estimateInvoices.filter(
+      (invoice) => getInvoiceStatus(invoice) === "paid",
+    );
+    const partialInvoices = data.estimateInvoices.filter(
+      (invoice) => getInvoiceStatus(invoice) === "partial",
+    );
+    const unpaidInvoices = data.estimateInvoices.filter(
+      (invoice) => getInvoiceStatus(invoice) === "unpaid",
+    );
+
+    const paidInvoiceAmount = paidInvoices.reduce(
+      (sum, invoice) => sum + getEstimateInvoiceAmount(invoice),
+      0,
+    );
+
+    const receivedInvoiceAmount = data.payments.reduce(
+      (sum, payment) => sum + safeNumber(payment?.amount),
+      0,
+    );
+
+    const invoiceOutstanding = Math.max(
+      invoiceTotalAmount - receivedInvoiceAmount,
+      0,
+    );
+
+    const poTotalAmount = data.purchaseOrders.reduce(
+      (sum, purchaseOrder) => sum + getPurchaseOrderAmount(purchaseOrder),
+      0,
+    );
+
+    const poPaid = data.purchaseOrders.filter(
+      (purchaseOrder) => normalizeText(purchaseOrder?.status) === "paid",
+    ).length;
+
+    const poOpen = data.purchaseOrders.filter((purchaseOrder) =>
+      ["open", "draft"].includes(normalizeText(purchaseOrder?.status)),
+    ).length;
+
+    const poOverdue = data.purchaseOrders.filter((purchaseOrder) => {
+      const status = normalizeText(purchaseOrder?.status);
+      return (
+        !["paid", "cancelled"].includes(status) &&
+        (status === "over due" ||
+          status === "overdue" ||
+          isOverdueDate(purchaseOrder?.dueDate))
+      );
+    }).length;
+
+    const expenseSheetAmount = data.expenseSheets.reduce(
+      (sum, expense) => sum + getExpenseAmount(expense),
+      0,
+    );
+
+    const allClaims = [...data.directClaims, ...data.meetingClaims];
+    const reimbursementAmount = allClaims.reduce(
+      (sum, claim) => sum + getClaimAmount(claim),
+      0,
+    );
+    const reimbursementPending = allClaims.filter(
+      (claim) => getClaimStatus(claim) === "pending",
+    ).length;
+    const reimbursementApproved = allClaims.filter(
+      (claim) => getClaimStatus(claim) === "approved",
+    ).length;
+    const reimbursementPaid = allClaims.filter(
+      (claim) => normalizeText(claim?.paymentStatus) === "paid",
+    ).length;
+    const reimbursementPaidAmount = allClaims.reduce(
+      (sum, claim) => sum + getClaimPaidAmount(claim),
+      0,
+    );
+
+    const recordChequeAmount = data.records.reduce(
+      (sum, record) => sum + safeNumber(record?.chequeAmount),
+      0,
+    );
+    const recordItemAmount = data.records.reduce(
+      (sum, record) => sum + safeNumber(record?.totalItemAmount),
+      0,
+    );
+    const recordRemaining = data.records.reduce(
+      (sum, record) => sum + safeNumber(record?.remainingBalance),
+      0,
+    );
+
+    const vendorNames = new Set<string>();
+    data.invoiceRequests.forEach((request) => {
+      getVendorNames(request).forEach((name) => vendorNames.add(name));
+    });
+
+    const vendorOverdue = data.invoiceRequests.reduce((sum, request) => {
+      const remaining = getRemainingRequestAmount(request);
+      const dueDate =
+        request?.dueDate || request?.paymentDueDate || request?.invoiceDueDate;
+
+      return remaining > 0 && dueDate && isOverdueDate(dueDate)
+        ? sum + remaining
+        : sum;
+    }, 0);
+
+    const lastSixMonths = Array.from({ length: 6 }, (_, index) => {
+      const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
+      return {
+        key: `${date.getFullYear()}-${date.getMonth()}`,
+        label: date.toLocaleDateString("en-PK", { month: "short" }),
+        income: 0,
+        expense: 0,
+      };
+    });
+
+    const monthMap = new Map(lastSixMonths.map((item) => [item.key, item]));
+
+    incomeEvents.forEach((event) => {
+      if (!event.date) return;
+      const key = `${event.date.getFullYear()}-${event.date.getMonth()}`;
+      const bucket = monthMap.get(key);
+      if (bucket) bucket.income += event.amount;
+    });
+
+    expenseEvents.forEach((event) => {
+      if (!event.date) return;
+      const key = `${event.date.getFullYear()}-${event.date.getMonth()}`;
+      const bucket = monthMap.get(key);
+      if (bucket) bucket.expense += event.amount;
+    });
+
+    const activities: ActivityItem[] = [
+      ...data.invoiceRequests.map((request) => ({
+        id: `budget-${request.id}`,
+        module: "Budget Request",
+        title: firstText(
+          request?.requestId,
+          request?.title,
+          request?.subject,
+          "Budget request",
+        ),
+        description: firstText(
+          request?.projectName,
+          request?.project,
+          request?.clientName,
+          request?.vendorName,
+          "Budget workflow updated",
+        ),
+        status: request?.status || "submitted",
+        date: getRequestDate(request),
+      })),
+      ...data.payments.map((payment) => ({
+        id: `payment-${payment.id}`,
+        module: "Payment Received",
+        title: firstText(
+          payment?.invoiceNo,
+          payment?.reference,
+          payment?.paymentReference,
+          "Invoice payment",
+        ),
+        description: `${firstText(payment?.client, "Payment received")} · ${formatPKR(
+          payment?.amount,
+        )}`,
+        status: "paid",
+        date:
+          toDate(payment?.paymentDate) ||
+          toDate(payment?.createdAt) ||
+          toDate(payment?.updatedAt),
+      })),
+      ...data.estimateInvoices.map((invoice) => ({
+        id: `invoice-${invoice.id}`,
+        module: "Estimate Invoice",
+        title: firstText(invoice?.invoiceNo, invoice?.subject, "Invoice"),
+        description: `${firstText(invoice?.client, "Client invoice")} · ${formatPKR(
+          getEstimateInvoiceAmount(invoice),
+        )}`,
+        status: invoice?.status || "unpaid",
+        date:
+          toDate(invoice?.invoiceDate) ||
+          toDate(invoice?.createdAt) ||
+          toDate(invoice?.updatedAt),
+      })),
+      ...data.purchaseOrders.map((purchaseOrder) => ({
+        id: `po-${purchaseOrder.id}`,
+        module: "Purchase Order",
+        title: firstText(
+          purchaseOrder?.poNumber,
+          purchaseOrder?.purchaseOrderNumber,
+          "Purchase order",
+        ),
+        description: `${firstText(
+          purchaseOrder?.supplierName,
+          purchaseOrder?.vendorName,
+          "Supplier",
+        )} · ${formatPKR(getPurchaseOrderAmount(purchaseOrder))}`,
+        status: purchaseOrder?.status || "draft",
+        date:
+          toDate(purchaseOrder?.createdAt) ||
+          toDate(purchaseOrder?.issueDate) ||
+          toDate(purchaseOrder?.updatedAt),
+      })),
+      ...data.expenseSheets.map((expense) => ({
+        id: `expense-${expense.id}`,
+        module: "Budget Expense",
+        title: firstText(
+          expense?.expenseId,
+          expense?.projectName,
+          expense?.project,
+          "Expense sheet",
+        ),
+        description: `${firstText(
+          expense?.clientName,
+          expense?.submittedByName,
+          "Expense submitted",
+        )} · ${formatPKR(getExpenseAmount(expense))}`,
+        status: expense?.paymentStatus || expense?.status || "submitted",
+        date:
+          toDate(expense?.submittedAt) ||
+          toDate(expense?.createdAt) ||
+          toDate(expense?.updatedAt),
+      })),
+      ...data.directClaims.map((claim) => ({
+        id: `claim-${claim.id}`,
+        module: "Reimbursement",
+        title: firstText(
+          claim?.description,
+          claim?.foodItem,
+          claim?.claimType,
+          "Reimbursement claim",
+        ),
+        description: `${firstText(
+          claim?.submittedByName,
+          claim?.personName,
+          "Employee",
+        )} · ${formatPKR(getClaimAmount(claim))}`,
+        status:
+          normalizeText(claim?.paymentStatus) === "paid"
+            ? "paid"
+            : claim?.status || claim?.approvalStatus || "pending",
+        date:
+          toDate(claim?.submittedAt) ||
+          toDate(claim?.createdAt) ||
+          toDate(claim?.updatedAt),
+      })),
+      ...data.records.map((record) => ({
+        id: `record-${record.id}`,
+        module: "Record",
+        title: firstText(
+          record?.statementTitle,
+          record?.accountTitle,
+          record?.chequeNumber,
+          "Financial record",
+        ),
+        description: `${firstText(record?.bank, record?.accountNo, "Account")} · ${formatPKR(
+          record?.chequeAmount,
+        )}`,
+        status: record?.status || "recorded",
+        date:
+          toDate(record?.createdAt) ||
+          toDate(record?.selectedDate) ||
+          toDate(record?.updatedAt),
+      })),
+    ]
+      .sort((a, b) => (b.date?.getTime() || 0) - (a.date?.getTime() || 0))
+      .slice(0, 12);
+
+    const workflowData = [
+      { name: "Admin", value: budgetPendingAdmin, color: "#f59e0b" },
+      { name: "Finance", value: budgetPendingFinance, color: "#8b5cf6" },
+      { name: "Ready", value: budgetReadyForPayment, color: "#3b82f6" },
+      { name: "Partial", value: budgetPartial, color: "#06b6d4" },
+      { name: "Released", value: budgetReleased, color: "#10b981" },
+      { name: "Returned", value: budgetRejected, color: "#f43f5e" },
+    ];
+
+    return {
+      totalIncome,
+      totalExpense,
+      balance,
+      monthIncome,
+      monthExpense,
+      incomeEvents,
+      expenseEvents,
+      budgetTotalAmount,
+      budgetReleasedAmount,
+      budgetRemainingAmount,
+      budgetPendingAdmin,
+      budgetPendingFinance,
+      budgetReadyForPayment,
+      budgetPartial,
+      budgetReleased,
+      budgetRejected,
+      estimateTotalAmount,
+      estimateApproved,
+      estimateInvoiced,
+      invoiceTotalAmount,
+      paidInvoices: paidInvoices.length,
+      partialInvoices: partialInvoices.length,
+      unpaidInvoices: unpaidInvoices.length,
+      paidInvoiceAmount,
+      receivedInvoiceAmount,
+      invoiceOutstanding,
+      poTotalAmount,
+      poPaid,
+      poOpen,
+      poOverdue,
+      expenseSheetAmount,
+      reimbursementAmount,
+      reimbursementPending,
+      reimbursementApproved,
+      reimbursementPaid,
+      reimbursementPaidAmount,
+      recordChequeAmount,
+      recordItemAmount,
+      recordRemaining,
+      vendorCount: vendorNames.size,
+      vendorOverdue,
+      cashFlowData: lastSixMonths,
+      workflowData,
+      activities,
+    };
+  }, [data]);
+
+  const roleKey = normalizeText(userProfile?.role).replace(/[\s-]+/g, "_");
+  const canCreateInvoices = [
+    "operation",
+    "operations",
+    "operational_admin",
+    "operation_admin",
+    "creative",
+    "sales",
+  ].includes(roleKey);
+
+  const roleAlerts = useMemo(() => {
+    if (["finance", "financial_admin", "finance_admin"].includes(roleKey)) {
+      return [
+        {
+          title: "Finance Approval",
+          value: String(summary.budgetPendingFinance),
+          description: "Requests currently waiting for finance approval.",
+          icon: <Landmark className="h-5 w-5" />,
+          tone: "amber" as const,
+        },
+        {
+          title: "Release Payment",
+          value: String(summary.budgetReadyForPayment),
+          description: "Approved requests that still require payment release.",
+          icon: <Banknote className="h-5 w-5" />,
+          tone: "blue" as const,
+        },
+        {
+          title: "Partial Releases",
+          value: String(summary.budgetPartial),
+          description: "Requests with a remaining payment balance.",
+          icon: <CircleDollarSign className="h-5 w-5" />,
+          tone: "blue" as const,
+        },
+        {
+          title: "Reimbursement Payment",
+          value: String(
+            Math.max(
+              summary.reimbursementApproved - summary.reimbursementPaid,
+              0,
+            ),
+          ),
+          description: "Approved reimbursement claims awaiting payment.",
+          icon: <Users className="h-5 w-5" />,
+          tone: "emerald" as const,
+        },
+      ];
     }
-  }
 
-  const canCreateInvoices = userProfile?.role === "operation";
+    if (["admin", "main_admin", "super_admin"].includes(roleKey)) {
+      return [
+        {
+          title: "Admin Approval",
+          value: String(summary.budgetPendingAdmin),
+          description: "Budget requests requiring an admin decision.",
+          icon: <BadgeCheck className="h-5 w-5" />,
+          tone: "amber" as const,
+        },
+        {
+          title: "Returned Requests",
+          value: String(summary.budgetRejected),
+          description: "Requests returned to their creators for correction.",
+          icon: <XCircle className="h-5 w-5" />,
+          tone: "rose" as const,
+        },
+        {
+          title: "Pending Reimbursements",
+          value: String(summary.reimbursementPending),
+          description: "Reimbursement claims waiting for review.",
+          icon: <Clock3 className="h-5 w-5" />,
+          tone: "blue" as const,
+        },
+        {
+          title: "Overdue Purchase Orders",
+          value: String(summary.poOverdue),
+          description: "Open purchase orders whose due date has passed.",
+          icon: <AlertTriangle className="h-5 w-5" />,
+          tone: "rose" as const,
+        },
+      ];
+    }
+
+    return [
+      {
+        title: "Admin Queue",
+        value: String(summary.budgetPendingAdmin),
+        description: "Requests currently moving through admin approval.",
+        icon: <Clock3 className="h-5 w-5" />,
+        tone: "amber" as const,
+      },
+      {
+        title: "Finance Queue",
+        value: String(summary.budgetPendingFinance),
+        description: "Requests currently waiting for finance review.",
+        icon: <Landmark className="h-5 w-5" />,
+        tone: "blue" as const,
+      },
+      {
+        title: "Returned To Team",
+        value: String(summary.budgetRejected),
+        description: "Requests that require correction and resubmission.",
+        icon: <XCircle className="h-5 w-5" />,
+        tone: "rose" as const,
+      },
+      {
+        title: "Expense Submitted",
+        value: String(data.expenseSheets.length),
+        description: "Budget expense sheets recorded in the system.",
+        icon: <ReceiptText className="h-5 w-5" />,
+        tone: "emerald" as const,
+      },
+    ];
+  }, [data.expenseSheets.length, roleKey, summary]);
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary"></div>
+      <div className="flex min-h-[70vh] items-center justify-center bg-slate-50">
+        <div className="rounded-3xl border border-slate-200 bg-white px-10 py-8 text-center shadow-sm">
+          <div className="mx-auto h-11 w-11 animate-spin rounded-full border-2 border-slate-200 border-t-slate-950" />
+          <p className="mt-4 text-sm font-bold text-slate-700">
+            Building your system dashboard...
+          </p>
+          <p className="mt-1 text-xs text-slate-400">
+            Loading finance, requests, invoices, POs, records and expenses.
+          </p>
+        </div>
       </div>
     );
   }
 
   return (
-    <div>
-      {/* Dashboard Header */}
-      <div className="mb-8">
-        <h2
-          className="text-3xl font-bold text-foreground mb-2"
-          data-testid="text-dashboard-title"
-        >
-          Dashboard
-        </h2>
-        <p className="text-muted-foreground">
-          Welcome back! Here's what's happening with your invoices.
-        </p>
-      </div>
+    <div className="min-h-screen bg-slate-50/80 p-4 text-slate-900 sm:p-6">
+      <div className="mx-auto space-y-6">
+        <section className="overflow-hidden rounded-[32px] bg-slate-950 p-6 text-white shadow-xl shadow-slate-200/70 sm:p-8">
+          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+            <div>
+              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
+                <Activity className="h-3.5 w-3.5" />
+                Live System Overview
+              </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Pending Requests
-                </p>
-                <p
-                  className="text-3xl font-bold text-foreground"
-                  data-testid="text-pending-count"
-                >
-                  {stats.pending}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-primary/10 rounded-lg flex items-center justify-center">
-                <i className="fas fa-clock text-primary text-xl"></i>
-              </div>
-            </div>
-            <div className="mt-4 flex items-center text-sm">
-              <span className="text-green-600">+8%</span>
-              <span className="text-muted-foreground ml-1">
-                from last month
-              </span>
-            </div>
-          </CardContent>
-        </Card>
+              <h1 className="mt-5 max-w-3xl text-3xl font-black tracking-[-0.04em] sm:text-4xl">
+                Welcome back, {userProfile?.displayName || "Team Member"}
+              </h1>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Approved Today
-                </p>
-                <p
-                  className="text-3xl font-bold text-foreground"
-                  data-testid="text-approved-count"
-                >
-                  {stats.approved}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-green-100 rounded-lg flex items-center justify-center">
-                <i className="fas fa-check-circle text-green-600 text-xl"></i>
-              </div>
-            </div>
-            <div className="mt-4 flex items-center text-sm">
-              <span className="text-green-600">+12%</span>
-              <span className="text-muted-foreground ml-1">from yesterday</span>
-            </div>
-          </CardContent>
-        </Card>
+              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
+                A complete operational and financial view of budget requests,
+                estimates, invoices, purchase orders, payments, expenses,
+                reimbursements, records and vendors.
+              </p>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Total Amount
-                </p>
-                <p
-                  className="text-3xl font-bold text-foreground"
-                  data-testid="text-total-amount"
-                >
-                  Rs {stats.totalAmount.toLocaleString()}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-blue-100 rounded-lg flex items-center justify-center">
-                <i className="fas fa-rupee-sign text-blue-600 text-xl"></i>
+              <div className="mt-5 flex flex-wrap items-center gap-3 text-xs text-slate-300">
+                <span className="rounded-full bg-white/10 px-3 py-1.5 font-semibold">
+                  Role: {humanize(userProfile?.role || "User")}
+                </span>
+                <span className="rounded-full bg-white/10 px-3 py-1.5 font-semibold">
+                  Updated:{" "}
+                  {lastUpdated ? formatRelativeTime(lastUpdated) : "Now"}
+                </span>
+                {unavailableModules.length > 0 && (
+                  <span className="rounded-full bg-amber-400/15 px-3 py-1.5 font-semibold text-amber-200">
+                    {unavailableModules.length} source(s) unavailable
+                  </span>
+                )}
               </div>
             </div>
-            <div className="mt-4 flex items-center text-sm">
-              <span className="text-green-600">+5%</span>
-              <span className="text-muted-foreground ml-1">from last week</span>
-            </div>
-          </CardContent>
-        </Card>
 
-        <Card>
-          <CardContent className="p-6">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-sm font-medium text-muted-foreground">
-                  Processing Time
-                </p>
-                <p
-                  className="text-3xl font-bold text-foreground"
-                  data-testid="text-processing-time"
-                >
-                  {stats.avgProcessing}
-                </p>
-              </div>
-              <div className="w-12 h-12 bg-purple-100 rounded-lg flex items-center justify-center">
-                <i className="fas fa-stopwatch text-purple-600 text-xl"></i>
-              </div>
-            </div>
-            <div className="mt-4 flex items-center text-sm">
-              <span className="text-red-600">-0.2</span>
-              <span className="text-muted-foreground ml-1">days improved</span>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-
-      {/* Quick Actions and Recent Activity */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        {/* New Invoice Request */}
-        {canCreateInvoices && (
-          <Card>
-            <CardContent className="p-6">
-              <h3 className="text-lg font-semibold text-foreground mb-4">
-                New Invoice Request
-              </h3>
+            <div className="flex flex-wrap gap-2">
               <Button
-                onClick={() => setIsInvoiceModalOpen(true)}
-                className="w-full"
-                data-testid="button-create-invoice"
+                type="button"
+                variant="outline"
+                onClick={() => loadDashboardData(true)}
+                disabled={refreshing}
+                className="h-11 rounded-2xl border-white/15 bg-white/10 px-4 text-white hover:bg-white/15 hover:text-white"
               >
-                <i className="fas fa-plus mr-2"></i>
-                Create Request
+                <RefreshCcw
+                  className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+                />
+                {refreshing ? "Refreshing" : "Refresh"}
               </Button>
-            </CardContent>
-          </Card>
-        )}
 
-        {/* Recent Activity */}
-        <Card className={canCreateInvoices ? "lg:col-span-2" : "lg:col-span-3"}>
-          <CardContent className="p-6">
-            <h3 className="text-lg font-semibold text-foreground mb-4">
-              Recent Activity
-            </h3>
-            <div className="space-y-4">
-              {recentActivity.length === 0 ? (
-                <p className="text-muted-foreground text-center py-4">
-                  No recent activity
-                </p>
-              ) : (
-                recentActivity.map((activity) => (
-                  <div
-                    key={activity.id}
-                    className="flex items-center space-x-4 p-3 bg-muted rounded-lg"
-                  >
-                    <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                    <div className="flex-1">
-                      <p className="text-sm font-medium text-foreground">
-                        {activity.description}
-                      </p>
-                      <p className="text-xs text-muted-foreground">
-                        {activity.timestamp}
-                      </p>
-                    </div>
-                    <span
-                      className={`text-xs px-2 py-1 rounded-full ${getStatusColor(activity.status)}`}
-                    >
-                      {activity.status
-                        .replace("_", " ")
-                        .replace("pending ", "")}
-                    </span>
-                  </div>
-                ))
+              {canCreateInvoices && (
+                <Button
+                  type="button"
+                  onClick={() => setIsInvoiceModalOpen(true)}
+                  className="h-11 rounded-2xl bg-white px-4 font-bold text-slate-950 hover:bg-slate-100"
+                >
+                  <Plus className="mr-2 h-4 w-4" />
+                  New Budget Request
+                </Button>
               )}
             </div>
-          </CardContent>
-        </Card>
+          </div>
+
+          <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <p className="text-xs font-semibold text-slate-300">
+                Opening Balance
+              </p>
+              <p className="mt-2 text-xl font-black">
+                {formatCompactPKR(data.openingBalance)}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <p className="text-xs font-semibold text-slate-300">
+                System Records
+              </p>
+              <p className="mt-2 text-xl font-black">
+                {(
+                  data.invoiceRequests.length +
+                  data.estimates.length +
+                  data.estimateInvoices.length +
+                  data.purchaseOrders.length +
+                  data.expenseSheets.length +
+                  data.records.length
+                ).toLocaleString()}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <p className="text-xs font-semibold text-slate-300">
+                Budget Pipeline
+              </p>
+              <p className="mt-2 text-xl font-black">
+                {formatCompactPKR(summary.budgetTotalAmount)}
+              </p>
+            </div>
+            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
+              <p className="text-xs font-semibold text-slate-300">
+                Outstanding Invoices
+              </p>
+              <p className="mt-2 text-xl font-black">
+                {formatCompactPKR(summary.invoiceOutstanding)}
+              </p>
+            </div>
+          </div>
+        </section>
+
+        {unavailableModules.length > 0 && (
+          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+              <div>
+                <p className="font-bold">
+                  Some dashboard sources could not be read.
+                </p>
+                <p className="mt-1 text-xs leading-5">
+                  Check Firestore permissions for:{" "}
+                  {unavailableModules.join(", ")}. All available modules are
+                  still displayed.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+          <MetricCard
+            title="Current Balance"
+            value={formatCompactPKR(summary.balance)}
+            subtitle={`Opening + ${formatCompactPKR(summary.totalIncome)} income - ${formatCompactPKR(summary.totalExpense)} expense`}
+            icon={Wallet}
+            tone={summary.balance >= 0 ? "emerald" : "rose"}
+            trend={summary.balance >= 0 ? "up" : "down"}
+          />
+          <MetricCard
+            title="Total Income"
+            value={formatCompactPKR(summary.totalIncome)}
+            subtitle={`${formatCompactPKR(summary.monthIncome)} received this month`}
+            icon={TrendingUp}
+            tone="emerald"
+            trend="up"
+          />
+          <MetricCard
+            title="Total Expense"
+            value={formatCompactPKR(summary.totalExpense)}
+            subtitle={`${formatCompactPKR(summary.monthExpense)} released this month`}
+            icon={ArrowDownRight}
+            tone="rose"
+            trend="down"
+          />
+          <MetricCard
+            title="Remaining Releases"
+            value={formatCompactPKR(summary.budgetRemainingAmount)}
+            subtitle={`${summary.budgetReadyForPayment} request(s) ready for payment`}
+            icon={CircleDollarSign}
+            tone="blue"
+          />
+        </section>
+
+        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="mb-4 flex items-center justify-between gap-4">
+            <div>
+              <h2 className="text-lg font-black text-slate-950">
+                Priority Actions
+              </h2>
+              <p className="mt-1 text-xs text-slate-500">
+                The most important tasks for your current role.
+              </p>
+            </div>
+            <ListChecks className="h-5 w-5 text-slate-400" />
+          </div>
+
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+            {roleAlerts.map((alert) => (
+              <AlertCard key={alert.title} {...alert} />
+            ))}
+          </div>
+        </section>
+
+        <section className="grid gap-6 xl:grid-cols-[1.55fr_1fr]">
+          <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
+            <CardContent className="p-5 sm:p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-black text-slate-950">
+                    Income vs Expense
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Account Statement cash movement for the last six months.
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
+                  <BarChart3 className="h-5 w-5" />
+                </div>
+              </div>
+
+              <div className="mt-6 h-[310px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={summary.cashFlowData}>
+                    <defs>
+                      <linearGradient
+                        id="incomeGradient"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="#10b981"
+                          stopOpacity={0.28}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#10b981"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                      <linearGradient
+                        id="expenseGradient"
+                        x1="0"
+                        y1="0"
+                        x2="0"
+                        y2="1"
+                      >
+                        <stop
+                          offset="5%"
+                          stopColor="#f43f5e"
+                          stopOpacity={0.22}
+                        />
+                        <stop
+                          offset="95%"
+                          stopColor="#f43f5e"
+                          stopOpacity={0}
+                        />
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      vertical={false}
+                      stroke="#e2e8f0"
+                    />
+                    <XAxis dataKey="label" tickLine={false} axisLine={false} />
+                    <YAxis
+                      tickLine={false}
+                      axisLine={false}
+                      tickFormatter={(value) =>
+                        formatCompactPKR(value).replace("Rs ", "")
+                      }
+                    />
+                    <Tooltip formatter={(value: any) => formatPKR(value)} />
+                    <Area
+                      type="monotone"
+                      dataKey="income"
+                      name="Income"
+                      stroke="#10b981"
+                      strokeWidth={3}
+                      fill="url(#incomeGradient)"
+                    />
+                    <Area
+                      type="monotone"
+                      dataKey="expense"
+                      name="Expense"
+                      stroke="#f43f5e"
+                      strokeWidth={3}
+                      fill="url(#expenseGradient)"
+                    />
+                  </AreaChart>
+                </ResponsiveContainer>
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
+            <CardContent className="p-5 sm:p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-black text-slate-950">
+                    Budget Workflow
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Current distribution of budget request stages.
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
+                  <FileCheck2 className="h-5 w-5" />
+                </div>
+              </div>
+
+              <div className="mt-6 h-[220px]">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={summary.workflowData}>
+                    <CartesianGrid
+                      strokeDasharray="3 3"
+                      vertical={false}
+                      stroke="#e2e8f0"
+                    />
+                    <XAxis
+                      dataKey="name"
+                      tickLine={false}
+                      axisLine={false}
+                      fontSize={11}
+                    />
+                    <YAxis
+                      allowDecimals={false}
+                      tickLine={false}
+                      axisLine={false}
+                    />
+                    <Tooltip />
+                    <Bar dataKey="value" radius={[8, 8, 0, 0]}>
+                      {summary.workflowData.map((item) => (
+                        <Cell key={item.name} fill={item.color} />
+                      ))}
+                    </Bar>
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+
+              <div className="mt-4 grid grid-cols-2 gap-3">
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <p className="text-xs font-semibold text-slate-500">
+                    Released
+                  </p>
+                  <p className="mt-1 text-lg font-black text-emerald-600">
+                    {formatCompactPKR(summary.budgetReleasedAmount)}
+                  </p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-3">
+                  <p className="text-xs font-semibold text-slate-500">
+                    Remaining
+                  </p>
+                  <p className="mt-1 text-lg font-black text-blue-600">
+                    {formatCompactPKR(summary.budgetRemainingAmount)}
+                  </p>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        </section>
+
+        <section>
+          <div className="mb-4 flex items-end justify-between gap-4">
+            <div>
+              <h2 className="text-xl font-black text-slate-950">
+                Module Overview
+              </h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Live totals from every major front-end module.
+              </p>
+            </div>
+          </div>
+
+          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <ModuleCard
+              title="Budget Requests"
+              subtitle="Approval, payment-release and remaining-balance status."
+              icon={FileText}
+              items={[
+                {
+                  label: "Total Requests",
+                  value: String(data.invoiceRequests.length),
+                },
+                {
+                  label: "Approved Value",
+                  value: formatCompactPKR(summary.budgetTotalAmount),
+                },
+                {
+                  label: "Partial Releases",
+                  value: String(summary.budgetPartial),
+                  className: "text-blue-600",
+                },
+                {
+                  label: "Fully Released",
+                  value: String(summary.budgetReleased),
+                  className: "text-emerald-600",
+                },
+              ]}
+            />
+
+            <ModuleCard
+              title="Estimates"
+              subtitle="Estimate pipeline and converted estimate records."
+              icon={FileSpreadsheet}
+              items={[
+                {
+                  label: "Total Estimates",
+                  value: String(data.estimates.length),
+                },
+                {
+                  label: "Estimate Value",
+                  value: formatCompactPKR(summary.estimateTotalAmount),
+                },
+                {
+                  label: "Approved",
+                  value: String(summary.estimateApproved),
+                  className: "text-emerald-600",
+                },
+                {
+                  label: "Invoiced",
+                  value: String(summary.estimateInvoiced),
+                  className: "text-blue-600",
+                },
+              ]}
+            />
+
+            <ModuleCard
+              title="Estimate Invoices"
+              subtitle="Paid, unpaid and partially-paid client invoices."
+              icon={ReceiptText}
+              items={[
+                {
+                  label: "Total Invoices",
+                  value: String(data.estimateInvoices.length),
+                },
+                {
+                  label: "Invoice Value",
+                  value: formatCompactPKR(summary.invoiceTotalAmount),
+                },
+                {
+                  label: "Paid / Partial",
+                  value: `${summary.paidInvoices} / ${summary.partialInvoices}`,
+                  className: "text-emerald-600",
+                },
+                {
+                  label: "Outstanding",
+                  value: formatCompactPKR(summary.invoiceOutstanding),
+                  className: "text-amber-600",
+                },
+              ]}
+            />
+
+            <ModuleCard
+              title="Purchase Orders"
+              subtitle="Purchase-order totals, open orders and overdue items."
+              icon={PackageCheck}
+              items={[
+                {
+                  label: "Total POs",
+                  value: String(data.purchaseOrders.length),
+                },
+                {
+                  label: "PO Value",
+                  value: formatCompactPKR(summary.poTotalAmount),
+                },
+                {
+                  label: "Open / Paid",
+                  value: `${summary.poOpen} / ${summary.poPaid}`,
+                },
+                {
+                  label: "Overdue",
+                  value: String(summary.poOverdue),
+                  className: "text-rose-600",
+                },
+              ]}
+            />
+
+            <ModuleCard
+              title="Budget Expenses"
+              subtitle="Submitted expense sheets and recorded expense value."
+              icon={CreditCard}
+              items={[
+                {
+                  label: "Expense Sheets",
+                  value: String(data.expenseSheets.length),
+                },
+                {
+                  label: "Submitted Value",
+                  value: formatCompactPKR(summary.expenseSheetAmount),
+                },
+                {
+                  label: "This Month Cash Out",
+                  value: formatCompactPKR(summary.monthExpense),
+                },
+                {
+                  label: "Total Cash Out",
+                  value: formatCompactPKR(summary.totalExpense),
+                  className: "text-rose-600",
+                },
+              ]}
+            />
+
+            <ModuleCard
+              title="Reimbursements"
+              subtitle="Direct and sales-meeting reimbursement claims."
+              icon={Users}
+              items={[
+                {
+                  label: "Total Claims",
+                  value: String(
+                    data.directClaims.length + data.meetingClaims.length,
+                  ),
+                },
+                {
+                  label: "Claim Value",
+                  value: formatCompactPKR(summary.reimbursementAmount),
+                },
+                {
+                  label: "Pending / Approved",
+                  value: `${summary.reimbursementPending} / ${summary.reimbursementApproved}`,
+                },
+                {
+                  label: "Paid Amount",
+                  value: formatCompactPKR(summary.reimbursementPaidAmount),
+                  className: "text-emerald-600",
+                },
+              ]}
+            />
+
+            <ModuleCard
+              title="Records & Cheques"
+              subtitle="Cheque records, item amounts and remaining balances."
+              icon={Landmark}
+              items={[
+                { label: "Total Records", value: String(data.records.length) },
+                {
+                  label: "Cheque Amount",
+                  value: formatCompactPKR(summary.recordChequeAmount),
+                },
+                {
+                  label: "Item Amount",
+                  value: formatCompactPKR(summary.recordItemAmount),
+                },
+                {
+                  label: "Remaining",
+                  value: formatCompactPKR(summary.recordRemaining),
+                  className:
+                    summary.recordRemaining < 0
+                      ? "text-rose-600"
+                      : "text-emerald-600",
+                },
+              ]}
+            />
+
+            <ModuleCard
+              title="Vendors"
+              subtitle="Vendor exposure derived from budget requests and releases."
+              icon={Building2}
+              items={[
+                { label: "Unique Vendors", value: String(summary.vendorCount) },
+                {
+                  label: "Paid to Vendors",
+                  value: formatCompactPKR(summary.budgetReleasedAmount),
+                },
+                {
+                  label: "Remaining Payable",
+                  value: formatCompactPKR(summary.budgetRemainingAmount),
+                  className: "text-blue-600",
+                },
+                {
+                  label: "Overdue Payable",
+                  value: formatCompactPKR(summary.vendorOverdue),
+                  className: "text-rose-600",
+                },
+              ]}
+            />
+          </div>
+        </section>
+
+        <section className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
+          <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
+            <CardContent className="p-5 sm:p-6">
+              <div className="flex items-start justify-between gap-4">
+                <div>
+                  <h2 className="text-lg font-black text-slate-950">
+                    Recent System Activity
+                  </h2>
+                  <p className="mt-1 text-xs text-slate-500">
+                    Latest updates across requests, invoices, POs, expenses,
+                    reimbursements and records.
+                  </p>
+                </div>
+                <Activity className="h-5 w-5 text-slate-400" />
+              </div>
+
+              <div className="mt-5 divide-y divide-slate-100">
+                {summary.activities.length === 0 ? (
+                  <div className="py-12 text-center">
+                    <CalendarClock className="mx-auto h-7 w-7 text-slate-300" />
+                    <p className="mt-3 text-sm font-semibold text-slate-500">
+                      No recent activity found.
+                    </p>
+                  </div>
+                ) : (
+                  summary.activities.map((activity) => (
+                    <div
+                      key={activity.id}
+                      className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center"
+                    >
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
+                        <Activity className="h-4 w-4" />
+                      </div>
+
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <p className="truncate text-sm font-black text-slate-900">
+                            {activity.title}
+                          </p>
+                          <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                            {activity.module}
+                          </span>
+                        </div>
+                        <p className="mt-1 truncate text-xs text-slate-500">
+                          {activity.description}
+                        </p>
+                      </div>
+
+                      <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end">
+                        <StatusBadge status={activity.status} />
+                        <span className="text-[11px] font-semibold text-slate-400">
+                          {formatRelativeTime(activity.date)}
+                        </span>
+                      </div>
+                    </div>
+                  ))
+                )}
+              </div>
+            </CardContent>
+          </Card>
+
+          <div className="space-y-6">
+            <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="font-black text-slate-950">
+                      Financial Health
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Key collection and payment indicators.
+                    </p>
+                  </div>
+                  <Wallet className="h-5 w-5 text-slate-400" />
+                </div>
+
+                <div className="mt-5 space-y-4">
+                  <div>
+                    <div className="flex justify-between text-xs font-semibold text-slate-500">
+                      <span>Invoice Collection</span>
+                      <span>
+                        {summary.invoiceTotalAmount > 0
+                          ? Math.min(
+                              (summary.receivedInvoiceAmount /
+                                summary.invoiceTotalAmount) *
+                                100,
+                              100,
+                            ).toFixed(0)
+                          : 0}
+                        %
+                      </span>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full bg-emerald-500"
+                        style={{
+                          width: `${
+                            summary.invoiceTotalAmount > 0
+                              ? Math.min(
+                                  (summary.receivedInvoiceAmount /
+                                    summary.invoiceTotalAmount) *
+                                    100,
+                                  100,
+                                )
+                              : 0
+                          }%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs font-semibold text-slate-500">
+                      <span>Budget Released</span>
+                      <span>
+                        {summary.budgetTotalAmount > 0
+                          ? Math.min(
+                              (summary.budgetReleasedAmount /
+                                summary.budgetTotalAmount) *
+                                100,
+                              100,
+                            ).toFixed(0)
+                          : 0}
+                        %
+                      </span>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full bg-blue-500"
+                        style={{
+                          width: `${
+                            summary.budgetTotalAmount > 0
+                              ? Math.min(
+                                  (summary.budgetReleasedAmount /
+                                    summary.budgetTotalAmount) *
+                                    100,
+                                  100,
+                                )
+                              : 0
+                          }%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+
+                  <div>
+                    <div className="flex justify-between text-xs font-semibold text-slate-500">
+                      <span>Reimbursements Paid</span>
+                      <span>
+                        {summary.reimbursementApproved > 0
+                          ? Math.min(
+                              (summary.reimbursementPaid /
+                                summary.reimbursementApproved) *
+                                100,
+                              100,
+                            ).toFixed(0)
+                          : 0}
+                        %
+                      </span>
+                    </div>
+                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
+                      <div
+                        className="h-full rounded-full bg-violet-500"
+                        style={{
+                          width: `${
+                            summary.reimbursementApproved > 0
+                              ? Math.min(
+                                  (summary.reimbursementPaid /
+                                    summary.reimbursementApproved) *
+                                    100,
+                                  100,
+                                )
+                              : 0
+                          }%`,
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
+              <CardContent className="p-5">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h2 className="font-black text-slate-950">
+                      System Snapshot
+                    </h2>
+                    <p className="mt-1 text-xs text-slate-500">
+                      Record counts across connected modules.
+                    </p>
+                  </div>
+                  <CheckCircle2 className="h-5 w-5 text-slate-400" />
+                </div>
+
+                <div className="mt-5 grid grid-cols-2 gap-3">
+                  {[
+                    ["Requests", data.invoiceRequests.length],
+                    ["Estimates", data.estimates.length],
+                    ["Invoices", data.estimateInvoices.length],
+                    ["Payments", data.payments.length],
+                    ["POs", data.purchaseOrders.length],
+                    ["Expenses", data.expenseSheets.length],
+                    [
+                      "Claims",
+                      data.directClaims.length + data.meetingClaims.length,
+                    ],
+                    ["Records", data.records.length],
+                  ].map(([label, value]) => (
+                    <div
+                      key={String(label)}
+                      className="rounded-2xl bg-slate-50 p-3"
+                    >
+                      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
+                        {label}
+                      </p>
+                      <p className="mt-1 text-xl font-black text-slate-950">
+                        {Number(value).toLocaleString()}
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              </CardContent>
+            </Card>
+          </div>
+        </section>
       </div>
 
-      {/* Invoice Request Modal */}
       {canCreateInvoices && (
         <InvoiceRequestModal
           isOpen={isInvoiceModalOpen}
           onClose={() => setIsInvoiceModalOpen(false)}
           onSuccess={() => {
             setIsInvoiceModalOpen(false);
-            loadDashboardData();
+            loadDashboardData(true);
           }}
         />
       )}
