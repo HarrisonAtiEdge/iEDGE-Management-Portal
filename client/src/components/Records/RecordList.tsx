@@ -2002,27 +2002,7 @@ const handlePrintRecord = (record: RecordRow) => {
               </div>
             </section>
 
-            <div class="authorization">
-              <div class="signature-block">
-                <span class="signature-title">
-                  Prepared By
-                </span>
-
-                <span class="signature-caption">
-                  Name, signature and date
-                </span>
-              </div>
-
-              <div class="signature-block">
-                <span class="signature-title">
-                  Authorized By
-                </span>
-
-                <span class="signature-caption">
-                  Name, signature and date
-                </span>
-              </div>
-            </div>
+         
           </div>
 
           <footer class="document-footer">
