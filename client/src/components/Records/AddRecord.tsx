@@ -4799,6 +4799,14 @@
 
 
 
+
+
+
+
+
+
+
+
 import { FormEvent, useEffect, useMemo, useState } from "react";
 import { useAuth } from "@/contexts/AuthContext";
 import {
@@ -4812,6 +4820,7 @@ import { db } from "@/lib/firebase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -4863,14 +4872,14 @@ type RecordItem = {
 
 type ItemField = keyof RecordItem;
 
-type PdfRecordItem = {
+type PrintableRecordItem = {
   category: string;
   amount: number;
   name: string;
   description: string;
 };
 
-type PdfRecordData = {
+type PrintableRecordData = {
   recordId?: string;
   selectedDate: string;
   accountType: AccountType;
@@ -4887,431 +4896,432 @@ type PdfRecordData = {
   totalItemAmount: number;
   remainingBalance: number;
   createdByName: string;
-  items: PdfRecordItem[];
+  items: PrintableRecordItem[];
 };
 
-type PdfPageCommands = string[];
-
-const sanitizePdfText = (value: unknown): string => {
+const escapeHtml = (value: unknown): string => {
   return String(value ?? "")
-    .normalize("NFKD")
-    .replace(/[^\x20-\x7E]/g, "?")
-    .replace(/\\/g, "\\\\")
-    .replace(/\(/g, "\\(")
-    .replace(/\)/g, "\\)");
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/\"/g, "&quot;")
+    .replace(/'/g, "&#039;");
 };
 
-const wrapPdfText = (value: unknown, maxCharacters: number): string[] => {
-  const text = String(value ?? "").trim();
-
-  if (!text) return ["-"];
-
-  const words = text.split(/\s+/);
-  const lines: string[] = [];
-  let currentLine = "";
-
-  words.forEach((word) => {
-    if (word.length > maxCharacters) {
-      if (currentLine) {
-        lines.push(currentLine);
-        currentLine = "";
-      }
-
-      for (let index = 0; index < word.length; index += maxCharacters) {
-        lines.push(word.slice(index, index + maxCharacters));
-      }
-
-      return;
-    }
-
-    const candidate = currentLine ? `${currentLine} ${word}` : word;
-
-    if (candidate.length <= maxCharacters) {
-      currentLine = candidate;
-    } else {
-      if (currentLine) lines.push(currentLine);
-      currentLine = word;
-    }
+const formatPrintAmount = (value: number): string => {
+  return value.toLocaleString("en-US", {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   });
-
-  if (currentLine) lines.push(currentLine);
-
-  return lines.length > 0 ? lines : ["-"];
 };
 
-const createRecordPdfBlob = (record: PdfRecordData): Blob => {
-  const pageWidth = 595.28;
-  const pageHeight = 841.89;
-  const margin = 40;
-  const bottomMargin = 45;
-  const contentWidth = pageWidth - margin * 2;
-  const pages: PdfPageCommands[] = [];
-  let currentPage: PdfPageCommands = [];
-  let cursorY = 0;
-  let pageNumber = 0;
+const normalizeDescriptionLineBreaks = (value: string): string => {
+  return value.replace(/\r\n?/g, "\n");
+};
 
-  const toPdfY = (topPosition: number): number => pageHeight - topPosition;
+const formatDescriptionForPrint = (value: string): string => {
+  const normalizedValue = normalizeDescriptionLineBreaks(value);
 
-  const addText = (
-    text: unknown,
-    x: number,
-    topPosition: number,
-    size = 10,
-    bold = false
-  ) => {
-    currentPage.push(
-      `BT /${bold ? "F2" : "F1"} ${size} Tf 0 0 0 rg ${x.toFixed(
-        2
-      )} ${toPdfY(topPosition).toFixed(2)} Td (${sanitizePdfText(text)}) Tj ET`
-    );
-  };
-
-  const drawLine = (
-    startX: number,
-    startTop: number,
-    endX: number,
-    endTop: number,
-    width = 0.7
-  ) => {
-    currentPage.push(
-      `${width} w ${startX.toFixed(2)} ${toPdfY(startTop).toFixed(
-        2
-      )} m ${endX.toFixed(2)} ${toPdfY(endTop).toFixed(2)} l S`
-    );
-  };
-
-  const drawRect = (
-    x: number,
-    topPosition: number,
-    width: number,
-    height: number,
-    fillGray?: number
-  ) => {
-    const bottomY = pageHeight - topPosition - height;
-
-    if (fillGray !== undefined) {
-      currentPage.push(
-        `${fillGray} g ${x.toFixed(2)} ${bottomY.toFixed(2)} ${width.toFixed(
-          2
-        )} ${height.toFixed(2)} re f 0 g`
-      );
-    }
-
-    currentPage.push(
-      `0.7 w ${x.toFixed(2)} ${bottomY.toFixed(2)} ${width.toFixed(
-        2
-      )} ${height.toFixed(2)} re S`
-    );
-  };
-
-  const startPage = (continued = false) => {
-    currentPage = [];
-    pages.push(currentPage);
-    pageNumber += 1;
-
-    addText(
-      continued ? "IEDGE FINANCIAL RECORD - CONTINUED" : "IEDGE FINANCIAL RECORD",
-      margin,
-      48,
-      continued ? 15 : 18,
-      true
-    );
-    addText(
-      "Official account, cheque and transaction record",
-      margin,
-      67,
-      9
-    );
-    drawLine(margin, 79, pageWidth - margin, 79, 1);
-    cursorY = 103;
-  };
-
-  const ensureSpace = (requiredHeight: number, onNewPage?: () => void) => {
-    if (cursorY + requiredHeight <= pageHeight - bottomMargin) return;
-
-    startPage(true);
-    onNewPage?.();
-  };
-
-  const addSectionTitle = (title: string) => {
-    ensureSpace(32);
-    drawRect(margin, cursorY, contentWidth, 24, 0.94);
-    addText(title, margin + 10, cursorY + 16, 11, true);
-    cursorY += 34;
-  };
-
-  const addKeyValue = (
-    label: string,
-    value: unknown,
-    x: number,
-    width: number,
-    valueCharacters = 34
-  ): number => {
-    const valueLines = wrapPdfText(value, valueCharacters);
-    const rowHeight = Math.max(30, 18 + valueLines.length * 12);
-
-    drawRect(x, cursorY, width, rowHeight);
-    addText(label, x + 9, cursorY + 14, 8, true);
-
-    valueLines.forEach((line, index) => {
-      addText(line, x + 9, cursorY + 27 + index * 11, 9);
-    });
-
-    return rowHeight;
-  };
-
-  const formatPdfAmount = (value: number): string => {
-    return value.toLocaleString("en-US", {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
-    });
-  };
-
-  startPage();
-
-  addSectionTitle("Record Information");
-
-  const halfWidth = (contentWidth - 10) / 2;
-  let leftHeight = addKeyValue(
-    "Record ID",
-    record.recordId || "Not saved yet",
-    margin,
-    halfWidth
-  );
-  let rightHeight = addKeyValue(
-    "Record Date",
-    record.selectedDate,
-    margin + halfWidth + 10,
-    halfWidth
-  );
-  cursorY += Math.max(leftHeight, rightHeight) + 10;
-
-  leftHeight = addKeyValue(
-    "Cheque Number",
-    record.chequeNumber,
-    margin,
-    halfWidth
-  );
-  rightHeight = addKeyValue(
-    "Statement Title",
-    record.statementTitle || "-",
-    margin + halfWidth + 10,
-    halfWidth,
-    32
-  );
-  cursorY += Math.max(leftHeight, rightHeight) + 10;
-
-  leftHeight = addKeyValue(
-    "Created By",
-    record.createdByName || "Unknown User",
-    margin,
-    halfWidth
-  );
-  rightHeight = addKeyValue(
-    "Account Type",
-    record.accountType === "cheque" ? "Cheque Account" : "Online Account",
-    margin + halfWidth + 10,
-    halfWidth
-  );
-  cursorY += Math.max(leftHeight, rightHeight) + 14;
-
-  addSectionTitle("Account Details");
-
-  leftHeight = addKeyValue(
-    "Account Title",
-    record.accountTitle,
-    margin,
-    halfWidth,
-    32
-  );
-  rightHeight = addKeyValue(
-    "Bank / Platform",
-    record.bank || record.platform || "-",
-    margin + halfWidth + 10,
-    halfWidth,
-    32
-  );
-  cursorY += Math.max(leftHeight, rightHeight) + 10;
-
-  leftHeight = addKeyValue(
-    "Account Number",
-    record.accountNo || "-",
-    margin,
-    halfWidth
-  );
-  rightHeight = addKeyValue(
-    "Branch / Routing Number",
-    record.branch || record.routingNumber || "-",
-    margin + halfWidth + 10,
-    halfWidth,
-    32
-  );
-  cursorY += Math.max(leftHeight, rightHeight) + 14;
-
-  const itemColumns = [
-    { label: "#", width: 28, maxCharacters: 3 },
-    { label: "Category", width: 92, maxCharacters: 15 },
-    { label: "Name", width: 128, maxCharacters: 21 },
-    { label: "Amount", width: 76, maxCharacters: 12 },
-    { label: "Description", width: contentWidth - 324, maxCharacters: 28 },
-  ];
-
-  const addItemsTableHeader = (continued = false) => {
-    if (continued) {
-      addText("Record Items (continued)", margin, cursorY, 11, true);
-      cursorY += 14;
-    }
-
-    const headerHeight = 26;
-    drawRect(margin, cursorY, contentWidth, headerHeight, 0.9);
-
-    let x = margin;
-    itemColumns.forEach((column) => {
-      addText(column.label, x + 6, cursorY + 17, 8, true);
-      x += column.width;
-      if (x < margin + contentWidth) {
-        drawLine(x, cursorY, x, cursorY + headerHeight);
-      }
-    });
-
-    cursorY += headerHeight;
-  };
-
-  addSectionTitle("Record Items");
-  addItemsTableHeader();
-
-  record.items.forEach((item, index) => {
-    const cellLines = [
-      [String(index + 1)],
-      wrapPdfText(item.category, itemColumns[1].maxCharacters),
-      wrapPdfText(item.name, itemColumns[2].maxCharacters),
-      [formatPdfAmount(item.amount)],
-      wrapPdfText(item.description || "-", itemColumns[4].maxCharacters),
-    ];
-
-    const maximumLines = Math.max(...cellLines.map((lines) => lines.length));
-    const rowHeight = Math.max(28, 14 + maximumLines * 11);
-
-    ensureSpace(rowHeight + 12, () => addItemsTableHeader(true));
-    drawRect(margin, cursorY, contentWidth, rowHeight);
-
-    let x = margin;
-
-    cellLines.forEach((lines, columnIndex) => {
-      lines.forEach((line, lineIndex) => {
-        addText(line, x + 6, cursorY + 16 + lineIndex * 11, 8);
-      });
-
-      x += itemColumns[columnIndex].width;
-
-      if (x < margin + contentWidth) {
-        drawLine(x, cursorY, x, cursorY + rowHeight);
-      }
-    });
-
-    cursorY += rowHeight;
-  });
-
-  cursorY += 16;
-  ensureSpace(145);
-  addSectionTitle("Cheque Summary");
-
-  const summaryRows = [
-    ["Cheque Amount", formatPdfAmount(record.chequeAmount)],
-    ["Total Item Amount", formatPdfAmount(record.totalItemAmount)],
-    ["Remaining Balance", formatPdfAmount(record.remainingBalance)],
-  ];
-
-  summaryRows.forEach(([label, value], index) => {
-    const rowHeight = 30;
-    drawRect(margin, cursorY, contentWidth, rowHeight, index === 2 ? 0.94 : undefined);
-    addText(label, margin + 10, cursorY + 19, 9, index === 2);
-    addText(value, pageWidth - margin - 105, cursorY + 19, 10, true);
-    cursorY += rowHeight;
-  });
-
-  pages.forEach((page, index) => {
-    const footerText = `Page ${index + 1} of ${pages.length}`;
-    page.push(
-      `BT /F1 8 Tf 0 0 0 rg ${(pageWidth - margin - 55).toFixed(
-        2
-      )} ${toPdfY(pageHeight - 22).toFixed(2)} Td (${sanitizePdfText(
-        footerText
-      )}) Tj ET`
-    );
-    page.push(
-      `BT /F1 8 Tf 0 0 0 rg ${margin.toFixed(2)} ${toPdfY(
-        pageHeight - 22
-      ).toFixed(2)} Td (${sanitizePdfText(
-        `Generated ${new Date().toLocaleString("en-US")}`
-      )}) Tj ET`
-    );
-  });
-
-  const encoder = new TextEncoder();
-  const objects: string[] = [];
-  const pageObjectIds: number[] = [];
-
-  objects[1] = "<< /Type /Catalog /Pages 2 0 R >>";
-  objects[3] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>";
-  objects[4] = "<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold >>";
-
-  pages.forEach((pageCommands, index) => {
-    const pageObjectId = 5 + index * 2;
-    const contentObjectId = pageObjectId + 1;
-    const contentStream = pageCommands.join("\n");
-
-    pageObjectIds.push(pageObjectId);
-    objects[pageObjectId] =
-      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth.toFixed(
-        2
-      )} ${pageHeight.toFixed(
-        2
-      )}] /Resources << /Font << /F1 3 0 R /F2 4 0 R >> >> /Contents ${contentObjectId} 0 R >>`;
-    objects[contentObjectId] = `<< /Length ${
-      encoder.encode(contentStream).length
-    } >>\nstream\n${contentStream}\nendstream`;
-  });
-
-  objects[2] = `<< /Type /Pages /Kids [${pageObjectIds
-    .map((id) => `${id} 0 R`)
-    .join(" ")}] /Count ${pageObjectIds.length} >>`;
-
-  let pdf = "%PDF-1.4\n%1234\n";
-  const offsets: number[] = [0];
-
-  for (let objectId = 1; objectId < objects.length; objectId += 1) {
-    offsets[objectId] = encoder.encode(pdf).length;
-    pdf += `${objectId} 0 obj\n${objects[objectId]}\nendobj\n`;
+  if (!normalizedValue.trim()) {
+    return '<span class="description-empty">-</span>';
   }
 
-  const xrefOffset = encoder.encode(pdf).length;
-  pdf += `xref\n0 ${objects.length}\n`;
-  pdf += "0000000000 65535 f \n";
-
-  for (let objectId = 1; objectId < objects.length; objectId += 1) {
-    pdf += `${String(offsets[objectId]).padStart(10, "0")} 00000 n \n`;
-  }
-
-  pdf += `trailer\n<< /Size ${objects.length} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
-
-  return new Blob([encoder.encode(pdf)], { type: "application/pdf" });
+  return `<div class="description-text">${escapeHtml(normalizedValue)}</div>`;
 };
 
-const downloadRecordPdf = (record: PdfRecordData) => {
-  const blob = createRecordPdfBlob(record);
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  const safeChequeNumber = record.chequeNumber
-    .replace(/[^a-zA-Z0-9-_]/g, "-")
-    .replace(/-+/g, "-");
+const printRecord = (record: PrintableRecordData): boolean => {
+  const printWindow = window.open("", "_blank", "width=1100,height=850");
 
-  link.href = url;
-  link.download = `record-${safeChequeNumber || record.selectedDate}.pdf`;
-  document.body.appendChild(link);
-  link.click();
-  link.remove();
-  window.setTimeout(() => URL.revokeObjectURL(url), 0);
+  if (!printWindow) return false;
+
+  const accountSource =
+    record.accountType === "online"
+      ? record.platform || record.bank || "-"
+      : record.bank || "-";
+
+  const branchOrRouting =
+    record.accountType === "online"
+      ? record.routingNumber || "-"
+      : record.branch || "-";
+
+  const itemRows = record.items
+    .map(
+      (item, index) => `
+        <tr>
+          <td class="number">${index + 1}</td>
+          <td>${escapeHtml(item.category || "-")}</td>
+          <td>${escapeHtml(item.name || "-")}</td>
+          <td><div class="description-content">${formatDescriptionForPrint(
+            item.description
+          )}</div></td>
+          <td class="amount">${escapeHtml(formatPrintAmount(item.amount))}</td>
+        </tr>`
+    )
+    .join("");
+
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Record ${escapeHtml(record.chequeNumber)}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 14mm;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: #172033;
+      background: #ffffff;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+      line-height: 1.45;
+    }
+
+    .document {
+      width: 100%;
+      margin: 0 auto;
+    }
+
+    .header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid #172033;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 0.8px;
+    }
+
+    .brand p {
+      margin: 5px 0 0;
+      color: #667085;
+      font-size: 11px;
+    }
+
+    .document-meta {
+      min-width: 220px;
+      text-align: right;
+    }
+
+    .document-meta .title {
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .document-meta .line {
+      margin-top: 4px;
+      color: #475467;
+    }
+
+    .section {
+      margin-top: 18px;
+      break-inside: avoid;
+    }
+
+    .section-title {
+      margin: 0 0 9px;
+      padding: 7px 10px;
+      border-left: 4px solid #172033;
+      background: #f2f4f7;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+
+    .details-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 24px;
+    }
+
+    .detail {
+      display: grid;
+      grid-template-columns: 125px minmax(0, 1fr);
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid #e4e7ec;
+    }
+
+    .detail .label {
+      color: #667085;
+      font-weight: 600;
+    }
+
+    .detail .value {
+      overflow-wrap: anywhere;
+      color: #101828;
+      font-weight: 600;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    thead {
+      display: table-header-group;
+    }
+
+    tr {
+      break-inside: avoid;
+    }
+
+    th,
+    td {
+      padding: 8px;
+      border: 1px solid #d0d5dd;
+      vertical-align: top;
+      overflow-wrap: anywhere;
+    }
+
+    th {
+      background: #f2f4f7;
+      color: #344054;
+      font-size: 10px;
+      letter-spacing: 0.35px;
+      text-align: left;
+      text-transform: uppercase;
+    }
+
+    th:nth-child(1),
+    td:nth-child(1) {
+      width: 6%;
+    }
+
+    th:nth-child(2),
+    td:nth-child(2) {
+      width: 18%;
+    }
+
+    th:nth-child(3),
+    td:nth-child(3) {
+      width: 23%;
+    }
+
+    th:nth-child(4),
+    td:nth-child(4) {
+      width: 35%;
+    }
+
+    th:nth-child(5),
+    td:nth-child(5) {
+      width: 18%;
+    }
+
+    .number {
+      text-align: center;
+    }
+
+    .amount {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .description-content {
+      color: #344054;
+      line-height: 1.5;
+    }
+
+    .description-text {
+      margin: 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .description-empty {
+      color: #98a2b3;
+    }
+
+    .summary {
+      width: 360px;
+      margin-left: auto;
+      border: 1px solid #d0d5dd;
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 9px 12px;
+      border-bottom: 1px solid #e4e7ec;
+    }
+
+    .summary-row:last-child {
+      border-bottom: 0;
+      background: #f2f4f7;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .summary-label {
+      color: #475467;
+    }
+
+    .summary-value {
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .footer {
+      margin-top: 24px;
+      padding-top: 10px;
+      border-top: 1px solid #d0d5dd;
+      color: #667085;
+      font-size: 10px;
+      text-align: center;
+    }
+
+    @media print {
+      .document {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="document">
+    <header class="header">
+      <div class="brand">
+        <h1>IEDGE</h1>
+        <p>Official account, cheque and transaction record</p>
+      </div>
+
+      <div class="document-meta">
+        <div class="title">Financial Record</div>
+        <div class="line"><strong>Record ID:</strong> ${escapeHtml(
+          record.recordId || "Not saved yet"
+        )}</div>
+        <div class="line"><strong>Date:</strong> ${escapeHtml(
+          record.selectedDate
+        )}</div>
+      </div>
+    </header>
+
+    <section class="section">
+      <h2 class="section-title">Record Information</h2>
+      <div class="details-grid">
+        <div class="detail">
+          <span class="label">Cheque Number</span>
+          <span class="value">${escapeHtml(record.chequeNumber)}</span>
+        </div>
+        <div class="detail">
+          <span class="label">Statement Title</span>
+          <span class="value">${escapeHtml(record.statementTitle || "-")}</span>
+        </div>
+        <div class="detail">
+          <span class="label">Created By</span>
+          <span class="value">${escapeHtml(record.createdByName)}</span>
+        </div>
+        <div class="detail">
+          <span class="label">Account Type</span>
+          <span class="value">${
+            record.accountType === "cheque" ? "Cheque Account" : "Online Account"
+          }</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">Account Details</h2>
+      <div class="details-grid">
+        <div class="detail">
+          <span class="label">Account Title</span>
+          <span class="value">${escapeHtml(record.accountTitle || "-")}</span>
+        </div>
+        <div class="detail">
+          <span class="label">Bank / Platform</span>
+          <span class="value">${escapeHtml(accountSource)}</span>
+        </div>
+        <div class="detail">
+          <span class="label">Account Number</span>
+          <span class="value">${escapeHtml(record.accountNo || "-")}</span>
+        </div>
+        <div class="detail">
+          <span class="label">Branch / Routing</span>
+          <span class="value">${escapeHtml(branchOrRouting)}</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">Record Items</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Category</th>
+            <th>Name</th>
+            <th>Description</th>
+            <th class="amount">Amount</th>
+          </tr>
+        </thead>
+        <tbody>${itemRows}</tbody>
+      </table>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">Cheque Summary</h2>
+      <div class="summary">
+        <div class="summary-row">
+          <span class="summary-label">Cheque Amount</span>
+          <span class="summary-value">${escapeHtml(
+            formatPrintAmount(record.chequeAmount)
+          )}</span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">Total Item Amount</span>
+          <span class="summary-value">${escapeHtml(
+            formatPrintAmount(record.totalItemAmount)
+          )}</span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">Remaining Balance</span>
+          <span class="summary-value">${escapeHtml(
+            formatPrintAmount(record.remainingBalance)
+          )}</span>
+        </div>
+      </div>
+    </section>
+
+    <footer class="footer">
+      Printed ${escapeHtml(new Date().toLocaleString("en-US"))}
+    </footer>
+  </main>
+
+  <script>
+    window.addEventListener("load", function () {
+      window.setTimeout(function () {
+        window.print();
+      }, 200);
+    });
+
+    window.addEventListener("afterprint", function () {
+      window.close();
+    });
+  </script>
+</body>
+</html>`;
+
+  printWindow.document.open();
+  printWindow.document.write(html);
+  printWindow.document.close();
+  printWindow.focus();
+
+  return true;
 };
 
 const PANEL_ID = "IEDGE-SYSTEM";
@@ -5510,7 +5520,7 @@ export default function Record() {
   const [duplicateChequeWarning, setDuplicateChequeWarning] =
     useState<string>("");
   const [lastSavedRecord, setLastSavedRecord] =
-    useState<PdfRecordData | null>(null);
+    useState<PrintableRecordData | null>(null);
 
   const getErrorMessage = (error: unknown): string => {
     if (error instanceof Error) return error.message;
@@ -5803,7 +5813,7 @@ export default function Record() {
     return "";
   };
 
-  const getCurrentPdfRecord = (): PdfRecordData | null => {
+  const getCurrentPrintableRecord = (): PrintableRecordData | null => {
     if (!selectedAccount) return null;
 
     const profileData = userProfile as {
@@ -5837,12 +5847,12 @@ export default function Record() {
         category: item.category,
         name: item.name.trim(),
         amount: Number(item.amount),
-        description: item.description.trim(),
+        description: normalizeDescriptionLineBreaks(item.description),
       })),
     };
   };
 
-  const handleDownloadPdf = () => {
+  const handlePrint = () => {
     const hasCurrentRecordData = Boolean(
       selectedAccountKey ||
         chequeNumber.trim() ||
@@ -5863,29 +5873,45 @@ export default function Record() {
       if (error) {
         setSubmitError(error);
         toast({
-          title: "Cannot download PDF",
+          title: "Cannot print record",
           description: error,
           variant: "destructive",
         });
         return;
       }
 
-      const currentRecord = getCurrentPdfRecord();
+      const currentRecord = getCurrentPrintableRecord();
 
       if (!currentRecord) return;
 
-      downloadRecordPdf(currentRecord);
+      const opened = printRecord(currentRecord);
+
+      if (!opened) {
+        toast({
+          title: "Print window blocked",
+          description: "Please allow pop-ups for this website and try again.",
+          variant: "destructive",
+        });
+      }
       return;
     }
 
     if (lastSavedRecord) {
-      downloadRecordPdf(lastSavedRecord);
+      const opened = printRecord(lastSavedRecord);
+
+      if (!opened) {
+        toast({
+          title: "Print window blocked",
+          description: "Please allow pop-ups for this website and try again.",
+          variant: "destructive",
+        });
+      }
       return;
     }
 
     toast({
       title: "No record available",
-      description: "Enter record details or save a record before downloading the PDF.",
+      description: "Enter record details or save a record before printing.",
       variant: "destructive",
     });
   };
@@ -5951,7 +5977,7 @@ export default function Record() {
           category: item.category,
           name: item.name.trim(),
           amount: Number(item.amount),
-          description: item.description.trim(),
+          description: normalizeDescriptionLineBreaks(item.description),
         })),
 
         createdBy: profileData?.id || "",
@@ -5993,7 +6019,7 @@ export default function Record() {
           category: item.category,
           name: item.name.trim(),
           amount: Number(item.amount),
-          description: item.description.trim(),
+          description: normalizeDescriptionLineBreaks(item.description),
         })),
       });
 
@@ -6245,17 +6271,30 @@ export default function Record() {
                     />
                   </div>
 
-                  <div>
-                    <Label>Description</Label>
+                  <div className="md:col-span-2 lg:col-span-4">
+                    <Label htmlFor={`item-description-${index}`}>
+                      Description
+                    </Label>
 
-                    <Input
+                    <Textarea
+                      id={`item-description-${index}`}
                       value={item.description}
                       onChange={(e) =>
                         handleItemChange(index, "description", e.target.value)
                       }
-                      placeholder="Optional"
+                      rows={7}
+                      className="mt-2 min-h-[160px] resize-y whitespace-pre-wrap"
+                      placeholder={
+                        "Write the description line by line. Press Enter for a new line, or press Enter twice to start a new paragraph."
+                      }
                       data-testid={`input-item-description-${index}`}
                     />
+
+                    <p className="mt-2 text-xs text-muted-foreground">
+                      Line breaks and blank paragraphs are preserved when the
+                      record is saved and printed.
+                    </p>
+
                   </div>
                 </div>
               </div>
@@ -6344,11 +6383,11 @@ export default function Record() {
               <Button
                 type="button"
                 variant="outline"
-                onClick={handleDownloadPdf}
+                onClick={handlePrint}
                 disabled={loading}
-                data-testid="button-download-record-pdf"
+                data-testid="button-print-record"
               >
-                Download PDF
+                Print Record
               </Button>
 
               <Button
