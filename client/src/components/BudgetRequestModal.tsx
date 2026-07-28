@@ -7258,7 +7258,7 @@ export default function InvoiceRequestModal({
             className="flex min-h-0 flex-1 flex-col"
           >
             <div className="flex-1 overflow-y-auto px-6 py-6">
-              <div className="mx-auto flex w-full max-w-[1600px] flex-col gap-6">
+              <div className="mx-auto flex w-full flex-col gap-6">
                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
