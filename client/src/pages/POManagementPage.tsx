@@ -5049,9 +5049,8 @@ export default function POManagementPage() {
         </CardContent>
       </Card>
 
-
       {paymentReleasePO && (
-        <PaymentReleaseModal<PurchaseOrder>
+        <PaymentReleaseModal
           isOpen={paymentReleaseOpen}
           onClose={handleClosePaymentRelease}
           onSuccess={handleClosePaymentRelease}

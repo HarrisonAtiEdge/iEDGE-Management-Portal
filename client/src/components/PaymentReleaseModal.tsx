@@ -3719,6 +3719,21 @@
 //   );
 // }
 
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 // import {
 //   useEffect,
 //   useMemo,
@@ -5393,6 +5408,10 @@
 //     </div>
 //   );
 // }
+
+
+
+
 
 // import {
 //   useEffect,
@@ -8215,6 +8234,13 @@
 //   );
 // }
 
+
+
+
+
+
+
+
 import {
   useEffect,
   useMemo,
@@ -8222,7 +8248,11 @@ import {
   type ChangeEvent,
   type FormEvent,
 } from "react";
-import { collection, getDocs, serverTimestamp } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  serverTimestamp,
+} from "firebase/firestore";
 import {
   ArrowLeft,
   Banknote,
@@ -8269,7 +8299,9 @@ interface PaymentReleaseModalProps<T = any> {
 
   context?: T | null;
   docPath?: ((context: T) => string[]) | string[];
-  buildUpdateData?: (args: PaymentReleaseSubmitArgs<T>) => Record<string, any>;
+  buildUpdateData?: (
+    args: PaymentReleaseSubmitArgs<T>,
+  ) => Record<string, any>;
 
   amount?: number;
   amountLabel?: string;
@@ -8279,16 +8311,21 @@ interface PaymentReleaseModalProps<T = any> {
   accounts?: PaymentAccount[];
   allowCheque?: boolean;
   allowReceiptUpload?: boolean;
-  initialPaymentMethod?: "cash" | "cheque" | "bank_transfer" | "wire";
+  initialPaymentMethod?:
+    | "cash"
+    | "cheque"
+    | "bank_transfer"
+    | "wire";
   amountReadOnly?: boolean;
 }
 
 const PANEL_ID = "IEDGE-SYSTEM";
 
-type ExtendedPaymentReleaseFormValues = PaymentReleaseFormValues & {
-  transactionName: string;
-  chequeNumbers: string[];
-};
+type ExtendedPaymentReleaseFormValues =
+  PaymentReleaseFormValues & {
+    transactionName: string;
+    chequeNumbers: string[];
+  };
 
 function normalizeText(value: any) {
   return String(value || "")
@@ -8303,13 +8340,17 @@ function normalizeChequeNumber(value: any) {
     .toLowerCase();
 }
 
-function extractChequeNumbersFromValue(value: any): string[] {
+function extractChequeNumbersFromValue(
+  value: any,
+): string[] {
   if (value === undefined || value === null) {
     return [];
   }
 
   if (Array.isArray(value)) {
-    return value.flatMap((item) => extractChequeNumbersFromValue(item));
+    return value.flatMap((item) =>
+      extractChequeNumbersFromValue(item),
+    );
   }
 
   if (typeof value === "object") {
@@ -8322,114 +8363,236 @@ function extractChequeNumbersFromValue(value: any): string[] {
     .filter(Boolean);
 }
 
-function collectChequeNumbersFromSource(source: any): string[] {
+function collectChequeNumbersFromSource(
+  source: any,
+): string[] {
   if (!source) return [];
 
-  const paymentDetails = source.paymentDetails || {};
-  const latestPaymentRelease = source.latestPaymentRelease || {};
-  const accountDetails = source.accountDetails || {};
+  const paymentDetails =
+    source.paymentDetails || {};
+  const latestPaymentRelease =
+    source.latestPaymentRelease || {};
+  const accountDetails =
+    source.accountDetails || {};
   const bankDetails = source.bankDetails || {};
-  const receivePayment = source.receivePayment || {};
+  const receivePayment =
+    source.receivePayment || {};
 
-  const paymentReleaseHistory = Array.isArray(source.paymentReleaseHistory)
+  const paymentReleaseHistory = Array.isArray(
+    source.paymentReleaseHistory,
+  )
     ? source.paymentReleaseHistory
     : [];
 
   return [
-    ...extractChequeNumbersFromValue(source.chequeNumber),
-    ...extractChequeNumbersFromValue(source.chequeNumbers),
-    ...extractChequeNumbersFromValue(source.chequeNo),
-    ...extractChequeNumbersFromValue(source.checkNumber),
-    ...extractChequeNumbersFromValue(source.checkNo),
-    ...extractChequeNumbersFromValue(source.bankChequeNumber),
-    ...extractChequeNumbersFromValue(source.paymentChequeNumber),
-    ...extractChequeNumbersFromValue(source.receivedChequeNumber),
-    ...extractChequeNumbersFromValue(source.reference),
-    ...extractChequeNumbersFromValue(source.Reference),
-    ...extractChequeNumbersFromValue(source.transactionReference),
+    ...extractChequeNumbersFromValue(
+      source.chequeNumber,
+    ),
+    ...extractChequeNumbersFromValue(
+      source.chequeNumbers,
+    ),
+    ...extractChequeNumbersFromValue(
+      source.chequeNo,
+    ),
+    ...extractChequeNumbersFromValue(
+      source.checkNumber,
+    ),
+    ...extractChequeNumbersFromValue(
+      source.checkNo,
+    ),
+    ...extractChequeNumbersFromValue(
+      source.bankChequeNumber,
+    ),
+    ...extractChequeNumbersFromValue(
+      source.paymentChequeNumber,
+    ),
+    ...extractChequeNumbersFromValue(
+      source.receivedChequeNumber,
+    ),
+    ...extractChequeNumbersFromValue(
+      source.reference,
+    ),
+    ...extractChequeNumbersFromValue(
+      source.Reference,
+    ),
+    ...extractChequeNumbersFromValue(
+      source.transactionReference,
+    ),
 
-    ...extractChequeNumbersFromValue(paymentDetails.chequeNumber),
-    ...extractChequeNumbersFromValue(paymentDetails.chequeNumbers),
-    ...extractChequeNumbersFromValue(paymentDetails.chequeNo),
-    ...extractChequeNumbersFromValue(paymentDetails.checkNumber),
-    ...extractChequeNumbersFromValue(paymentDetails.reference),
-    ...extractChequeNumbersFromValue(paymentDetails.Reference),
-    ...extractChequeNumbersFromValue(paymentDetails.transactionReference),
+    ...extractChequeNumbersFromValue(
+      paymentDetails.chequeNumber,
+    ),
+    ...extractChequeNumbersFromValue(
+      paymentDetails.chequeNumbers,
+    ),
+    ...extractChequeNumbersFromValue(
+      paymentDetails.chequeNo,
+    ),
+    ...extractChequeNumbersFromValue(
+      paymentDetails.checkNumber,
+    ),
+    ...extractChequeNumbersFromValue(
+      paymentDetails.reference,
+    ),
+    ...extractChequeNumbersFromValue(
+      paymentDetails.Reference,
+    ),
+    ...extractChequeNumbersFromValue(
+      paymentDetails.transactionReference,
+    ),
 
-    ...extractChequeNumbersFromValue(latestPaymentRelease.chequeNumber),
-    ...extractChequeNumbersFromValue(latestPaymentRelease.chequeNumbers),
-    ...extractChequeNumbersFromValue(latestPaymentRelease.chequeNo),
-    ...extractChequeNumbersFromValue(latestPaymentRelease.checkNumber),
-    ...extractChequeNumbersFromValue(latestPaymentRelease.reference),
-    ...extractChequeNumbersFromValue(latestPaymentRelease.Reference),
-    ...extractChequeNumbersFromValue(latestPaymentRelease.transactionReference),
+    ...extractChequeNumbersFromValue(
+      latestPaymentRelease.chequeNumber,
+    ),
+    ...extractChequeNumbersFromValue(
+      latestPaymentRelease.chequeNumbers,
+    ),
+    ...extractChequeNumbersFromValue(
+      latestPaymentRelease.chequeNo,
+    ),
+    ...extractChequeNumbersFromValue(
+      latestPaymentRelease.checkNumber,
+    ),
+    ...extractChequeNumbersFromValue(
+      latestPaymentRelease.reference,
+    ),
+    ...extractChequeNumbersFromValue(
+      latestPaymentRelease.Reference,
+    ),
+    ...extractChequeNumbersFromValue(
+      latestPaymentRelease.transactionReference,
+    ),
 
-    ...extractChequeNumbersFromValue(accountDetails.chequeNumber),
-    ...extractChequeNumbersFromValue(accountDetails.chequeNumbers),
-    ...extractChequeNumbersFromValue(accountDetails.chequeNo),
-    ...extractChequeNumbersFromValue(accountDetails.checkNumber),
-    ...extractChequeNumbersFromValue(accountDetails.reference),
-    ...extractChequeNumbersFromValue(accountDetails.Reference),
-    ...extractChequeNumbersFromValue(accountDetails.transactionReference),
+    ...extractChequeNumbersFromValue(
+      accountDetails.chequeNumber,
+    ),
+    ...extractChequeNumbersFromValue(
+      accountDetails.chequeNumbers,
+    ),
+    ...extractChequeNumbersFromValue(
+      accountDetails.chequeNo,
+    ),
+    ...extractChequeNumbersFromValue(
+      accountDetails.checkNumber,
+    ),
+    ...extractChequeNumbersFromValue(
+      accountDetails.reference,
+    ),
+    ...extractChequeNumbersFromValue(
+      accountDetails.Reference,
+    ),
+    ...extractChequeNumbersFromValue(
+      accountDetails.transactionReference,
+    ),
 
-    ...extractChequeNumbersFromValue(bankDetails.chequeNumber),
-    ...extractChequeNumbersFromValue(bankDetails.chequeNumbers),
-    ...extractChequeNumbersFromValue(bankDetails.chequeNo),
-    ...extractChequeNumbersFromValue(bankDetails.checkNumber),
-    ...extractChequeNumbersFromValue(bankDetails.reference),
-    ...extractChequeNumbersFromValue(bankDetails.Reference),
-    ...extractChequeNumbersFromValue(bankDetails.transactionReference),
+    ...extractChequeNumbersFromValue(
+      bankDetails.chequeNumber,
+    ),
+    ...extractChequeNumbersFromValue(
+      bankDetails.chequeNumbers,
+    ),
+    ...extractChequeNumbersFromValue(
+      bankDetails.chequeNo,
+    ),
+    ...extractChequeNumbersFromValue(
+      bankDetails.checkNumber,
+    ),
+    ...extractChequeNumbersFromValue(
+      bankDetails.reference,
+    ),
+    ...extractChequeNumbersFromValue(
+      bankDetails.Reference,
+    ),
+    ...extractChequeNumbersFromValue(
+      bankDetails.transactionReference,
+    ),
 
-    ...extractChequeNumbersFromValue(receivePayment.chequeNumber),
-    ...extractChequeNumbersFromValue(receivePayment.chequeNumbers),
-    ...extractChequeNumbersFromValue(receivePayment.chequeNo),
-    ...extractChequeNumbersFromValue(receivePayment.checkNumber),
-    ...extractChequeNumbersFromValue(receivePayment.reference),
-    ...extractChequeNumbersFromValue(receivePayment.Reference),
-    ...extractChequeNumbersFromValue(receivePayment.transactionReference),
+    ...extractChequeNumbersFromValue(
+      receivePayment.chequeNumber,
+    ),
+    ...extractChequeNumbersFromValue(
+      receivePayment.chequeNumbers,
+    ),
+    ...extractChequeNumbersFromValue(
+      receivePayment.chequeNo,
+    ),
+    ...extractChequeNumbersFromValue(
+      receivePayment.checkNumber,
+    ),
+    ...extractChequeNumbersFromValue(
+      receivePayment.reference,
+    ),
+    ...extractChequeNumbersFromValue(
+      receivePayment.Reference,
+    ),
+    ...extractChequeNumbersFromValue(
+      receivePayment.transactionReference,
+    ),
 
-    ...paymentReleaseHistory.flatMap((entry: any) =>
-      collectChequeNumbersFromSource(entry),
+    ...paymentReleaseHistory.flatMap(
+      (entry: any) =>
+        collectChequeNumbersFromSource(entry),
     ),
   ];
 }
 
-function cleanChequeNumbers(values: string[] = []) {
-  return values.map((value) => value.trim()).filter(Boolean);
+function cleanChequeNumbers(
+  values: string[] = [],
+) {
+  return values
+    .map((value) => value.trim())
+    .filter(Boolean);
 }
 
 function getDuplicateChequeNumbers(
   chequeNumbers: string[],
   existingChequeNumbers: Set<string>,
 ) {
-  const normalizedCounts = new Map<string, number>();
+  const normalizedCounts = new Map<
+    string,
+    number
+  >();
 
   chequeNumbers.forEach((chequeNumber) => {
-    const normalized = normalizeChequeNumber(chequeNumber);
+    const normalized =
+      normalizeChequeNumber(chequeNumber);
 
     if (!normalized) return;
 
     normalizedCounts.set(
       normalized,
-      (normalizedCounts.get(normalized) || 0) + 1,
+      (normalizedCounts.get(normalized) || 0) +
+        1,
     );
   });
 
-  return cleanChequeNumbers(chequeNumbers).filter((chequeNumber) => {
-    const normalized = normalizeChequeNumber(chequeNumber);
+  return cleanChequeNumbers(
+    chequeNumbers,
+  ).filter((chequeNumber) => {
+    const normalized =
+      normalizeChequeNumber(chequeNumber);
 
     return (
       existingChequeNumbers.has(normalized) ||
-      (normalizedCounts.get(normalized) || 0) > 1
+      (normalizedCounts.get(normalized) || 0) >
+        1
     );
   });
 }
 
-function formatPKR(value: number | string | undefined | null) {
+function formatPKR(
+  value:
+    | number
+    | string
+    | undefined
+    | null,
+) {
   const numberValue =
     typeof value === "number"
       ? value
-      : Number(String(value || 0).replace(/,/g, "")) || 0;
+      : Number(
+          String(value || 0).replace(/,/g, ""),
+        ) || 0;
 
   return numberValue.toLocaleString("en-PK", {
     minimumFractionDigits: 2,
@@ -8438,13 +8601,17 @@ function formatPKR(value: number | string | undefined | null) {
 }
 
 function safeNumber(value: any) {
-  const parsed = Number(String(value ?? 0).replace(/,/g, ""));
+  const parsed = Number(
+    String(value ?? 0).replace(/,/g, ""),
+  );
 
   return Number.isFinite(parsed) ? parsed : 0;
 }
 
 function roundMoney(value: any) {
-  return Math.round(safeNumber(value) * 100) / 100;
+  return (
+    Math.round(safeNumber(value) * 100) / 100
+  );
 }
 
 function getPaymentReleaseAmount(entry: any) {
@@ -8457,19 +8624,31 @@ function getPaymentReleaseAmount(entry: any) {
   );
 }
 
-function getPaymentReleaseHistory(source: any): any[] {
-  const history = Array.isArray(source?.paymentReleaseHistory)
+function getPaymentReleaseHistory(
+  source: any,
+): any[] {
+  const history = Array.isArray(
+    source?.paymentReleaseHistory,
+  )
     ? source.paymentReleaseHistory
     : [];
 
   if (history.length > 0) {
-    return history.filter((entry: any) => getPaymentReleaseAmount(entry) > 0);
+    return history.filter(
+      (entry: any) =>
+        getPaymentReleaseAmount(entry) > 0,
+    );
   }
 
   // Backward compatibility for older records.
-  const legacyPayment = source?.paymentDetails || source?.latestPaymentRelease;
+  const legacyPayment =
+    source?.paymentDetails ||
+    source?.latestPaymentRelease;
 
-  if (legacyPayment && getPaymentReleaseAmount(legacyPayment) > 0) {
+  if (
+    legacyPayment &&
+    getPaymentReleaseAmount(legacyPayment) > 0
+  ) {
     return [
       {
         ...legacyPayment,
@@ -8489,13 +8668,17 @@ function getPaymentReleaseHistory(source: any): any[] {
 function getTotalReleasedAmount(source: any) {
   return roundMoney(
     getPaymentReleaseHistory(source).reduce(
-      (sum, entry) => sum + getPaymentReleaseAmount(entry),
+      (sum, entry) =>
+        sum + getPaymentReleaseAmount(entry),
       0,
     ),
   );
 }
 
-function getApprovedAmountFromRecord(source: any, fallback = 0) {
+function getApprovedAmountFromRecord(
+  source: any,
+  fallback = 0,
+) {
   return roundMoney(
     source?.approvedAmount ??
       source?.totalApprovedAmount ??
@@ -8506,12 +8689,25 @@ function getApprovedAmountFromRecord(source: any, fallback = 0) {
   );
 }
 
-function getRemainingReleaseAmount(source: any, fallbackApproved = 0) {
-  const approvedAmount = getApprovedAmountFromRecord(source, fallbackApproved);
+function getRemainingReleaseAmount(
+  source: any,
+  fallbackApproved = 0,
+) {
+  const approvedAmount =
+    getApprovedAmountFromRecord(
+      source,
+      fallbackApproved,
+    );
 
-  const releasedAmount = getTotalReleasedAmount(source);
+  const releasedAmount =
+    getTotalReleasedAmount(source);
 
-  return roundMoney(Math.max(approvedAmount - releasedAmount, 0));
+  return roundMoney(
+    Math.max(
+      approvedAmount - releasedAmount,
+      0,
+    ),
+  );
 }
 
 function getReleaseDateLabel(value: any) {
@@ -8521,15 +8717,22 @@ function getReleaseDateLabel(value: any) {
 
   if (value instanceof Date) {
     date = value;
-  } else if (typeof value?.toDate === "function") {
+  } else if (
+    typeof value?.toDate === "function"
+  ) {
     date = value.toDate();
-  } else if (typeof value?.seconds === "number") {
+  } else if (
+    typeof value?.seconds === "number"
+  ) {
     date = new Date(value.seconds * 1000);
   } else {
     date = new Date(value);
   }
 
-  if (!date || Number.isNaN(date.getTime())) {
+  if (
+    !date ||
+    Number.isNaN(date.getTime())
+  ) {
     return "-";
   }
 
@@ -8542,7 +8745,9 @@ function getReleaseDateLabel(value: any) {
   });
 }
 
-function getPaymentMethodLabel(method?: string) {
+function getPaymentMethodLabel(
+  method?: string,
+) {
   switch (method) {
     case "cash":
       return "Cash";
@@ -8597,20 +8802,28 @@ function formatMultilineText(value: any) {
  * corrected or removed. It prevents payment-history changes from affecting
  * the Admin/Finance approval workflow.
  */
-function getPaymentWorkflowBaseStatus(sourceRecord: any) {
+function getPaymentWorkflowBaseStatus(
+  sourceRecord: any,
+) {
   const existingBaseStatus = String(
-    sourceRecord?.paymentWorkflowBaseStatus || "",
+    sourceRecord?.paymentWorkflowBaseStatus ||
+      "",
   ).trim();
 
   if (existingBaseStatus) {
     return existingBaseStatus;
   }
 
-  const currentStatus = normalizeText(sourceRecord?.status);
+  const currentStatus = normalizeText(
+    sourceRecord?.status,
+  );
 
   if (
     currentStatus &&
-    !["payment_released", "payment_partially_released"].includes(currentStatus)
+    ![
+      "payment_released",
+      "payment_partially_released",
+    ].includes(currentStatus)
   ) {
     return String(sourceRecord.status);
   }
@@ -8634,18 +8847,23 @@ function getPaymentWorkflowBaseStatus(sourceRecord: any) {
   return "approved";
 }
 
-function getPaymentWorkflowBasePaymentStatus(sourceRecord: any) {
+function getPaymentWorkflowBasePaymentStatus(
+  sourceRecord: any,
+) {
   const existingBaseStatus = String(
-    sourceRecord?.paymentWorkflowBasePaymentStatus || "",
+    sourceRecord?.paymentWorkflowBasePaymentStatus ||
+      "",
   ).trim();
 
   if (existingBaseStatus) {
     return existingBaseStatus;
   }
 
-  const currentPaymentStatus = normalizeText(
-    sourceRecord?.paymentStatus || sourceRecord?.releasePaymentStatus,
-  );
+  const currentPaymentStatus =
+    normalizeText(
+      sourceRecord?.paymentStatus ||
+        sourceRecord?.releasePaymentStatus,
+    );
 
   if (
     currentPaymentStatus &&
@@ -8657,14 +8875,18 @@ function getPaymentWorkflowBasePaymentStatus(sourceRecord: any) {
     ].includes(currentPaymentStatus)
   ) {
     return String(
-      sourceRecord?.paymentStatus || sourceRecord?.releasePaymentStatus || "",
+      sourceRecord?.paymentStatus ||
+        sourceRecord?.releasePaymentStatus ||
+        "",
     );
   }
 
   return "";
 }
 
-export default function PaymentReleaseModal<T = any>({
+export default function PaymentReleaseModal<
+  T = any,
+>({
   isOpen,
   onClose,
   onSuccess,
@@ -8686,201 +8908,359 @@ export default function PaymentReleaseModal<T = any>({
   initialPaymentMethod,
   amountReadOnly,
 }: PaymentReleaseModalProps<T>) {
-  const { userProfile, currentUser } = useAuth();
+  const { userProfile, currentUser } =
+    useAuth();
 
   const { toast } = useToast();
 
-  const [loading, setLoading] = useState(false);
+  const [loading, setLoading] =
+    useState(false);
 
-  const [accountsLoading, setAccountsLoading] = useState(false);
+  const [
+    accountsLoading,
+    setAccountsLoading,
+  ] = useState(false);
 
-  const [receiptFiles, setReceiptFiles] = useState<File[]>([]);
+  const [
+    receiptFiles,
+    setReceiptFiles,
+  ] = useState<File[]>([]);
 
-  const [selectedAccount, setSelectedAccount] = useState<PaymentAccount | null>(
+  const [
+    selectedAccount,
+    setSelectedAccount,
+  ] = useState<PaymentAccount | null>(
     null,
   );
 
-  const [storedAccounts, setStoredAccounts] = useState<PaymentAccount[]>([]);
+  const [
+    storedAccounts,
+    setStoredAccounts,
+  ] = useState<PaymentAccount[]>([]);
 
-  const [existingChequeNumbers, setExistingChequeNumbers] = useState<
-    Set<string>
-  >(() => new Set());
+  const [
+    existingChequeNumbers,
+    setExistingChequeNumbers,
+  ] = useState<Set<string>>(
+    () => new Set(),
+  );
 
-  const [chequeValidationLoading, setChequeValidationLoading] = useState(false);
+  const [
+    chequeValidationLoading,
+    setChequeValidationLoading,
+  ] = useState(false);
 
-  const approvedInvoiceItems = useMemo(() => {
-    const items = Array.isArray((invoice as any)?.lineItems)
-      ? (invoice as any).lineItems
-      : [];
+  const approvedInvoiceItems =
+    useMemo(() => {
+      const items = Array.isArray(
+        (invoice as any)?.lineItems,
+      )
+        ? (invoice as any).lineItems
+        : [];
 
-    return items.filter((item: any) => item?.status === "approved");
-  }, [invoice]);
+      return items.filter(
+        (item: any) =>
+          item?.status === "approved",
+      );
+    }, [invoice]);
 
-  const approvedLineItemsAmount = useMemo(() => {
-    return roundMoney(
-      approvedInvoiceItems.reduce((sum: number, item: any) => {
-        const qty = Number(item?.units || 0);
+  const approvedLineItemsAmount =
+    useMemo(() => {
+      return roundMoney(
+        approvedInvoiceItems.reduce(
+          (sum: number, item: any) => {
+            const qty = Number(
+              item?.units || 0,
+            );
 
-        const rate = Number(item?.unitRate || 0);
+            const rate = Number(
+              item?.unitRate || 0,
+            );
 
-        const tax = Number(item?.tax || 0);
+            const tax = Number(
+              item?.tax || 0,
+            );
 
-        const total = Number(item?.total ?? qty * rate + tax);
+            const total = Number(
+              item?.total ??
+                qty * rate + tax,
+            );
 
-        return sum + total;
-      }, 0),
-    );
-  }, [approvedInvoiceItems]);
+            return sum + total;
+          },
+          0,
+        ),
+      );
+    }, [approvedInvoiceItems]);
 
-  const invoiceApprovedAmount = useMemo(() => {
-    return getApprovedAmountFromRecord(invoice, approvedLineItemsAmount);
-  }, [invoice, approvedLineItemsAmount]);
+  const invoiceApprovedAmount =
+    useMemo(() => {
+      return getApprovedAmountFromRecord(
+        invoice,
+        approvedLineItemsAmount,
+      );
+    }, [
+      invoice,
+      approvedLineItemsAmount,
+    ]);
 
-  const paymentReleaseHistory = useMemo(() => {
-    return getPaymentReleaseHistory(invoice);
-  }, [invoice]);
+  const paymentReleaseHistory =
+    useMemo(() => {
+      return getPaymentReleaseHistory(
+        invoice,
+      );
+    }, [invoice]);
 
-  const totalReleasedAmount = useMemo(() => {
-    return getTotalReleasedAmount(invoice);
-  }, [invoice]);
+  const totalReleasedAmount =
+    useMemo(() => {
+      return getTotalReleasedAmount(
+        invoice,
+      );
+    }, [invoice]);
 
-  const remainingReleaseAmount = useMemo(() => {
-    return getRemainingReleaseAmount(invoice, invoiceApprovedAmount);
-  }, [invoice, invoiceApprovedAmount]);
+  const remainingReleaseAmount =
+    useMemo(() => {
+      return getRemainingReleaseAmount(
+        invoice,
+        invoiceApprovedAmount,
+      );
+    }, [
+      invoice,
+      invoiceApprovedAmount,
+    ]);
 
-  const invoiceApprovedVendors = useMemo(() => {
-    const vendors = [
-      ...new Set(
-        approvedInvoiceItems
-          .map((item: any) =>
-            String(
-              item?.vendor ||
-                item?.vendorName ||
-                item?.supplier ||
-                item?.supplierName ||
-                "",
-            ).trim(),
-          )
-          .filter(Boolean),
-      ),
-    ] as string[];
+  const invoiceApprovedVendors =
+    useMemo(() => {
+      const vendors = [
+        ...new Set(
+          approvedInvoiceItems
+            .map((item: any) =>
+              String(
+                item?.vendor ||
+                  item?.vendorName ||
+                  item?.supplier ||
+                  item?.supplierName ||
+                  "",
+              ).trim(),
+            )
+            .filter(Boolean),
+        ),
+      ] as string[];
 
-    if (vendors.length > 0) {
-      return vendors;
-    }
+      if (vendors.length > 0) {
+        return vendors;
+      }
 
-    const fallbackVendor = String(
-      (invoice as any)?.vendorName ||
-        (invoice as any)?.supplierName ||
-        (invoice as any)?.clientName ||
-        (invoice as any)?.partyName ||
-        "",
-    ).trim();
+      const fallbackVendor = String(
+        (invoice as any)?.vendorName ||
+          (invoice as any)?.supplierName ||
+          (invoice as any)?.clientName ||
+          (invoice as any)?.partyName ||
+          "",
+      ).trim();
 
-    return fallbackVendor ? [fallbackVendor] : [];
-  }, [approvedInvoiceItems, invoice]);
+      return fallbackVendor
+        ? [fallbackVendor]
+        : [];
+    }, [
+      approvedInvoiceItems,
+      invoice,
+    ]);
 
-  const resolvedContext = (context ?? invoice ?? null) as
-    | T
-    | InvoiceRequest
-    | null;
+  const resolvedContext = (
+    context ??
+    invoice ??
+    null
+  ) as T | InvoiceRequest | null;
 
-  const resolvedDocPath = useMemo(() => {
-    if (docPath && resolvedContext) {
-      return typeof docPath === "function"
-        ? docPath(resolvedContext as T)
-        : docPath;
-    }
+  const resolvedDocPath =
+    useMemo(() => {
+      if (
+        docPath &&
+        resolvedContext
+      ) {
+        return typeof docPath === "function"
+          ? docPath(resolvedContext as T)
+          : docPath;
+      }
 
-    if ((invoice as any)?.id) {
-      return ["Panels", PANEL_ID, "invoiceRequests", (invoice as any).id];
-    }
+      if ((invoice as any)?.id) {
+        return [
+          "Panels",
+          PANEL_ID,
+          "invoiceRequests",
+          (invoice as any).id,
+        ];
+      }
 
-    return [];
-  }, [docPath, resolvedContext, invoice]);
+      return [];
+    }, [
+      docPath,
+      resolvedContext,
+      invoice,
+    ]);
 
-  const resolvedAmount = amount ?? (invoice ? remainingReleaseAmount : 0);
+  const resolvedAmount =
+    amount ??
+    (invoice
+      ? remainingReleaseAmount
+      : 0);
 
-  const resolvedParties = parties ?? (invoice ? invoiceApprovedVendors : []);
+  const resolvedParties =
+    parties ??
+    (invoice
+      ? invoiceApprovedVendors
+      : []);
 
   const resolvedAmountLabel =
-    amountLabel ?? (invoice ? "Remaining Balance" : "Amount");
+    amountLabel ??
+    (invoice
+      ? "Remaining Balance"
+      : "Amount");
 
   const resolvedPartyLabel =
-    partyLabel ?? (invoice ? "Approved Vendors" : "Payee");
+    partyLabel ??
+    (invoice
+      ? "Approved Vendors"
+      : "Payee");
 
   const resolvedInitialPaymentMethod =
-    initialPaymentMethod ?? (invoice ? "bank_transfer" : "cash");
+    initialPaymentMethod ??
+    (invoice
+      ? "bank_transfer"
+      : "cash");
 
-  const resolvedAmountReadOnly = amountReadOnly ?? false;
+  const resolvedAmountReadOnly =
+    amountReadOnly ?? false;
 
-  const resolvedAccounts = useMemo(() => {
-    const map = new Map<string, PaymentAccount>();
+  const resolvedAccounts =
+    useMemo(() => {
+      const map = new Map<
+        string,
+        PaymentAccount
+      >();
 
-    [...storedAccounts, ...accounts].forEach((account) => {
-      if (!account?.id) return;
+      [
+        ...storedAccounts,
+        ...accounts,
+      ].forEach((account) => {
+        if (!account?.id) return;
 
-      map.set(account.id, account);
-    });
+        map.set(account.id, account);
+      });
 
-    return Array.from(map.values()).filter(
-      (account) => account.isActive !== false,
-    );
-  }, [storedAccounts, accounts]);
+      return Array.from(
+        map.values(),
+      ).filter(
+        (account) =>
+          account.isActive !== false,
+      );
+    }, [
+      storedAccounts,
+      accounts,
+    ]);
 
   const defaultInvoiceBuildUpdateData = (
     args: PaymentReleaseSubmitArgs<InvoiceRequest>,
   ) => {
-    const { formData, receiptUrl, selectedAccount, actor } = args;
+    const {
+      formData,
+      receiptUrl,
+      selectedAccount,
+      actor,
+    } = args;
 
-    const sourceRecord = ((args as any).context || invoice || {}) as any;
+    const sourceRecord = (
+      (args as any).context ||
+      invoice ||
+      {}
+    ) as any;
 
-    const extendedFormData = formData as ExtendedPaymentReleaseFormValues;
+    const extendedFormData =
+      formData as ExtendedPaymentReleaseFormValues;
 
-    const releaseAmount = roundMoney(extendedFormData.amount);
+    const releaseAmount =
+      roundMoney(
+        extendedFormData.amount,
+      );
 
-    const approvedAmount = getApprovedAmountFromRecord(
-      sourceRecord,
-      invoiceApprovedAmount || releaseAmount,
-    );
+    const approvedAmount =
+      getApprovedAmountFromRecord(
+        sourceRecord,
+        invoiceApprovedAmount ||
+          releaseAmount,
+      );
 
-    const existingHistory = getPaymentReleaseHistory(sourceRecord);
+    const existingHistory =
+      getPaymentReleaseHistory(
+        sourceRecord,
+      );
 
-    const releasedBefore = roundMoney(
-      existingHistory.reduce(
-        (sum, entry) => sum + getPaymentReleaseAmount(entry),
-        0,
-      ),
-    );
+    const releasedBefore =
+      roundMoney(
+        existingHistory.reduce(
+          (sum, entry) =>
+            sum +
+            getPaymentReleaseAmount(
+              entry,
+            ),
+          0,
+        ),
+      );
 
-    const releasedAfter = roundMoney(releasedBefore + releaseAmount);
+    const releasedAfter =
+      roundMoney(
+        releasedBefore +
+          releaseAmount,
+      );
 
-    const remainingAfter = roundMoney(
-      Math.max(approvedAmount - releasedAfter, 0),
-    );
+    const remainingAfter =
+      roundMoney(
+        Math.max(
+          approvedAmount -
+            releasedAfter,
+          0,
+        ),
+      );
 
-    const isFullyReleased = approvedAmount > 0 && remainingAfter <= 0.009;
+    const isFullyReleased =
+      approvedAmount > 0 &&
+      remainingAfter <= 0.009;
 
-    const chequeNumbers = cleanChequeNumbers(
-      extendedFormData.chequeNumbers?.length
-        ? extendedFormData.chequeNumbers
-        : [extendedFormData.chequeNumber || ""],
-    );
+    const chequeNumbers =
+      cleanChequeNumbers(
+        extendedFormData
+          .chequeNumbers?.length
+          ? extendedFormData.chequeNumbers
+          : [
+              extendedFormData.chequeNumber ||
+                "",
+            ],
+      );
 
-    const receiptUrls = Array.isArray((args as any).receiptUrls)
-      ? (args as any).receiptUrls
-      : receiptUrl
-        ? [receiptUrl]
-        : [];
+    const receiptUrls =
+      Array.isArray(
+        (args as any).receiptUrls,
+      )
+        ? (args as any).receiptUrls
+        : receiptUrl
+          ? [receiptUrl]
+          : [];
 
     const paymentWorkflowBaseStatus =
-      getPaymentWorkflowBaseStatus(sourceRecord);
+      getPaymentWorkflowBaseStatus(
+        sourceRecord,
+      );
 
     const paymentWorkflowBasePaymentStatus =
-      getPaymentWorkflowBasePaymentStatus(sourceRecord);
+      getPaymentWorkflowBasePaymentStatus(
+        sourceRecord,
+      );
 
     const releaseEntry: any = {
-      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      id: `${Date.now()}-${Math.random()
+        .toString(36)
+        .slice(2, 8)}`,
 
       releaseType:
         releasedBefore <= 0
@@ -8891,7 +9271,8 @@ export default function PaymentReleaseModal<T = any>({
             ? "final"
             : "partial",
 
-      paymentMethod: extendedFormData.paymentMethod,
+      paymentMethod:
+        extendedFormData.paymentMethod,
 
       amount: releaseAmount,
       approvedAmount,
@@ -8899,23 +9280,38 @@ export default function PaymentReleaseModal<T = any>({
       releasedAfter,
       remainingAfter,
 
-      vendors: invoiceApprovedVendors,
+      vendors:
+        invoiceApprovedVendors,
 
-      transactionName: extendedFormData.transactionName?.trim() || "",
+      transactionName:
+        extendedFormData.transactionName?.trim() ||
+        "",
 
-      transactionReference: extendedFormData.transactionReference,
+      transactionReference:
+        extendedFormData.transactionReference,
 
-      bankReceiptUrl: receiptUrls[0] || receiptUrl || "",
+      bankReceiptUrl:
+        receiptUrls[0] ||
+        receiptUrl ||
+        "",
 
       bankReceiptUrls: receiptUrls,
 
-      paymentNotes: extendedFormData.paymentNotes,
+      paymentNotes:
+        extendedFormData.paymentNotes,
 
-      releasedBy: actor.profileId || actor.uid || "",
+      releasedBy:
+        actor.profileId ||
+        actor.uid ||
+        "",
 
-      releasedByName: actor.displayName || actor.email || "Unknown",
+      releasedByName:
+        actor.displayName ||
+        actor.email ||
+        "Unknown",
 
-      releasedByEmail: actor.email || "",
+      releasedByEmail:
+        actor.email || "",
 
       releasedAt: new Date(),
 
@@ -8924,94 +9320,131 @@ export default function PaymentReleaseModal<T = any>({
     };
 
     if (chequeNumbers.length > 0) {
-      releaseEntry.chequeNumber = chequeNumbers[0];
+      releaseEntry.chequeNumber =
+        chequeNumbers[0];
 
-      releaseEntry.chequeNumbers = chequeNumbers;
+      releaseEntry.chequeNumbers =
+        chequeNumbers;
     }
 
     if (selectedAccount) {
-      releaseEntry.selectedAccount = selectedAccount;
+      releaseEntry.selectedAccount =
+        selectedAccount;
 
-      releaseEntry.selectedAccountId = selectedAccount.id || "";
+      releaseEntry.selectedAccountId =
+        selectedAccount.id || "";
 
-      releaseEntry.selectedAccountName = selectedAccount.accountName || "";
+      releaseEntry.selectedAccountName =
+        selectedAccount.accountName ||
+        "";
     }
 
-    const updateData: Record<string, any> = {
+    const updateData: Record<
+      string,
+      any
+    > = {
       status: isFullyReleased
         ? "payment_released"
         : "payment_partially_released",
 
-      paymentStatus: isFullyReleased ? "released" : "partial",
+      paymentStatus: isFullyReleased
+        ? "released"
+        : "partial",
 
       paymentWorkflowBaseStatus,
       paymentWorkflowBasePaymentStatus,
 
-      paymentReleased: isFullyReleased,
+      paymentReleased:
+        isFullyReleased,
 
-      paymentPartiallyReleased: !isFullyReleased,
+      paymentPartiallyReleased:
+        !isFullyReleased,
 
       releasePaymentCreated: true,
 
-      totalApprovedAmount: approvedAmount,
+      totalApprovedAmount:
+        approvedAmount,
 
-      totalReleasedAmount: releasedAfter,
+      totalReleasedAmount:
+        releasedAfter,
 
-      remainingReleaseAmount: remainingAfter,
+      remainingReleaseAmount:
+        remainingAfter,
 
-      transactionName: extendedFormData.transactionName?.trim() || "",
+      transactionName:
+        extendedFormData.transactionName?.trim() ||
+        "",
 
-      latestTransactionName: extendedFormData.transactionName?.trim() || "",
+      latestTransactionName:
+        extendedFormData.transactionName?.trim() ||
+        "",
 
-      latestPaymentRelease: releaseEntry,
+      latestPaymentRelease:
+        releaseEntry,
 
       paymentDetails: releaseEntry,
 
-      paymentReleaseHistory: [...existingHistory, releaseEntry],
+      paymentReleaseHistory: [
+        ...existingHistory,
+        releaseEntry,
+      ],
 
       updatedAt: serverTimestamp(),
     };
 
     if (isFullyReleased) {
-      updateData.paymentReleasedAt = serverTimestamp();
+      updateData.paymentReleasedAt =
+        serverTimestamp();
 
-      updateData.releasePaymentAt = serverTimestamp();
+      updateData.releasePaymentAt =
+        serverTimestamp();
 
-      updateData.paymentFullyReleasedAt = serverTimestamp();
+      updateData.paymentFullyReleasedAt =
+        serverTimestamp();
     } else {
-      updateData.partialPaymentReleasedAt = serverTimestamp();
+      updateData.partialPaymentReleasedAt =
+        serverTimestamp();
     }
 
     return updateData;
   };
 
-  const [formData, setFormData] = useState<ExtendedPaymentReleaseFormValues>({
-    paymentMethod: resolvedInitialPaymentMethod,
+  const [formData, setFormData] =
+    useState<ExtendedPaymentReleaseFormValues>(
+      {
+        paymentMethod:
+          resolvedInitialPaymentMethod,
 
-    selectedAccountId: "",
+        selectedAccountId: "",
 
-    amount: String(resolvedAmount || 0),
+        amount: String(
+          resolvedAmount || 0,
+        ),
 
-    transactionName: "",
+        transactionName: "",
 
-    chequeNumber: "",
+        chequeNumber: "",
 
-    chequeNumbers: [""],
+        chequeNumbers: [""],
 
-    transactionReference: "",
+        transactionReference: "",
 
-    paymentNotes: "",
-  });
+        paymentNotes: "",
+      },
+    );
 
   useEffect(() => {
     if (!isOpen) return;
 
     setFormData({
-      paymentMethod: resolvedInitialPaymentMethod,
+      paymentMethod:
+        resolvedInitialPaymentMethod,
 
       selectedAccountId: "",
 
-      amount: String(resolvedAmount || 0),
+      amount: String(
+        resolvedAmount || 0,
+      ),
 
       transactionName: "",
 
@@ -9026,7 +9459,11 @@ export default function PaymentReleaseModal<T = any>({
 
     setSelectedAccount(null);
     setReceiptFiles([]);
-  }, [isOpen, resolvedAmount, resolvedInitialPaymentMethod]);
+  }, [
+    isOpen,
+    resolvedAmount,
+    resolvedInitialPaymentMethod,
+  ]);
 
   useEffect(() => {
     let mounted = true;
@@ -9035,18 +9472,23 @@ export default function PaymentReleaseModal<T = any>({
       try {
         setAccountsLoading(true);
 
-        const rows = await fetchPaymentAccounts();
+        const rows =
+          await fetchPaymentAccounts();
 
         if (mounted) {
           setStoredAccounts(rows);
         }
       } catch (error) {
-        console.error("Failed to load payment accounts:", error);
+        console.error(
+          "Failed to load payment accounts:",
+          error,
+        );
 
         if (mounted) {
           toast({
             title: "Error",
-            description: "Failed to load payment accounts",
+            description:
+              "Failed to load payment accounts",
             variant: "destructive",
           });
         }
@@ -9075,38 +9517,79 @@ export default function PaymentReleaseModal<T = any>({
       try {
         setChequeValidationLoading(true);
 
-        const snapshots = await Promise.all([
-          getDocs(collection(db, "Panels", PANEL_ID, "invoiceRequests")),
+        const snapshots =
+          await Promise.all([
+            getDocs(
+              collection(
+                db,
+                "Panels",
+                PANEL_ID,
+                "invoiceRequests",
+              ),
+            ),
 
-          getDocs(collection(db, "Panels", PANEL_ID, "Record")),
+            getDocs(
+              collection(
+                db,
+                "Panels",
+                PANEL_ID,
+                "Record",
+              ),
+            ),
 
-          getDocs(collection(db, "Panels", PANEL_ID, "payments")),
-        ]);
+            getDocs(
+              collection(
+                db,
+                "Panels",
+                PANEL_ID,
+                "payments",
+              ),
+            ),
+          ]);
 
-        const chequeSet = new Set<string>();
+        const chequeSet =
+          new Set<string>();
 
-        snapshots.forEach((snapshot) => {
-          snapshot.docs.forEach((documentSnapshot) => {
-            const source = {
-              id: documentSnapshot.id,
-              ...documentSnapshot.data(),
-            };
+        snapshots.forEach(
+          (snapshot) => {
+            snapshot.docs.forEach(
+              (documentSnapshot) => {
+                const source = {
+                  id: documentSnapshot.id,
+                  ...documentSnapshot.data(),
+                };
 
-            collectChequeNumbersFromSource(source).forEach((chequeNumber) => {
-              const normalized = normalizeChequeNumber(chequeNumber);
+                collectChequeNumbersFromSource(
+                  source,
+                ).forEach(
+                  (chequeNumber) => {
+                    const normalized =
+                      normalizeChequeNumber(
+                        chequeNumber,
+                      );
 
-              if (normalized) {
-                chequeSet.add(normalized);
-              }
-            });
-          });
-        });
+                    if (normalized) {
+                      chequeSet.add(
+                        normalized,
+                      );
+                    }
+                  },
+                );
+              },
+            );
+          },
+        );
 
         if (mounted) {
-          setExistingChequeNumbers(chequeSet);
+          setExistingChequeNumbers(
+            chequeSet,
+          );
         }
       } catch (error) {
-        console.error("Failed to validate existing cheque numbers:", error);
+        console.error(
+          "Failed to validate existing cheque numbers:",
+          error,
+        );
 
         if (mounted) {
           toast({
@@ -9118,7 +9601,9 @@ export default function PaymentReleaseModal<T = any>({
         }
       } finally {
         if (mounted) {
-          setChequeValidationLoading(false);
+          setChequeValidationLoading(
+            false,
+          );
         }
       }
     }
@@ -9130,29 +9615,50 @@ export default function PaymentReleaseModal<T = any>({
     };
   }, [isOpen, toast]);
 
-  const duplicateChequeNumbers = useMemo(() => {
-    return getDuplicateChequeNumbers(
+  const duplicateChequeNumbers =
+    useMemo(() => {
+      return getDuplicateChequeNumbers(
+        formData.chequeNumbers,
+        existingChequeNumbers,
+      );
+    }, [
       formData.chequeNumbers,
       existingChequeNumbers,
-    );
-  }, [formData.chequeNumbers, existingChequeNumbers]);
+    ]);
 
-  const hasDuplicateChequeNumbers = duplicateChequeNumbers.length > 0;
+  const hasDuplicateChequeNumbers =
+    duplicateChequeNumbers.length > 0;
 
-  const getChequeNumberWarning = (chequeNumber: string, index: number) => {
-    const normalized = normalizeChequeNumber(chequeNumber);
+  const getChequeNumberWarning = (
+    chequeNumber: string,
+    index: number,
+  ) => {
+    const normalized =
+      normalizeChequeNumber(
+        chequeNumber,
+      );
 
     if (!normalized) return "";
 
-    if (existingChequeNumbers.has(normalized)) {
+    if (
+      existingChequeNumbers.has(
+        normalized,
+      )
+    ) {
       return "This cheque number already exists.";
     }
 
-    const appearsInCurrentForm = formData.chequeNumbers.some(
-      (currentChequeNumber, chequeIndex) =>
-        chequeIndex !== index &&
-        normalizeChequeNumber(currentChequeNumber) === normalized,
-    );
+    const appearsInCurrentForm =
+      formData.chequeNumbers.some(
+        (
+          currentChequeNumber,
+          chequeIndex,
+        ) =>
+          chequeIndex !== index &&
+          normalizeChequeNumber(
+            currentChequeNumber,
+          ) === normalized,
+      );
 
     return appearsInCurrentForm
       ? "This cheque number is already added in this release."
@@ -9161,16 +9667,25 @@ export default function PaymentReleaseModal<T = any>({
 
   const submitDisabled = loading;
 
-  const handleChequeNumberChange = (index: number, value: string) => {
+  const handleChequeNumberChange = (
+    index: number,
+    value: string,
+  ) => {
     setFormData((previous) => {
-      const updatedChequeNumbers = [...previous.chequeNumbers];
+      const updatedChequeNumbers = [
+        ...previous.chequeNumbers,
+      ];
 
-      updatedChequeNumbers[index] = value;
+      updatedChequeNumbers[index] =
+        value;
 
       return {
         ...previous,
-        chequeNumbers: updatedChequeNumbers,
-        chequeNumber: updatedChequeNumbers[0] || "",
+        chequeNumbers:
+          updatedChequeNumbers,
+        chequeNumber:
+          updatedChequeNumbers[0] ||
+          "",
       };
     });
   };
@@ -9178,36 +9693,56 @@ export default function PaymentReleaseModal<T = any>({
   const handleAddChequeNumber = () => {
     setFormData((previous) => ({
       ...previous,
-      chequeNumbers: [...previous.chequeNumbers, ""],
+      chequeNumbers: [
+        ...previous.chequeNumbers,
+        "",
+      ],
     }));
   };
 
-  const handleRemoveChequeNumber = (index: number) => {
+  const handleRemoveChequeNumber = (
+    index: number,
+  ) => {
     setFormData((previous) => {
-      const updatedChequeNumbers = previous.chequeNumbers.filter(
-        (_, chequeIndex) => chequeIndex !== index,
-      );
+      const updatedChequeNumbers =
+        previous.chequeNumbers.filter(
+          (_, chequeIndex) =>
+            chequeIndex !== index,
+        );
 
       const safeChequeNumbers =
-        updatedChequeNumbers.length > 0 ? updatedChequeNumbers : [""];
+        updatedChequeNumbers.length > 0
+          ? updatedChequeNumbers
+          : [""];
 
       return {
         ...previous,
-        chequeNumbers: safeChequeNumbers,
-        chequeNumber: safeChequeNumbers[0] || "",
+        chequeNumbers:
+          safeChequeNumbers,
+        chequeNumber:
+          safeChequeNumbers[0] || "",
       };
     });
   };
 
-  const handleReceiptFilesChange = (event: ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(event.target.files || []);
+  const handleReceiptFilesChange = (
+    event: ChangeEvent<HTMLInputElement>,
+  ) => {
+    const files = Array.from(
+      event.target.files || [],
+    );
 
     setReceiptFiles(files);
   };
 
-  const handleRemoveReceiptFile = (index: number) => {
+  const handleRemoveReceiptFile = (
+    index: number,
+  ) => {
     setReceiptFiles((previous) =>
-      previous.filter((_, fileIndex) => fileIndex !== index),
+      previous.filter(
+        (_, fileIndex) =>
+          fileIndex !== index,
+      ),
     );
   };
 
@@ -9221,47 +9756,85 @@ export default function PaymentReleaseModal<T = any>({
     if (!printWindow) {
       toast({
         title: "Print blocked",
-        description: "Please allow pop-ups for this website and try again.",
+        description:
+          "Please allow pop-ups for this website and try again.",
         variant: "destructive",
       });
 
       return;
     }
 
-    const currentReleaseAmount = roundMoney(formData.amount);
+    const currentReleaseAmount = roundMoney(
+      formData.amount,
+    );
 
     const balanceAfter = invoice
-      ? roundMoney(Math.max(remainingReleaseAmount - currentReleaseAmount, 0))
+      ? roundMoney(
+          Math.max(
+            remainingReleaseAmount -
+              currentReleaseAmount,
+            0,
+          ),
+        )
       : 0;
 
-    const currentChequeNumbers = cleanChequeNumbers(formData.chequeNumbers);
+    const currentChequeNumbers =
+      cleanChequeNumbers(
+        formData.chequeNumbers,
+      );
 
-    const historyRows = [...paymentReleaseHistory]
+    const historyRows = [
+      ...paymentReleaseHistory,
+    ]
       .reverse()
       .map((entry: any, index: number) => {
-        const chequeNumbers = Array.isArray(entry?.chequeNumbers)
+        const chequeNumbers = Array.isArray(
+          entry?.chequeNumbers,
+        )
           ? entry.chequeNumbers
-          : cleanChequeNumbers([entry?.chequeNumber || ""]);
+          : cleanChequeNumbers([
+              entry?.chequeNumber || "",
+            ]);
 
         return `
           <tr>
             <td>${index + 1}</td>
-            <td>${escapeHtml(getReleaseDateLabel(entry?.releasedAt))}</td>
-            <td>${escapeHtml(getPaymentMethodLabel(entry?.paymentMethod))}</td>
-            <td>${escapeHtml(entry?.transactionName || "-")}</td>
-            <td>${escapeHtml(entry?.transactionReference || "-")}</td>
             <td>${escapeHtml(
-              chequeNumbers.length ? chequeNumbers.join(", ") : "-",
+              getReleaseDateLabel(
+                entry?.releasedAt,
+              ),
+            )}</td>
+            <td>${escapeHtml(
+              getPaymentMethodLabel(
+                entry?.paymentMethod,
+              ),
+            )}</td>
+            <td>${escapeHtml(
+              entry?.transactionName || "-",
+            )}</td>
+            <td>${escapeHtml(
+              entry?.transactionReference ||
+                "-",
+            )}</td>
+            <td>${escapeHtml(
+              chequeNumbers.length
+                ? chequeNumbers.join(", ")
+                : "-",
             )}</td>
             <td class="amount">Rs ${escapeHtml(
-              formatPKR(getPaymentReleaseAmount(entry)),
+              formatPKR(
+                getPaymentReleaseAmount(
+                  entry,
+                ),
+              ),
             )}</td>
           </tr>
         `;
       })
       .join("");
 
-    const documentTitle = title || "Payment Release";
+    const documentTitle =
+      title || "Payment Release";
 
     printWindow.document.open();
     printWindow.document.write(`
@@ -9270,7 +9843,9 @@ export default function PaymentReleaseModal<T = any>({
         <head>
           <meta charset="utf-8" />
           <meta name="viewport" content="width=device-width, initial-scale=1" />
-          <title>${escapeHtml(documentTitle)}</title>
+          <title>${escapeHtml(
+            documentTitle,
+          )}</title>
           <style>
             * { box-sizing: border-box; }
             body {
@@ -9483,19 +10058,24 @@ export default function PaymentReleaseModal<T = any>({
             <header class="header">
               <div>
                 <div class="brand">IEDGE Financial System</div>
-                <h1>${escapeHtml(documentTitle)}</h1>
+                <h1>${escapeHtml(
+                  documentTitle,
+                )}</h1>
               </div>
 
               <div class="generated">
                 <strong>Print View</strong><br />
                 Generated: ${escapeHtml(
-                  new Date().toLocaleString("en-PK", {
-                    day: "2-digit",
-                    month: "short",
-                    year: "numeric",
-                    hour: "2-digit",
-                    minute: "2-digit",
-                  }),
+                  new Date().toLocaleString(
+                    "en-PK",
+                    {
+                      day: "2-digit",
+                      month: "short",
+                      year: "numeric",
+                      hour: "2-digit",
+                      minute: "2-digit",
+                    },
+                  ),
                 )}
               </div>
             </header>
@@ -9504,31 +10084,51 @@ export default function PaymentReleaseModal<T = any>({
               <div class="summary-grid">
                 <div class="summary-card">
                   <div class="summary-label">${
-                    invoice ? "Total Approved" : escapeHtml(resolvedAmountLabel)
+                    invoice
+                      ? "Total Approved"
+                      : escapeHtml(
+                          resolvedAmountLabel,
+                        )
                   }</div>
                   <div class="summary-value">Rs ${escapeHtml(
-                    formatPKR(invoice ? invoiceApprovedAmount : resolvedAmount),
+                    formatPKR(
+                      invoice
+                        ? invoiceApprovedAmount
+                        : resolvedAmount,
+                    ),
                   )}</div>
                 </div>
 
                 <div class="summary-card">
                   <div class="summary-label">Released Before</div>
                   <div class="summary-value">Rs ${escapeHtml(
-                    formatPKR(invoice ? totalReleasedAmount : 0),
+                    formatPKR(
+                      invoice
+                        ? totalReleasedAmount
+                        : 0,
+                    ),
                   )}</div>
                 </div>
 
                 <div class="summary-card">
                   <div class="summary-label">This Release</div>
                   <div class="summary-value">Rs ${escapeHtml(
-                    formatPKR(currentReleaseAmount),
+                    formatPKR(
+                      currentReleaseAmount,
+                    ),
                   )}</div>
                 </div>
 
                 <div class="summary-card">
                   <div class="summary-label">Balance After</div>
                   <div class="summary-value">${
-                    invoice ? `Rs ${escapeHtml(formatPKR(balanceAfter))}` : "-"
+                    invoice
+                      ? `Rs ${escapeHtml(
+                          formatPKR(
+                            balanceAfter,
+                          ),
+                        )}`
+                      : "-"
                   }</div>
                 </div>
               </div>
@@ -9539,7 +10139,9 @@ export default function PaymentReleaseModal<T = any>({
                   <div class="detail">
                     <div class="detail-label">Payment Method</div>
                     <div class="detail-value">${escapeHtml(
-                      getPaymentMethodLabel(formData.paymentMethod),
+                      getPaymentMethodLabel(
+                        formData.paymentMethod,
+                      ),
                     )}</div>
                   </div>
 
@@ -9548,44 +10150,55 @@ export default function PaymentReleaseModal<T = any>({
                       resolvedPartyLabel,
                     )}</div>
                     <div class="detail-value">${escapeHtml(
-                      resolvedParties.length ? resolvedParties.join(", ") : "-",
+                      resolvedParties.length
+                        ? resolvedParties.join(
+                            ", ",
+                          )
+                        : "-",
                     )}</div>
                   </div>
 
                   <div class="detail">
                     <div class="detail-label">Transaction Name</div>
                     <div class="detail-value">${escapeHtml(
-                      formData.transactionName || "-",
+                      formData.transactionName ||
+                        "-",
                     )}</div>
                   </div>
 
                   <div class="detail">
                     <div class="detail-label">Transaction Reference</div>
                     <div class="detail-value">${escapeHtml(
-                      formData.transactionReference || "-",
+                      formData.transactionReference ||
+                        "-",
                     )}</div>
                   </div>
 
                   ${
-                    formData.paymentMethod === "cheque"
+                    formData.paymentMethod ===
+                    "cheque"
                       ? `
                         <div class="detail">
                           <div class="detail-label">Account</div>
                           <div class="detail-value">${escapeHtml(
-                            selectedAccount?.accountName || "-",
+                            selectedAccount?.accountName ||
+                              "-",
                           )}</div>
                         </div>
                         <div class="detail">
                           <div class="detail-label">Account Number</div>
                           <div class="detail-value">${escapeHtml(
-                            selectedAccount?.accountNumber || "-",
+                            selectedAccount?.accountNumber ||
+                              "-",
                           )}</div>
                         </div>
                         <div class="detail full">
                           <div class="detail-label">Cheque Numbers</div>
                           <div class="detail-value">${escapeHtml(
                             currentChequeNumbers.length
-                              ? currentChequeNumbers.join(", ")
+                              ? currentChequeNumbers.join(
+                                  ", ",
+                                )
                               : "-",
                           )}</div>
                         </div>
@@ -9646,23 +10259,29 @@ export default function PaymentReleaseModal<T = any>({
     printWindow.focus();
   };
 
-  async function handleSubmit(event: FormEvent<HTMLFormElement>) {
+  async function handleSubmit(
+    event: FormEvent<HTMLFormElement>,
+  ) {
     event.preventDefault();
 
     if (!resolvedContext) {
       toast({
         title: "Error",
-        description: "No record selected",
+        description:
+          "No record selected",
         variant: "destructive",
       });
 
       return;
     }
 
-    if (resolvedDocPath.length === 0) {
+    if (
+      resolvedDocPath.length === 0
+    ) {
       toast({
         title: "Error",
-        description: "Invalid payment record path",
+        description:
+          "Invalid payment record path",
         variant: "destructive",
       });
 
@@ -9672,26 +10291,37 @@ export default function PaymentReleaseModal<T = any>({
     if (!formData.paymentMethod) {
       toast({
         title: "Error",
-        description: "Please select a payment method",
+        description:
+          "Please select a payment method",
         variant: "destructive",
       });
 
       return;
     }
 
-    const requestedReleaseAmount = roundMoney(formData.amount);
+    const requestedReleaseAmount =
+      roundMoney(formData.amount);
 
-    if (!formData.amount || requestedReleaseAmount <= 0) {
+    if (
+      !formData.amount ||
+      requestedReleaseAmount <= 0
+    ) {
       toast({
         title: "Error",
-        description: "Please enter a valid amount",
+        description:
+          "Please enter a valid amount",
         variant: "destructive",
       });
 
       return;
     }
 
-    if (invoice && requestedReleaseAmount > remainingReleaseAmount + 0.009) {
+    if (
+      invoice &&
+      requestedReleaseAmount >
+        remainingReleaseAmount +
+          0.009
+    ) {
       toast({
         title: "Error",
         description: `Release amount cannot exceed the remaining balance of Rs ${formatPKR(
@@ -9703,35 +10333,49 @@ export default function PaymentReleaseModal<T = any>({
       return;
     }
 
-    const normalizedChequeNumbers = cleanChequeNumbers(formData.chequeNumbers);
+    const normalizedChequeNumbers =
+      cleanChequeNumbers(
+        formData.chequeNumbers,
+      );
 
-    if (formData.paymentMethod === "cheque") {
+    if (
+      formData.paymentMethod ===
+      "cheque"
+    ) {
       if (!formData.selectedAccountId) {
         toast({
           title: "Error",
-          description: "Please select an account",
+          description:
+            "Please select an account",
           variant: "destructive",
         });
 
         return;
       }
 
-      if (normalizedChequeNumbers.length === 0) {
+      if (
+        normalizedChequeNumbers.length ===
+        0
+      ) {
         toast({
           title: "Error",
-          description: "Please enter at least one cheque number",
+          description:
+            "Please enter at least one cheque number",
           variant: "destructive",
         });
 
         return;
       }
 
-      const duplicateCheques = getDuplicateChequeNumbers(
-        normalizedChequeNumbers,
-        existingChequeNumbers,
-      );
+      const duplicateCheques =
+        getDuplicateChequeNumbers(
+          normalizedChequeNumbers,
+          existingChequeNumbers,
+        );
 
-      if (duplicateCheques.length > 0) {
+      if (
+        duplicateCheques.length > 0
+      ) {
         toast({
           title: "Warning",
           description: `This cheque number already exists: ${duplicateCheques.join(
@@ -9741,15 +10385,20 @@ export default function PaymentReleaseModal<T = any>({
       }
     }
 
-    const normalizedFormData: ExtendedPaymentReleaseFormValues = {
-      ...formData,
+    const normalizedFormData: ExtendedPaymentReleaseFormValues =
+      {
+        ...formData,
 
-      transactionName: formData.transactionName.trim(),
+        transactionName:
+          formData.transactionName.trim(),
 
-      chequeNumber: normalizedChequeNumbers[0] || "",
+        chequeNumber:
+          normalizedChequeNumbers[0] ||
+          "",
 
-      chequeNumbers: normalizedChequeNumbers,
-    };
+        chequeNumbers:
+          normalizedChequeNumbers,
+      };
 
     try {
       setLoading(true);
@@ -9757,12 +10406,15 @@ export default function PaymentReleaseModal<T = any>({
       await releasePayment({
         docPath: resolvedDocPath,
 
-        context: resolvedContext as any,
+        context:
+          resolvedContext as any,
 
-        formData: normalizedFormData as any,
+        formData:
+          normalizedFormData as any,
 
         // Existing support for the first receipt file.
-        receiptFile: receiptFiles[0] || null,
+        receiptFile:
+          receiptFiles[0] || null,
 
         // Multiple receipt file support.
         receiptFiles,
@@ -9772,33 +10424,43 @@ export default function PaymentReleaseModal<T = any>({
         actor: {
           uid: currentUser?.uid,
 
-          email: currentUser?.email,
+          email:
+            currentUser?.email,
 
           displayName:
             userProfile?.displayName ||
             currentUser?.displayName ||
             currentUser?.email,
 
-          profileId: userProfile?.id,
+          profileId:
+            userProfile?.id,
         },
 
-        buildUpdateData: (buildUpdateData ||
-          defaultInvoiceBuildUpdateData) as any,
+        buildUpdateData: (
+          buildUpdateData ||
+          defaultInvoiceBuildUpdateData
+        ) as any,
       } as any);
 
       toast({
         title: "Success",
-        description: "Payment released successfully",
+        description:
+          "Payment released successfully",
       });
 
       onSuccess();
       onClose();
     } catch (error: any) {
-      console.error("Failed to release payment:", error);
+      console.error(
+        "Failed to release payment:",
+        error,
+      );
 
       toast({
         title: "Error",
-        description: error?.message || "Failed to release payment",
+        description:
+          error?.message ||
+          "Failed to release payment",
         variant: "destructive",
       });
     } finally {
@@ -9836,8 +10498,10 @@ export default function PaymentReleaseModal<T = any>({
               </div>
 
               <p className="mt-1 max-w-2xl text-sm text-slate-500">
-                Review payment information, select the payment method, attach
-                receipts, and release the remaining amount.
+                Review payment information,
+                select the payment method,
+                attach receipts, and release
+                the remaining amount.
               </p>
             </div>
           </div>
@@ -9892,12 +10556,18 @@ export default function PaymentReleaseModal<T = any>({
             <div className="flex items-center justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                  {invoice ? "Total Approved Amount" : resolvedAmountLabel}
+                  {invoice
+                    ? "Total Approved Amount"
+                    : resolvedAmountLabel}
                 </p>
 
                 <p className="mt-2 text-2xl font-bold text-slate-950">
                   Rs{" "}
-                  {formatPKR(invoice ? invoiceApprovedAmount : resolvedAmount)}
+                  {formatPKR(
+                    invoice
+                      ? invoiceApprovedAmount
+                      : resolvedAmount,
+                  )}
                 </p>
               </div>
 
@@ -9915,7 +10585,12 @@ export default function PaymentReleaseModal<T = any>({
                 </p>
 
                 <p className="mt-2 text-2xl font-bold text-slate-950">
-                  Rs {formatPKR(invoice ? totalReleasedAmount : 0)}
+                  Rs{" "}
+                  {formatPKR(
+                    invoice
+                      ? totalReleasedAmount
+                      : 0,
+                  )}
                 </p>
               </div>
 
@@ -9934,7 +10609,11 @@ export default function PaymentReleaseModal<T = any>({
 
                 <p className="mt-2 text-2xl font-bold text-slate-950">
                   Rs{" "}
-                  {formatPKR(invoice ? remainingReleaseAmount : resolvedAmount)}
+                  {formatPKR(
+                    invoice
+                      ? remainingReleaseAmount
+                      : resolvedAmount,
+                  )}
                 </p>
               </div>
 
@@ -9952,7 +10631,9 @@ export default function PaymentReleaseModal<T = any>({
                 </p>
 
                 <p className="mt-2 text-sm font-semibold text-slate-950">
-                  {getPaymentMethodLabel(formData.paymentMethod)}
+                  {getPaymentMethodLabel(
+                    formData.paymentMethod,
+                  )}
                 </p>
               </div>
 
@@ -9963,47 +10644,59 @@ export default function PaymentReleaseModal<T = any>({
           </div>
         </div>
 
-        {invoice && invoiceApprovedAmount > 0 && (
-          <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <p className="text-sm font-semibold text-slate-950">
-                  Payment Release Progress
-                </p>
+        {invoice &&
+          invoiceApprovedAmount > 0 && (
+            <div className="mb-6 rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-semibold text-slate-950">
+                    Payment Release Progress
+                  </p>
 
-                <p className="mt-1 text-xs text-slate-500">
-                  Rs {formatPKR(totalReleasedAmount)} released from Rs{" "}
-                  {formatPKR(invoiceApprovedAmount)}.
+                  <p className="mt-1 text-xs text-slate-500">
+                    Rs{" "}
+                    {formatPKR(
+                      totalReleasedAmount,
+                    )}{" "}
+                    released from Rs{" "}
+                    {formatPKR(
+                      invoiceApprovedAmount,
+                    )}
+                    .
+                  </p>
+                </div>
+
+                <p className="text-sm font-semibold text-slate-950">
+                  {Math.min(
+                    100,
+                    Math.round(
+                      (totalReleasedAmount /
+                        invoiceApprovedAmount) *
+                        100,
+                    ),
+                  )}
+                  %
                 </p>
               </div>
 
-              <p className="text-sm font-semibold text-slate-950">
-                {Math.min(
-                  100,
-                  Math.round(
-                    (totalReleasedAmount / invoiceApprovedAmount) * 100,
-                  ),
-                )}
-                %
-              </p>
+              <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
+                <div
+                  className="h-full rounded-full bg-slate-950 transition-all"
+                  style={{
+                    width: `${Math.min(
+                      100,
+                      Math.max(
+                        0,
+                        (totalReleasedAmount /
+                          invoiceApprovedAmount) *
+                          100,
+                      ),
+                    )}%`,
+                  }}
+                />
+              </div>
             </div>
-
-            <div className="mt-4 h-3 overflow-hidden rounded-full bg-slate-100">
-              <div
-                className="h-full rounded-full bg-slate-950 transition-all"
-                style={{
-                  width: `${Math.min(
-                    100,
-                    Math.max(
-                      0,
-                      (totalReleasedAmount / invoiceApprovedAmount) * 100,
-                    ),
-                  )}%`,
-                }}
-              />
-            </div>
-          </div>
-        )}
+          )}
 
         <form
           id="payment-release-form"
@@ -10023,14 +10716,18 @@ export default function PaymentReleaseModal<T = any>({
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    Enter the release amount and payment method details.
+                    Enter the release amount
+                    and payment method details.
                   </p>
                 </div>
               </div>
 
               <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
                 <div className="space-y-2">
-                  <Label htmlFor="amount" className="text-sm text-slate-700">
+                  <Label
+                    htmlFor="amount"
+                    className="text-sm text-slate-700"
+                  >
                     Release Amount
                   </Label>
 
@@ -10039,24 +10736,40 @@ export default function PaymentReleaseModal<T = any>({
                     type="number"
                     min="0"
                     step="0.01"
-                    max={invoice ? remainingReleaseAmount : undefined}
+                    max={
+                      invoice
+                        ? remainingReleaseAmount
+                        : undefined
+                    }
                     value={formData.amount}
-                    readOnly={resolvedAmountReadOnly}
+                    readOnly={
+                      resolvedAmountReadOnly
+                    }
                     className={`h-11 rounded-2xl border-slate-200 ${
-                      resolvedAmountReadOnly ? "bg-slate-100" : "bg-white"
+                      resolvedAmountReadOnly
+                        ? "bg-slate-100"
+                        : "bg-white"
                     }`}
                     onChange={(event) =>
-                      setFormData((previous) => ({
-                        ...previous,
-                        amount: event.target.value,
-                      }))
+                      setFormData(
+                        (previous) => ({
+                          ...previous,
+                          amount:
+                            event.target
+                              .value,
+                        }),
+                      )
                     }
                   />
 
                   {invoice && (
                     <p className="text-xs text-slate-500">
-                      You can release any amount up to Rs{" "}
-                      {formatPKR(remainingReleaseAmount)}.
+                      You can release any
+                      amount up to Rs{" "}
+                      {formatPKR(
+                        remainingReleaseAmount,
+                      )}
+                      .
                     </p>
                   )}
                 </div>
@@ -10070,22 +10783,35 @@ export default function PaymentReleaseModal<T = any>({
                   </Label>
 
                   <Select
-                    value={formData.paymentMethod}
-                    onValueChange={(value: any) =>
-                      setFormData((previous) => ({
-                        ...previous,
+                    value={
+                      formData.paymentMethod
+                    }
+                    onValueChange={(
+                      value: any,
+                    ) =>
+                      setFormData(
+                        (previous) => ({
+                          ...previous,
 
-                        paymentMethod: value,
+                          paymentMethod:
+                            value,
 
-                        selectedAccountId:
-                          value === "cheque" ? previous.selectedAccountId : "",
+                          selectedAccountId:
+                            value ===
+                            "cheque"
+                              ? previous.selectedAccountId
+                              : "",
 
-                        chequeNumbers:
-                          value === "cheque" &&
-                          previous.chequeNumbers.length === 0
-                            ? [""]
-                            : previous.chequeNumbers,
-                      }))
+                          chequeNumbers:
+                            value ===
+                              "cheque" &&
+                            previous
+                              .chequeNumbers
+                              .length === 0
+                              ? [""]
+                              : previous.chequeNumbers,
+                        }),
+                      )
                     }
                   >
                     <SelectTrigger className="h-11 rounded-2xl border-slate-200">
@@ -10093,16 +10819,22 @@ export default function PaymentReleaseModal<T = any>({
                     </SelectTrigger>
 
                     <SelectContent>
-                      <SelectItem value="cash">Cash</SelectItem>
+                      <SelectItem value="cash">
+                        Cash
+                      </SelectItem>
 
                       <SelectItem value="bank_transfer">
                         Bank Transfer
                       </SelectItem>
 
-                      <SelectItem value="wire">Online Transfer</SelectItem>
+                      <SelectItem value="wire">
+                        Online Transfer
+                      </SelectItem>
 
                       {allowCheque && (
-                        <SelectItem value="cheque">Cheque</SelectItem>
+                        <SelectItem value="cheque">
+                          Cheque
+                        </SelectItem>
                       )}
                     </SelectContent>
                   </Select>
@@ -10110,204 +10842,279 @@ export default function PaymentReleaseModal<T = any>({
               </div>
             </section>
 
-            {formData.paymentMethod === "cheque" && allowCheque && (
-              <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
-                <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                  <div>
-                    <h2 className="text-lg font-semibold text-slate-950">
-                      Cheque Details
-                    </h2>
+            {formData.paymentMethod ===
+              "cheque" &&
+              allowCheque && (
+                <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
+                  <div className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                    <div>
+                      <h2 className="text-lg font-semibold text-slate-950">
+                        Cheque Details
+                      </h2>
 
-                    <p className="mt-1 text-sm text-slate-500">
-                      Select the account and add one or more cheque numbers.
-                    </p>
-                  </div>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="rounded-full border-slate-200"
-                    onClick={handleAddChequeNumber}
-                  >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Cheque
-                  </Button>
-                </div>
-
-                <div className="space-y-5">
-                  <div className="space-y-2">
-                    <Label htmlFor="account" className="text-sm text-slate-700">
-                      Select Account
-                    </Label>
-
-                    <Select
-                      value={formData.selectedAccountId}
-                      onValueChange={(value) => {
-                        const account =
-                          resolvedAccounts.find(
-                            (currentAccount) => currentAccount.id === value,
-                          ) || null;
-
-                        setSelectedAccount(account);
-
-                        setFormData((previous) => ({
-                          ...previous,
-                          selectedAccountId: value,
-                        }));
-                      }}
-                    >
-                      <SelectTrigger className="h-11 rounded-2xl border-slate-200">
-                        <SelectValue
-                          placeholder={
-                            accountsLoading
-                              ? "Loading accounts..."
-                              : "Select account"
-                          }
-                        />
-                      </SelectTrigger>
-
-                      <SelectContent>
-                        {resolvedAccounts.length === 0 ? (
-                          <SelectItem value="__no_accounts__" disabled>
-                            No active accounts found
-                          </SelectItem>
-                        ) : (
-                          resolvedAccounts.map((account) => (
-                            <SelectItem key={account.id} value={account.id}>
-                              {account.accountName || account.id}
-                            </SelectItem>
-                          ))
-                        )}
-                      </SelectContent>
-                    </Select>
-                  </div>
-
-                  {selectedAccount && (
-                    <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
-                      <h3 className="mb-4 text-sm font-semibold text-slate-950">
-                        Account Information
-                      </h3>
-
-                      <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Account Name
-                          </p>
-
-                          <p className="mt-1 font-semibold text-slate-900">
-                            {selectedAccount.accountName || "-"}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Account Number
-                          </p>
-
-                          <p className="mt-1 font-semibold text-slate-900">
-                            {selectedAccount.accountNumber || "-"}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Bank
-                          </p>
-
-                          <p className="mt-1 font-semibold text-slate-900">
-                            {selectedAccount.bankName || "-"}
-                          </p>
-                        </div>
-
-                        <div>
-                          <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                            Balance
-                          </p>
-
-                          <p className="mt-1 font-semibold text-slate-900">
-                            Rs{" "}
-                            {formatPKR(
-                              selectedAccount.currentBalance ??
-                                selectedAccount.balance ??
-                                0,
-                            )}
-                          </p>
-                        </div>
-                      </div>
+                      <p className="mt-1 text-sm text-slate-500">
+                        Select the account
+                        and add one or more
+                        cheque numbers.
+                      </p>
                     </div>
-                  )}
 
-                  <div className="space-y-3">
-                    <Label className="text-sm text-slate-700">
-                      Cheque Numbers
-                    </Label>
+                    <Button
+                      type="button"
+                      variant="outline"
+                      size="sm"
+                      className="rounded-full border-slate-200"
+                      onClick={
+                        handleAddChequeNumber
+                      }
+                    >
+                      <Plus className="mr-2 h-4 w-4" />
+                      Add Cheque
+                    </Button>
+                  </div>
 
-                    {formData.chequeNumbers.map((chequeNumber, index) => {
-                      const warning = getChequeNumberWarning(
-                        chequeNumber,
-                        index,
-                      );
+                  <div className="space-y-5">
+                    <div className="space-y-2">
+                      <Label
+                        htmlFor="account"
+                        className="text-sm text-slate-700"
+                      >
+                        Select Account
+                      </Label>
 
-                      return (
-                        <div
-                          key={index}
-                          className="flex flex-col gap-2 sm:flex-row sm:items-start"
-                        >
-                          <div className="flex-1">
-                            <Input
-                              value={chequeNumber}
-                              onChange={(event) =>
-                                handleChequeNumberChange(
-                                  index,
-                                  event.target.value,
-                                )
-                              }
-                              placeholder={`Enter cheque number ${index + 1}`}
-                              className={`h-11 rounded-2xl ${
-                                warning
-                                  ? "border-amber-400 bg-amber-50"
-                                  : "border-slate-200"
-                              }`}
-                            />
+                      <Select
+                        value={
+                          formData.selectedAccountId
+                        }
+                        onValueChange={(
+                          value,
+                        ) => {
+                          const account =
+                            resolvedAccounts.find(
+                              (
+                                currentAccount,
+                              ) =>
+                                currentAccount.id ===
+                                value,
+                            ) ||
+                            null;
 
-                            {warning && (
-                              <p className="mt-1 text-xs font-medium text-amber-700">
-                                {warning}
-                              </p>
-                            )}
+                          setSelectedAccount(
+                            account,
+                          );
+
+                          setFormData(
+                            (previous) => ({
+                              ...previous,
+                              selectedAccountId:
+                                value,
+                            }),
+                          );
+                        }}
+                      >
+                        <SelectTrigger className="h-11 rounded-2xl border-slate-200">
+                          <SelectValue
+                            placeholder={
+                              accountsLoading
+                                ? "Loading accounts..."
+                                : "Select account"
+                            }
+                          />
+                        </SelectTrigger>
+
+                        <SelectContent>
+                          {resolvedAccounts.length ===
+                          0 ? (
+                            <SelectItem
+                              value="__no_accounts__"
+                              disabled
+                            >
+                              No active accounts
+                              found
+                            </SelectItem>
+                          ) : (
+                            resolvedAccounts.map(
+                              (
+                                account,
+                              ) => (
+                                <SelectItem
+                                  key={
+                                    account.id
+                                  }
+                                  value={
+                                    account.id
+                                  }
+                                >
+                                  {account.accountName ||
+                                    account.id}
+                                </SelectItem>
+                              ),
+                            )
+                          )}
+                        </SelectContent>
+                      </Select>
+                    </div>
+
+                    {selectedAccount && (
+                      <div className="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+                        <h3 className="mb-4 text-sm font-semibold text-slate-950">
+                          Account Information
+                        </h3>
+
+                        <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2">
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Account Name
+                            </p>
+
+                            <p className="mt-1 font-semibold text-slate-900">
+                              {selectedAccount.accountName ||
+                                "-"}
+                            </p>
                           </div>
 
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="icon"
-                            className="h-11 w-11 shrink-0 rounded-2xl border-slate-200 text-red-600 hover:bg-red-50 hover:text-red-700"
-                            onClick={() => handleRemoveChequeNumber(index)}
-                            disabled={formData.chequeNumbers.length === 1}
-                          >
-                            <Trash2 className="h-4 w-4" />
-                          </Button>
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Account Number
+                            </p>
+
+                            <p className="mt-1 font-semibold text-slate-900">
+                              {selectedAccount.accountNumber ||
+                                "-"}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Bank
+                            </p>
+
+                            <p className="mt-1 font-semibold text-slate-900">
+                              {selectedAccount.bankName ||
+                                "-"}
+                            </p>
+                          </div>
+
+                          <div>
+                            <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                              Balance
+                            </p>
+
+                            <p className="mt-1 font-semibold text-slate-900">
+                              Rs{" "}
+                              {formatPKR(
+                                selectedAccount.currentBalance ??
+                                  selectedAccount.balance ??
+                                  0,
+                              )}
+                            </p>
+                          </div>
                         </div>
-                      );
-                    })}
-
-                    {chequeValidationLoading && (
-                      <p className="text-xs text-slate-500">
-                        Checking existing cheque numbers...
-                      </p>
-                    )}
-
-                    {hasDuplicateChequeNumbers && (
-                      <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
-                        This cheque number already exists:{" "}
-                        {duplicateChequeNumbers.join(", ")}
                       </div>
                     )}
+
+                    <div className="space-y-3">
+                      <Label className="text-sm text-slate-700">
+                        Cheque Numbers
+                      </Label>
+
+                      {formData.chequeNumbers.map(
+                        (
+                          chequeNumber,
+                          index,
+                        ) => {
+                          const warning =
+                            getChequeNumberWarning(
+                              chequeNumber,
+                              index,
+                            );
+
+                          return (
+                            <div
+                              key={
+                                index
+                              }
+                              className="flex flex-col gap-2 sm:flex-row sm:items-start"
+                            >
+                              <div className="flex-1">
+                                <Input
+                                  value={
+                                    chequeNumber
+                                  }
+                                  onChange={(
+                                    event,
+                                  ) =>
+                                    handleChequeNumberChange(
+                                      index,
+                                      event
+                                        .target
+                                        .value,
+                                    )
+                                  }
+                                  placeholder={`Enter cheque number ${
+                                    index +
+                                    1
+                                  }`}
+                                  className={`h-11 rounded-2xl ${
+                                    warning
+                                      ? "border-amber-400 bg-amber-50"
+                                      : "border-slate-200"
+                                  }`}
+                                />
+
+                                {warning && (
+                                  <p className="mt-1 text-xs font-medium text-amber-700">
+                                    {
+                                      warning
+                                    }
+                                  </p>
+                                )}
+                              </div>
+
+                              <Button
+                                type="button"
+                                variant="outline"
+                                size="icon"
+                                className="h-11 w-11 shrink-0 rounded-2xl border-slate-200 text-red-600 hover:bg-red-50 hover:text-red-700"
+                                onClick={() =>
+                                  handleRemoveChequeNumber(
+                                    index,
+                                  )
+                                }
+                                disabled={
+                                  formData
+                                    .chequeNumbers
+                                    .length ===
+                                  1
+                                }
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          );
+                        },
+                      )}
+
+                      {chequeValidationLoading && (
+                        <p className="text-xs text-slate-500">
+                          Checking existing
+                          cheque numbers...
+                        </p>
+                      )}
+
+                      {hasDuplicateChequeNumbers && (
+                        <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+                          This cheque number
+                          already exists:{" "}
+                          {duplicateChequeNumbers.join(
+                            ", ",
+                          )}
+                        </div>
+                      )}
+                    </div>
                   </div>
-                </div>
-              </section>
-            )}
+                </section>
+              )}
 
             <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm sm:p-6">
               <div className="mb-6 flex items-start gap-3">
@@ -10321,7 +11128,9 @@ export default function PaymentReleaseModal<T = any>({
                   </h2>
 
                   <p className="mt-1 text-sm text-slate-500">
-                    Add transaction reference, upload receipts, and write
+                    Add transaction
+                    reference, upload
+                    receipts, and write
                     payment notes.
                   </p>
                 </div>
@@ -10338,12 +11147,18 @@ export default function PaymentReleaseModal<T = any>({
 
                   <Input
                     id="transactionName"
-                    value={formData.transactionName}
+                    value={
+                      formData.transactionName
+                    }
                     onChange={(event) =>
-                      setFormData((previous) => ({
-                        ...previous,
-                        transactionName: event.target.value,
-                      }))
+                      setFormData(
+                        (previous) => ({
+                          ...previous,
+                          transactionName:
+                            event.target
+                              .value,
+                        }),
+                      )
                     }
                     placeholder="Enter transaction name"
                     className="h-11 rounded-2xl border-slate-200"
@@ -10360,12 +11175,18 @@ export default function PaymentReleaseModal<T = any>({
 
                   <Input
                     id="transactionReference"
-                    value={formData.transactionReference}
+                    value={
+                      formData.transactionReference
+                    }
                     onChange={(event) =>
-                      setFormData((previous) => ({
-                        ...previous,
-                        transactionReference: event.target.value,
-                      }))
+                      setFormData(
+                        (previous) => ({
+                          ...previous,
+                          transactionReference:
+                            event.target
+                              .value,
+                        }),
+                      )
                     }
                     placeholder="Enter transaction reference"
                     className="h-11 rounded-2xl border-slate-200"
@@ -10374,8 +11195,12 @@ export default function PaymentReleaseModal<T = any>({
 
                 {allowReceiptUpload && (
                   <div className="space-y-3">
-                    <Label htmlFor="receipt" className="text-sm text-slate-700">
-                      Upload Receipt / Cheque Copies
+                    <Label
+                      htmlFor="receipt"
+                      className="text-sm text-slate-700"
+                    >
+                      Upload Receipt /
+                      Cheque Copies
                     </Label>
 
                     <label
@@ -10385,11 +11210,14 @@ export default function PaymentReleaseModal<T = any>({
                       <FileUp className="h-8 w-8 text-slate-500" />
 
                       <p className="mt-3 text-sm font-semibold text-slate-800">
-                        Click to upload files
+                        Click to upload
+                        files
                       </p>
 
                       <p className="mt-1 text-xs text-slate-500">
-                        JPG, PNG, or PDF. Multiple files are allowed.
+                        JPG, PNG, or PDF.
+                        Multiple files are
+                        allowed.
                       </p>
 
                       <Input
@@ -10397,39 +11225,58 @@ export default function PaymentReleaseModal<T = any>({
                         type="file"
                         accept=".jpg,.jpeg,.png,.pdf"
                         multiple
-                        onChange={handleReceiptFilesChange}
+                        onChange={
+                          handleReceiptFilesChange
+                        }
                         className="hidden"
                       />
                     </label>
 
-                    {receiptFiles.length > 0 && (
+                    {receiptFiles.length >
+                      0 && (
                       <div className="space-y-2">
-                        {receiptFiles.map((file, index) => (
-                          <div
-                            key={`${file.name}-${index}`}
-                            className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
-                          >
-                            <div className="min-w-0">
-                              <p className="truncate font-medium text-slate-900">
-                                {index + 1}. {file.name}
-                              </p>
-
-                              <p className="text-xs text-slate-500">
-                                {getFileSizeLabel(file.size)}
-                              </p>
-                            </div>
-
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="icon"
-                              className="h-9 w-9 shrink-0 rounded-full text-red-600 hover:bg-red-50 hover:text-red-700"
-                              onClick={() => handleRemoveReceiptFile(index)}
+                        {receiptFiles.map(
+                          (
+                            file,
+                            index,
+                          ) => (
+                            <div
+                              key={`${file.name}-${index}`}
+                              className="flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm"
                             >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        ))}
+                              <div className="min-w-0">
+                                <p className="truncate font-medium text-slate-900">
+                                  {index +
+                                    1}
+                                  .{" "}
+                                  {
+                                    file.name
+                                  }
+                                </p>
+
+                                <p className="text-xs text-slate-500">
+                                  {getFileSizeLabel(
+                                    file.size,
+                                  )}
+                                </p>
+                              </div>
+
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="icon"
+                                className="h-9 w-9 shrink-0 rounded-full text-red-600 hover:bg-red-50 hover:text-red-700"
+                                onClick={() =>
+                                  handleRemoveReceiptFile(
+                                    index,
+                                  )
+                                }
+                              >
+                                <Trash2 className="h-4 w-4" />
+                              </Button>
+                            </div>
+                          ),
+                        )}
                       </div>
                     )}
                   </div>
@@ -10446,12 +11293,18 @@ export default function PaymentReleaseModal<T = any>({
                   <Textarea
                     id="paymentNotes"
                     rows={5}
-                    value={formData.paymentNotes}
+                    value={
+                      formData.paymentNotes
+                    }
                     onChange={(event) =>
-                      setFormData((previous) => ({
-                        ...previous,
-                        paymentNotes: event.target.value,
-                      }))
+                      setFormData(
+                        (previous) => ({
+                          ...previous,
+                          paymentNotes:
+                            event.target
+                              .value,
+                        }),
+                      )
                     }
                     placeholder="Add any notes..."
                     className="rounded-2xl border-slate-200"
@@ -10471,40 +11324,60 @@ export default function PaymentReleaseModal<T = any>({
                 {invoice && (
                   <>
                     <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-                      <span className="text-slate-500">Approved</span>
+                      <span className="text-slate-500">
+                        Approved
+                      </span>
 
                       <span className="text-right font-semibold text-slate-950">
-                        Rs {formatPKR(invoiceApprovedAmount)}
+                        Rs{" "}
+                        {formatPKR(
+                          invoiceApprovedAmount,
+                        )}
                       </span>
                     </div>
 
                     <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-                      <span className="text-slate-500">Released Before</span>
+                      <span className="text-slate-500">
+                        Released Before
+                      </span>
 
                       <span className="text-right font-semibold text-slate-950">
-                        Rs {formatPKR(totalReleasedAmount)}
+                        Rs{" "}
+                        {formatPKR(
+                          totalReleasedAmount,
+                        )}
                       </span>
                     </div>
                   </>
                 )}
 
                 <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-                  <span className="text-slate-500">This Release</span>
+                  <span className="text-slate-500">
+                    This Release
+                  </span>
 
                   <span className="text-right font-semibold text-slate-950">
-                    Rs {formatPKR(formData.amount)}
+                    Rs{" "}
+                    {formatPKR(
+                      formData.amount,
+                    )}
                   </span>
                 </div>
 
                 {invoice && (
                   <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-                    <span className="text-slate-500">Balance After</span>
+                    <span className="text-slate-500">
+                      Balance After
+                    </span>
 
                     <span className="text-right font-semibold text-slate-950">
                       Rs{" "}
                       {formatPKR(
                         Math.max(
-                          remainingReleaseAmount - safeNumber(formData.amount),
+                          remainingReleaseAmount -
+                            safeNumber(
+                              formData.amount,
+                            ),
                           0,
                         ),
                       )}
@@ -10513,51 +11386,76 @@ export default function PaymentReleaseModal<T = any>({
                 )}
 
                 <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-                  <span className="text-slate-500">Transaction Name</span>
+                  <span className="text-slate-500">
+                    Transaction Name
+                  </span>
 
                   <span className="max-w-[190px] text-right font-semibold text-slate-950">
-                    {formData.transactionName.trim() || "-"}
+                    {formData.transactionName.trim() ||
+                      "-"}
                   </span>
                 </div>
 
                 <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-                  <span className="text-slate-500">Method</span>
+                  <span className="text-slate-500">
+                    Method
+                  </span>
 
                   <span className="text-right font-semibold text-slate-950">
-                    {getPaymentMethodLabel(formData.paymentMethod)}
+                    {getPaymentMethodLabel(
+                      formData.paymentMethod,
+                    )}
                   </span>
                 </div>
 
                 <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-                  <span className="text-slate-500">{resolvedPartyLabel}</span>
+                  <span className="text-slate-500">
+                    {resolvedPartyLabel}
+                  </span>
 
                   <span className="max-w-[190px] text-right font-semibold text-slate-950">
-                    {resolvedParties.length ? resolvedParties.join(", ") : "-"}
+                    {resolvedParties.length
+                      ? resolvedParties.join(
+                          ", ",
+                        )
+                      : "-"}
                   </span>
                 </div>
 
-                {formData.paymentMethod === "cheque" && (
+                {formData.paymentMethod ===
+                  "cheque" && (
                   <>
                     <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-                      <span className="text-slate-500">Account</span>
+                      <span className="text-slate-500">
+                        Account
+                      </span>
 
                       <span className="max-w-[190px] text-right font-semibold text-slate-950">
-                        {selectedAccount?.accountName || "-"}
+                        {selectedAccount?.accountName ||
+                          "-"}
                       </span>
                     </div>
 
                     <div className="flex items-start justify-between gap-4 border-b border-slate-100 pb-4">
-                      <span className="text-slate-500">Cheques</span>
+                      <span className="text-slate-500">
+                        Cheques
+                      </span>
 
                       <span className="text-right font-semibold text-slate-950">
-                        {cleanChequeNumbers(formData.chequeNumbers).length}
+                        {
+                          cleanChequeNumbers(
+                            formData.chequeNumbers,
+                          ).length
+                        }
                       </span>
                     </div>
                   </>
                 )}
 
                 <div className="flex items-start justify-between gap-4">
-                  <span className="text-slate-500">Files</span>
+                  <span className="text-slate-500">
+                    Files
+                  </span>
 
                   <span className="text-right font-semibold text-slate-950">
                     {receiptFiles.length}
@@ -10566,62 +11464,113 @@ export default function PaymentReleaseModal<T = any>({
               </div>
             </section>
 
-            {paymentReleaseHistory.length > 0 && (
+            {paymentReleaseHistory.length >
+              0 && (
               <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h2 className="text-base font-semibold text-slate-950">
                   Payment Release History
                 </h2>
 
                 <div className="mt-4 space-y-3">
-                  {[...paymentReleaseHistory]
+                  {[
+                    ...paymentReleaseHistory,
+                  ]
                     .reverse()
-                    .map((entry: any, index: number) => (
-                      <div
-                        key={
-                          entry?.id ||
-                          `${entry?.releasedAt || "release"}-${index}`
-                        }
-                        className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm"
-                      >
-                        <div className="flex items-start justify-between gap-3">
-                          <div>
-                            <p className="font-semibold text-slate-950">
-                              Rs {formatPKR(getPaymentReleaseAmount(entry))}
-                            </p>
+                    .map(
+                      (
+                        entry: any,
+                        index: number,
+                      ) => (
+                        <div
+                          key={
+                            entry?.id ||
+                            `${
+                              entry?.releasedAt ||
+                              "release"
+                            }-${index}`
+                          }
+                          className="rounded-2xl border border-slate-100 bg-slate-50 p-4 text-sm"
+                        >
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <p className="font-semibold text-slate-950">
+                                Rs{" "}
+                                {formatPKR(
+                                  getPaymentReleaseAmount(
+                                    entry,
+                                  ),
+                                )}
+                              </p>
 
-                            <p className="mt-1 text-xs text-slate-500">
-                              {getPaymentMethodLabel(entry?.paymentMethod)} •{" "}
-                              {getReleaseDateLabel(entry?.releasedAt)}
-                            </p>
+                              <p className="mt-1 text-xs text-slate-500">
+                                {getPaymentMethodLabel(
+                                  entry?.paymentMethod,
+                                )}{" "}
+                                •{" "}
+                                {getReleaseDateLabel(
+                                  entry?.releasedAt,
+                                )}
+                              </p>
+                            </div>
+
+                            <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
+                              {entry?.releaseType ||
+                                "release"}
+                            </span>
                           </div>
 
-                          <span className="rounded-full bg-white px-2.5 py-1 text-xs font-semibold text-slate-600">
-                            {entry?.releaseType || "release"}
-                          </span>
-                        </div>
+                          <div className="mt-3 space-y-1 text-xs text-slate-500">
+                            <p>
+                              Released By:{" "}
+                              {entry?.releasedByName ||
+                                "-"}
+                            </p>
 
-                        <div className="mt-3 space-y-1 text-xs text-slate-500">
-                          <p>Released By: {entry?.releasedByName || "-"}</p>
-
-                          {entry?.transactionName && (
-                            <p>Transaction: {entry.transactionName}</p>
-                          )}
-
-                          {entry?.transactionReference && (
-                            <p>Reference: {entry.transactionReference}</p>
-                          )}
-
-                          {Array.isArray(entry?.chequeNumbers) &&
-                            entry.chequeNumbers.length > 0 && (
-                              <p>Cheques: {entry.chequeNumbers.join(", ")}</p>
+                            {entry?.transactionName && (
+                              <p>
+                                Transaction:{" "}
+                                {
+                                  entry.transactionName
+                                }
+                              </p>
                             )}
 
-                          {entry?.paymentNotes && (
-                            <p>Notes: {entry.paymentNotes}</p>
-                          )}
+                            {entry?.transactionReference && (
+                              <p>
+                                Reference:{" "}
+                                {
+                                  entry.transactionReference
+                                }
+                              </p>
+                            )}
+
+                            {Array.isArray(
+                              entry?.chequeNumbers,
+                            ) &&
+                              entry
+                                .chequeNumbers
+                                .length >
+                                0 && (
+                                <p>
+                                  Cheques:{" "}
+                                  {entry.chequeNumbers.join(
+                                    ", ",
+                                  )}
+                                </p>
+                              )}
+
+                            {entry?.paymentNotes && (
+                              <p>
+                                Notes:{" "}
+                                {
+                                  entry.paymentNotes
+                                }
+                              </p>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      ),
+                    )}
                 </div>
               </section>
             )}
@@ -10632,11 +11581,20 @@ export default function PaymentReleaseModal<T = any>({
               </h3>
 
               <ul className="mt-3 space-y-2 text-sm text-blue-800">
-                <li>Confirm the release amount is correct.</li>
+                <li>
+                  Confirm the release amount
+                  is correct.
+                </li>
 
-                <li>For cheque payment, add all cheque numbers.</li>
+                <li>
+                  For cheque payment, add
+                  all cheque numbers.
+                </li>
 
-                <li>Upload receipt or cheque copy files if available.</li>
+                <li>
+                  Upload receipt or cheque
+                  copy files if available.
+                </li>
               </ul>
             </section>
           </aside>
