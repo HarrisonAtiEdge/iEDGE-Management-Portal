@@ -2196,7 +2196,7 @@ export default function ReceivePaymentModal({ invoice, onClose }: Props) {
                     >
                       <option value="">Select Method</option>
                       <option value="Cash">Cash</option>
-                      <option value="Check">Check</option>
+                      <option value="Check">Cheque</option>
                       <option value="Credit Card">Credit Card</option>
                       <option value="Direct Debit">Direct Debit</option>
                       <option value="Bank Transfer">Bank Transfer</option>
