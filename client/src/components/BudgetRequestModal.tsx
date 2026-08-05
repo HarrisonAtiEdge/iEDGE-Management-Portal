@@ -5912,6 +5912,3428 @@
 //   );
 // }
 
+// import {
+//   useEffect,
+//   useRef,
+//   useState,
+//   type DragEvent,
+//   type FormEvent,
+//   type ReactNode,
+//   type TextareaHTMLAttributes,
+// } from "react";
+// import { useAuth } from "@/contexts/AuthContext";
+// import {
+//   Trash2,
+//   CalendarIcon,
+//   X,
+//   FileText,
+//   FileSpreadsheet,
+//   GripVertical,
+//   Plus,
+// } from "lucide-react";
+// import {
+//   collection,
+//   addDoc,
+//   serverTimestamp,
+//   doc,
+//   updateDoc,
+//   runTransaction,
+//   getDocs,
+// } from "firebase/firestore";
+// import { db } from "@/lib/firebase";
+// import {
+//   Dialog,
+//   DialogContent,
+//   DialogHeader,
+//   DialogTitle,
+// } from "@/components/ui/dialog";
+// import { Button } from "@/components/ui/button";
+// import { Input } from "@/components/ui/input";
+// import { Label } from "@/components/ui/label";
+// import { Textarea } from "@/components/ui/textarea";
+// import { useToast } from "@/hooks/use-toast";
+// import { Calendar } from "@/components/ui/calendar";
+// import {
+//   Popover,
+//   PopoverContent,
+//   PopoverTrigger,
+// } from "@/components/ui/popover";
+// import { format } from "date-fns";
+// import jsPDF from "jspdf";
+// import autoTable from "jspdf-autotable";
+// import * as XLSX from "xlsx";
+
+// const PANEL_ID = "IEDGE-SYSTEM";
+
+// type InvoiceType = "general" | "project";
+
+// type LineItem = {
+//   id: number;
+//   date: string;
+//   service: string;
+//   description: string;
+//   vendor: string;
+//   units: string;
+//   unitRate: string;
+//   total: number;
+//   comment: string;
+// };
+
+// type TableColumnKey =
+//   | "date"
+//   | "service"
+//   | "description"
+//   | "vendor"
+//   | "units"
+//   | "unitRate"
+//   | "total"
+//   | "comment"
+//   | "actions";
+
+// type TableColumnConfig = {
+//   label: string;
+//   headerClassName: string;
+//   headerContentClassName: string;
+//   cellClassName: string;
+//   render: (item: LineItem) => ReactNode;
+// };
+
+// const DEFAULT_TABLE_COLUMN_ORDER: TableColumnKey[] = [
+//   "date",
+//   "service",
+//   "description",
+//   "vendor",
+//   "units",
+//   "unitRate",
+//   "total",
+//   "comment",
+//   "actions",
+// ];
+
+// type BudgetRequestModalProps = {
+//   isOpen: boolean;
+//   onClose: () => void;
+//   onSuccess?: () => void;
+//   editingInvoice?: any | null;
+// };
+
+// type AutoResizeTextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
+//   minHeight?: number;
+//   maxHeight?: number;
+//   minWidthCh?: number;
+//   maxWidthCh?: number;
+// };
+
+// function parseAmount(value: any): number {
+//   if (value === null || value === undefined || value === "") return 0;
+//   const parsed = Number(String(value).replace(/,/g, ""));
+//   return Number.isFinite(parsed) ? parsed : 0;
+// }
+
+// function formatNumberWithCommas(
+//   value: any,
+//   removeTrailingZeroes = false,
+// ): string {
+//   if (value === null || value === undefined || value === "") return "";
+
+//   const rawValue = String(value).replace(/,/g, "").trim();
+//   if (!rawValue || rawValue === ".") return rawValue;
+
+//   const [integerPart, decimalPart] = rawValue.split(".");
+//   const safeIntegerPart = integerPart || "0";
+//   const formattedInteger = safeIntegerPart.replace(
+//     /\B(?=(\d{3})+(?!\d))/g,
+//     ",",
+//   );
+
+//   if (decimalPart !== undefined) {
+//     const trimmedDecimal = removeTrailingZeroes
+//       ? decimalPart.replace(/0+$/, "")
+//       : decimalPart;
+
+//     if (trimmedDecimal) return `${formattedInteger}.${trimmedDecimal}`;
+
+//     // While typing editable fields, keep a trailing decimal point like "1,000."
+//     // so the user can continue entering decimal digits naturally.
+//     return removeTrailingZeroes ? formattedInteger : `${formattedInteger}.`;
+//   }
+
+//   return formattedInteger;
+// }
+
+// function formatAmount(value: any): string {
+//   const amount = parseAmount(value);
+
+//   return amount.toLocaleString("en-PK", {
+//     minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+//     maximumFractionDigits: 2,
+//   });
+// }
+
+// function sanitizeDecimalInput(value: string) {
+//   let cleanValue = value.replace(/,/g, "").replace(/[^\d.]/g, "");
+
+//   const parts = cleanValue.split(".");
+//   if (parts.length > 2) {
+//     cleanValue = `${parts[0]}.${parts.slice(1).join("")}`;
+//   }
+
+//   return cleanValue;
+// }
+
+// function formatDateForDisplay(value: any) {
+//   if (!value) return "";
+
+//   const date = value instanceof Date ? value : new Date(value);
+//   if (Number.isNaN(date.getTime())) return String(value);
+
+//   return format(date, "dd MMM yyyy");
+// }
+
+// function safeExportFileName(value: string) {
+//   return value
+//     .trim()
+//     .replace(/[^a-z0-9-_]+/gi, "-")
+//     .replace(/-+/g, "-")
+//     .replace(/^-|-$/g, "")
+//     .slice(0, 80);
+// }
+
+// function getAutoWidth(value: any, minWidthCh = 10, maxWidthCh = 45) {
+//   const text = String(value || "");
+//   const longestLine = text
+//     .split("\n")
+//     .reduce((longest, line) => Math.max(longest, line.length), 0);
+
+//   return `${Math.min(Math.max(longestLine + 2, minWidthCh), maxWidthCh)}ch`;
+// }
+
+// function AutoResizeTextarea({
+//   value,
+//   onChange,
+//   className = "",
+//   minHeight = 36,
+//   maxHeight = 140,
+//   minWidthCh = 10,
+//   maxWidthCh = 45,
+//   style,
+//   ...props
+// }: AutoResizeTextareaProps) {
+//   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+//   function resizeTextarea() {
+//     const el = textareaRef.current;
+//     if (!el) return;
+
+//     el.style.height = "auto";
+
+//     const nextHeight = Math.min(
+//       Math.max(el.scrollHeight, minHeight),
+//       maxHeight,
+//     );
+
+//     el.style.height = `${nextHeight}px`;
+//     el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
+//   }
+
+//   useEffect(() => {
+//     resizeTextarea();
+//   }, [value]);
+
+//   return (
+//     <Textarea
+//       ref={textareaRef}
+//       value={value}
+//       rows={1}
+//       onChange={(e) => {
+//         onChange?.(e);
+//         requestAnimationFrame(resizeTextarea);
+//       }}
+//       className={`resize-none overflow-hidden text-sm leading-5 ${className}`}
+//       style={{
+//         minHeight,
+//         width: getAutoWidth(value, minWidthCh, maxWidthCh),
+//         ...style,
+//       }}
+//       {...props}
+//     />
+//   );
+// }
+
+// function getRoleKey(role: any): string {
+//   return String(role || "")
+//     .toLowerCase()
+//     .trim()
+//     .replace(/[\s-]+/g, "_");
+// }
+
+// function getRoleLabel(role: string) {
+//   const normalizedRole = getRoleKey(role);
+
+//   const roleLabels: Record<string, string> = {
+//     admin: "Admin",
+//     main_admin: "Admin",
+//     super_admin: "Super Admin",
+//     finance_admin: "Finance Admin",
+//     financial_admin: "Finance Admin",
+//     finance: "Finance",
+//     operation: "Operation",
+//     operations: "Operation",
+//     operational_admin: "Operation Admin",
+//     operation_admin: "Operation Admin",
+//     creative: "Creative",
+//     sales: "Sales",
+//   };
+
+//   return (
+//     roleLabels[normalizedRole] ||
+//     normalizedRole
+//       .replace(/_/g, " ")
+//       .replace(/\b\w/g, (letter) => letter.toUpperCase())
+//   );
+// }
+
+// function canRoleCreateBudgetRequest(role: string) {
+//   const roleKey = getRoleKey(role);
+
+//   // Only Admin roles are blocked. Finance and Finance Admin can create requests.
+//   const blockedRoles = ["admin", "main_admin", "super_admin"];
+
+//   return !!roleKey && !blockedRoles.includes(roleKey);
+// }
+
+// export default function InvoiceRequestModal({
+//   isOpen,
+//   onClose,
+//   onSuccess,
+//   editingInvoice = null,
+// }: BudgetRequestModalProps) {
+//   const { userProfile } = useAuth();
+//   const { toast } = useToast();
+
+//   const currentUserRole = getRoleKey(userProfile?.role || "");
+//   const canSubmitBudgetRequest = canRoleCreateBudgetRequest(currentUserRole);
+
+//   const [loading, setLoading] = useState(false);
+//   const [invoiceType, setInvoiceType] = useState<InvoiceType>("general");
+
+//   const [estimates, setEstimates] = useState<any[]>([]);
+//   const [suppliers, setSuppliers] = useState<any[]>([]);
+//   const [selectedEstimateId, setSelectedEstimateId] = useState("");
+//   const [selectedEstimateInput, setSelectedEstimateInput] = useState("");
+//   const [subject, setSubject] = useState("");
+//   const [message, setMessage] = useState("");
+
+//   const [formData, setFormData] = useState({
+//     requestId: "",
+//     clientName: "",
+//     project: "",
+//     projectCode: "",
+//     title: "",
+//     comment: "",
+//   });
+
+//   const [lineItems, setLineItems] = useState<LineItem[]>([
+//     {
+//       id: 1,
+//       date: "",
+//       service: "",
+//       description: "",
+//       vendor: "",
+//       units: "",
+//       unitRate: "",
+//       total: 0,
+//       comment: "",
+//     },
+//   ]);
+//   const [draggedRowId, setDraggedRowId] = useState<number | null>(null);
+//   const [dragOverRowId, setDragOverRowId] = useState<number | null>(null);
+
+//   function getEmptyLineItem(id = 1): LineItem {
+//     return {
+//       id,
+//       date: "",
+//       service: "",
+//       description: "",
+//       vendor: "",
+//       units: "",
+//       unitRate: "",
+//       total: 0,
+//       comment: "",
+//     };
+//   }
+
+//   function resetForm() {
+//     setInvoiceType("general");
+//     setSelectedEstimateId("");
+//     setSelectedEstimateInput("");
+//     setSubject("");
+//     setMessage("");
+//     setFormData({
+//       requestId: "",
+//       clientName: "",
+//       project: "",
+//       projectCode: "",
+//       title: "",
+//       comment: "",
+//     });
+//     setLineItems([getEmptyLineItem(1)]);
+//   }
+
+//   function getSupplierDisplayName(supplier: any) {
+//     return (
+//       supplier?.supplierName ||
+//       supplier?.vendorName ||
+//       supplier?.name ||
+//       supplier?.companyName ||
+//       supplier?.businessName ||
+//       supplier?.title ||
+//       ""
+//     );
+//   }
+
+//   function getEstimateProjectCode(estimate: any) {
+//     return (
+//       estimate?.projectCode ||
+//       estimate?.projectcode ||
+//       estimate?.project_code ||
+//       estimate?.code ||
+//       ""
+//     );
+//   }
+
+//   function getEstimateTitle(estimate: any) {
+//     return estimate?.subject || estimate?.title || "";
+//   }
+
+//   function getEstimateClientName(estimate: any) {
+//     return estimate?.client || estimate?.clientName || "";
+//   }
+
+//   function getEstimateProjectName(estimate: any) {
+//     return (
+//       estimate?.projectOwner || estimate?.project || estimate?.projectName || ""
+//     );
+//   }
+
+//   function getEstimateDisplayNo(estimate: any) {
+//     return (
+//       estimate?.estimateNo || estimate?.estimateNumber || estimate?.id || ""
+//     );
+//   }
+
+//   useEffect(() => {
+//     if (!isOpen || editingInvoice) return;
+//     resetForm();
+//   }, [isOpen, editingInvoice]);
+
+//   useEffect(() => {
+//     if (!isOpen) return;
+
+//     const fetchSuppliers = async () => {
+//       try {
+//         const snap = await getDocs(
+//           collection(db, "Panels", PANEL_ID, "suppliers"),
+//         );
+
+//         const data = snap.docs
+//           .map((d) => ({
+//             id: d.id,
+//             ...d.data(),
+//           }))
+//           .sort((a, b) =>
+//             getSupplierDisplayName(a).localeCompare(getSupplierDisplayName(b)),
+//           );
+
+//         setSuppliers(data);
+//       } catch (error) {
+//         console.error("Failed to fetch suppliers:", error);
+//       }
+//     };
+
+//     fetchSuppliers();
+//   }, [isOpen]);
+
+//   useEffect(() => {
+//     if (!isOpen || invoiceType !== "project") return;
+
+//     const fetchEstimates = async () => {
+//       try {
+//         const snap = await getDocs(
+//           collection(db, "Panels", PANEL_ID, "estimates"),
+//         );
+
+//         setEstimates(
+//           snap.docs.map((d) => ({
+//             id: d.id,
+//             ...d.data(),
+//           })),
+//         );
+//       } catch (error) {
+//         console.error("Failed to fetch estimates:", error);
+//       }
+//     };
+
+//     fetchEstimates();
+//   }, [isOpen, invoiceType]);
+
+//   useEffect(() => {
+//     if (invoiceType === "general") {
+//       setSelectedEstimateId("");
+//       setSelectedEstimateInput("");
+//       setFormData((prev) => ({
+//         ...prev,
+//         clientName: "",
+//         project: "",
+//         projectCode: "",
+//       }));
+//     }
+//   }, [invoiceType]);
+
+//   useEffect(() => {
+//     if (!selectedEstimateId || !estimates.length) return;
+
+//     const matchedEstimate = estimates.find((e) => e.id === selectedEstimateId);
+//     if (matchedEstimate) {
+//       setSelectedEstimateInput(getEstimateDisplayNo(matchedEstimate));
+//     }
+//   }, [selectedEstimateId, estimates]);
+
+//   function handleEstimateSelect(value: string) {
+//     setSelectedEstimateInput(value);
+
+//     const normalizedValue = value.trim().toLowerCase();
+
+//     const est = estimates.find((e) => {
+//       const displayNo = getEstimateDisplayNo(e).trim().toLowerCase();
+//       return e.id === value || displayNo === normalizedValue;
+//     });
+
+//     if (!est) {
+//       setSelectedEstimateId(value);
+//       setFormData((prev) => ({
+//         ...prev,
+//         clientName: "",
+//         title: "",
+//         project: "",
+//         projectCode: "",
+//       }));
+//       return;
+//     }
+
+//     setSelectedEstimateId(est.id);
+
+//     setFormData((prev) => ({
+//       ...prev,
+//       clientName: getEstimateClientName(est),
+//       title: getEstimateTitle(est),
+//       project: getEstimateProjectName(est),
+//       projectCode: getEstimateProjectCode(est),
+//     }));
+//   }
+
+//   function updateLineItem(id: number, field: keyof LineItem, value: string) {
+//     setLineItems((prev) =>
+//       prev.map((item) => {
+//         if (item.id !== id) return item;
+
+//         const updated = { ...item, [field]: value };
+
+//         const units = parseAmount(updated.units);
+//         const rate = parseAmount(updated.unitRate);
+
+//         updated.total = units * rate;
+
+//         return updated;
+//       }),
+//     );
+//   }
+
+//   function addLineItem() {
+//     setLineItems((prev) => {
+//       const nextId =
+//         prev.length > 0 ? Math.max(...prev.map((item) => item.id || 0)) + 1 : 1;
+
+//       return [...prev, getEmptyLineItem(nextId)];
+//     });
+//   }
+
+//   function removeLineItem(id: number) {
+//     if (lineItems.length > 1) {
+//       setLineItems((prev) => prev.filter((i) => i.id !== id));
+//     }
+//   }
+
+//   function moveLineItemRow(sourceRowId: number, targetRowId: number) {
+//     if (sourceRowId === targetRowId) return;
+
+//     setLineItems((prev) => {
+//       const sourceIndex = prev.findIndex((item) => item.id === sourceRowId);
+//       const targetIndex = prev.findIndex((item) => item.id === targetRowId);
+
+//       if (sourceIndex === -1 || targetIndex === -1) return prev;
+
+//       const nextItems = [...prev];
+//       const [movedItem] = nextItems.splice(sourceIndex, 1);
+//       nextItems.splice(targetIndex, 0, movedItem);
+
+//       return nextItems;
+//     });
+//   }
+
+//   function handleRowDragStart(
+//     event: DragEvent<HTMLSpanElement>,
+//     rowId: number,
+//   ) {
+//     setDraggedRowId(rowId);
+//     event.dataTransfer.effectAllowed = "move";
+//     event.dataTransfer.setData("text/plain", String(rowId));
+//   }
+
+//   function handleRowDragOver(
+//     event: DragEvent<HTMLTableRowElement>,
+//     rowId: number,
+//   ) {
+//     if (draggedRowId === rowId) return;
+
+//     event.preventDefault();
+//     event.dataTransfer.dropEffect = "move";
+//     setDragOverRowId(rowId);
+//   }
+
+//   function handleRowDrop(
+//     event: DragEvent<HTMLTableRowElement>,
+//     targetRowId: number,
+//   ) {
+//     event.preventDefault();
+
+//     const sourceRowId =
+//       draggedRowId ?? Number(event.dataTransfer.getData("text/plain"));
+
+//     if (Number.isFinite(sourceRowId)) {
+//       moveLineItemRow(sourceRowId, targetRowId);
+//     }
+
+//     setDraggedRowId(null);
+//     setDragOverRowId(null);
+//   }
+
+//   function handleRowDragEnd() {
+//     setDraggedRowId(null);
+//     setDragOverRowId(null);
+//   }
+
+//   function normalizeLineItemsForSave(items: any[]): LineItem[] {
+//     return items.map((item, index) => {
+//       const unitsValue =
+//         item.units ?? item.unit ?? item.quantity ?? item.qty ?? "";
+
+//       const unitRateValue = item.unitRate ?? item.rate ?? item.price ?? "";
+
+//       const units = parseAmount(unitsValue);
+//       const unitRate = parseAmount(unitRateValue);
+//       const savedTotal = parseAmount(item.total);
+
+//       return {
+//         id: item.id || index + 1,
+//         date: item.date || "",
+//         service: item.service || "",
+//         description: item.description || "",
+//         vendor: item.vendor || "",
+//         units: String(unitsValue),
+//         unitRate: String(unitRateValue),
+//         total: savedTotal || units * unitRate,
+//         comment: item.comment || "",
+//       };
+//     });
+//   }
+
+//   const totalAmount = lineItems.reduce(
+//     (sum, item) => sum + parseAmount(item.total),
+//     0,
+//   );
+
+//   function getRequestNumber() {
+//     return formData.requestId || editingInvoice?.requestId || "DRAFT";
+//   }
+
+//   function getRequestTitle() {
+//     return formData.title || subject || "Budget Request";
+//   }
+
+//   function getExportFileName(extension: "pdf" | "xlsx") {
+//     const baseName = safeExportFileName(
+//       `${getRequestNumber()}-${getRequestTitle()}`,
+//     );
+
+//     return `${baseName || "budget-request"}.${extension}`;
+//   }
+
+//   function getExportMetaRows() {
+//     return [
+//       ["Request ID", getRequestNumber()],
+//       ["Request Type", invoiceType === "project" ? "Project" : "General"],
+//       ["Title", getRequestTitle()],
+//       ["Subject", subject || formData.title || "-"],
+//       [
+//         "Estimate No",
+//         invoiceType === "project" ? selectedEstimateInput || "-" : "-",
+//       ],
+//       ["Client", invoiceType === "project" ? formData.clientName || "-" : "-"],
+//       ["Project", invoiceType === "project" ? formData.project || "-" : "-"],
+//       [
+//         "Project Code",
+//         invoiceType === "project" ? formData.projectCode || "-" : "-",
+//       ],
+//       [
+//         "Prepared By",
+//         userProfile?.displayName ||
+//           (userProfile as any)?.name ||
+//           userProfile?.email ||
+//           "-",
+//       ],
+//       ["Prepared On", formatDateForDisplay(new Date())],
+//       ["Total", `Rs ${formatAmount(totalAmount)}`],
+//     ];
+//   }
+
+//   function handleExportPdf() {
+//     try {
+//       const exportItems = normalizeLineItemsForSave(lineItems);
+//       const doc = new jsPDF({
+//         orientation: "landscape",
+//         unit: "pt",
+//         format: "a4",
+//       });
+//       const pageWidth = doc.internal.pageSize.getWidth();
+//       const metaRows = getExportMetaRows();
+
+//       doc.setProperties({ title: `Budget Request - ${getRequestNumber()}` });
+//       doc.setFont("helvetica", "bold");
+//       doc.setFontSize(22);
+//       doc.text("Budget Request", 40, 44);
+
+//       doc.setFont("helvetica", "normal");
+//       doc.setFontSize(10);
+//       doc.setTextColor(90);
+//       doc.text(
+//         `Generated ${formatDateForDisplay(new Date())}`,
+//         pageWidth - 40,
+//         44,
+//         {
+//           align: "right",
+//         },
+//       );
+
+//       doc.setTextColor(30);
+//       metaRows.forEach(([label, value], index) => {
+//         const column = index % 3;
+//         const row = Math.floor(index / 3);
+//         const x = 40 + column * 260;
+//         const y = 78 + row * 34;
+
+//         doc.setFont("helvetica", "bold");
+//         doc.setFontSize(8);
+//         doc.setTextColor(100);
+//         doc.text(label, x, y);
+
+//         doc.setFont("helvetica", "normal");
+//         doc.setFontSize(10);
+//         doc.setTextColor(25);
+//         doc.text(String(value || "-"), x, y + 14, { maxWidth: 220 });
+//       });
+
+//       autoTable(doc, {
+//         startY: 220,
+//         head: [
+//           [
+//             "#",
+//             "Date",
+//             "Service",
+//             "Description",
+//             "Vendor",
+//             "Units",
+//             "Rate",
+//             "Total",
+//             "Comment",
+//           ],
+//         ],
+//         body: exportItems.map((item, index) => [
+//           String(index + 1),
+//           formatDateForDisplay(item.date) || "-",
+//           item.service || "-",
+//           item.description || "-",
+//           item.vendor || "-",
+//           item.units || "0",
+//           formatAmount(item.unitRate),
+//           formatAmount(item.total),
+//           item.comment || "-",
+//         ]),
+//         foot: [
+//           [
+//             "",
+//             "",
+//             "",
+//             "",
+//             "",
+//             "",
+//             "Total",
+//             `Rs ${formatAmount(totalAmount)}`,
+//             "",
+//           ],
+//         ],
+//         styles: {
+//           font: "helvetica",
+//           fontSize: 8,
+//           cellPadding: 5,
+//           lineColor: [229, 231, 235],
+//           lineWidth: 0.5,
+//           overflow: "linebreak",
+//           valign: "top",
+//         },
+//         headStyles: {
+//           fillColor: [15, 23, 42],
+//           textColor: [255, 255, 255],
+//           fontStyle: "bold",
+//         },
+//         footStyles: {
+//           fillColor: [248, 250, 252],
+//           textColor: [15, 23, 42],
+//           fontStyle: "bold",
+//         },
+//         columnStyles: {
+//           0: { cellWidth: 24, halign: "center" },
+//           1: { cellWidth: 70 },
+//           2: { cellWidth: 90 },
+//           3: { cellWidth: 150 },
+//           4: { cellWidth: 100 },
+//           5: { cellWidth: 45, halign: "right" },
+//           6: { cellWidth: 65, halign: "right" },
+//           7: { cellWidth: 70, halign: "right" },
+//           8: { cellWidth: 120 },
+//         },
+//         margin: { left: 40, right: 40 },
+//       });
+
+//       const lastTableY = (doc as any).lastAutoTable?.finalY || 220;
+//       if (message && lastTableY < doc.internal.pageSize.getHeight() - 70) {
+//         doc.setFont("helvetica", "bold");
+//         doc.setFontSize(9);
+//         doc.text("Message", 40, lastTableY + 28);
+//         doc.setFont("helvetica", "normal");
+//         doc.setFontSize(9);
+//         doc.text(message, 40, lastTableY + 44, { maxWidth: pageWidth - 80 });
+//       }
+
+//       doc.save(getExportFileName("pdf"));
+//       toast({ title: "PDF exported" });
+//     } catch (error) {
+//       console.error("Failed to export PDF:", error);
+//       toast({
+//         title: "Export failed",
+//         description: "Could not export the Budget Request PDF.",
+//         variant: "destructive",
+//       });
+//     }
+//   }
+
+//   function handleExportExcel() {
+//     try {
+//       const exportItems = normalizeLineItemsForSave(lineItems);
+//       const rows: Array<Array<string | number>> = [
+//         ["Budget Request"],
+//         [],
+//         ...getExportMetaRows(),
+//         [],
+//         ["Line Items"],
+//         [
+//           "#",
+//           "Date",
+//           "Service",
+//           "Description",
+//           "Vendor",
+//           "Units",
+//           "Rate",
+//           "Total",
+//           "Comment",
+//         ],
+//         ...exportItems.map((item, index) => [
+//           index + 1,
+//           formatDateForDisplay(item.date),
+//           item.service,
+//           item.description,
+//           item.vendor,
+//           parseAmount(item.units),
+//           parseAmount(item.unitRate),
+//           parseAmount(item.total),
+//           item.comment,
+//         ]),
+//         ["", "", "", "", "", "", "Total", totalAmount, ""],
+//       ];
+
+//       if (message) {
+//         rows.push([], ["Message", message]);
+//       }
+
+//       const worksheet = XLSX.utils.aoa_to_sheet(rows);
+//       worksheet["!cols"] = [
+//         { wch: 6 },
+//         { wch: 14 },
+//         { wch: 24 },
+//         { wch: 36 },
+//         { wch: 24 },
+//         { wch: 10 },
+//         { wch: 14 },
+//         { wch: 14 },
+//         { wch: 28 },
+//       ];
+
+//       const workbook = XLSX.utils.book_new();
+//       XLSX.utils.book_append_sheet(workbook, worksheet, "Budget Request");
+//       XLSX.writeFile(workbook, getExportFileName("xlsx"));
+
+//       toast({ title: "Excel exported" });
+//     } catch (error) {
+//       console.error("Failed to export Excel:", error);
+//       toast({
+//         title: "Export failed",
+//         description: "Could not export the Budget Request Excel file.",
+//         variant: "destructive",
+//       });
+//     }
+//   }
+
+//   async function generateRequestId() {
+//     const counterRef = doc(
+//       db,
+//       "Panels",
+//       PANEL_ID,
+//       "counters",
+//       "invoiceRequests",
+//     );
+
+//     return await runTransaction(db, async (transaction) => {
+//       const snap = await transaction.get(counterRef);
+
+//       let count = 1;
+
+//       if (!snap.exists()) {
+//         transaction.set(counterRef, { count: 1 });
+//       } else {
+//         count = (snap.data().count || 0) + 1;
+//         transaction.update(counterRef, { count });
+//       }
+
+//       const year = new Date().getFullYear();
+//       return `PR-${year}-${String(count).padStart(4, "0")}`;
+//     });
+//   }
+
+//   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+//     e.preventDefault();
+
+//     if (!userProfile || !canSubmitBudgetRequest) {
+//       toast({
+//         title: "Permission denied",
+//         description: "Only Admin users cannot create Budget Requests.",
+//         variant: "destructive",
+//       });
+//       return;
+//     }
+
+//     try {
+//       setLoading(true);
+
+//       const lineItemsForSave = normalizeLineItemsForSave(lineItems);
+//       const submittedBy =
+//         (userProfile as any).id ||
+//         (userProfile as any).uid ||
+//         (userProfile as any).userId ||
+//         userProfile.email ||
+//         "";
+//       const submittedByName =
+//         userProfile.displayName ||
+//         (userProfile as any).name ||
+//         userProfile.email ||
+//         "";
+
+//       if (!editingInvoice) {
+//         const requestId = await generateRequestId();
+
+//         await addDoc(collection(db, "Panels", PANEL_ID, "invoiceRequests"), {
+//           requestId,
+//           invoiceType,
+//           estimateId: selectedEstimateId || "",
+//           estimateNumber:
+//             invoiceType === "project" ? selectedEstimateInput : "",
+//           clientName: invoiceType === "project" ? formData.clientName : "",
+//           project: invoiceType === "project" ? formData.project : "",
+//           projectName: invoiceType === "project" ? formData.project : "",
+//           projectCode: invoiceType === "project" ? formData.projectCode : "",
+//           title: formData.title,
+//           lineItems: lineItemsForSave,
+//           items: lineItemsForSave,
+//           totalAmount,
+//           subject,
+//           message,
+
+//           status: "pending_main_admin",
+//           currentApprover: "main_admin",
+
+//           returnedToRole: "",
+//           returnedToRoleLabel: "",
+//           returnedToCreator: false,
+//           needsCreatorRevision: false,
+
+//           submittedAt: serverTimestamp(),
+//           editDate: null,
+//           submittedBy,
+//           createdBy: submittedBy,
+//           submittedByRole: currentUserRole,
+//           submittedByRoleLabel: getRoleLabel(currentUserRole),
+//           submittedByName,
+//           createdByName: submittedByName,
+//           updatedAt: serverTimestamp(),
+//         });
+
+//         toast({ title: "Budget request submitted" });
+//       } else {
+//         await updateDoc(
+//           doc(db, "Panels", PANEL_ID, "invoiceRequests", editingInvoice.id),
+//           {
+//             invoiceType,
+//             estimateId: selectedEstimateId || "",
+//             estimateNumber:
+//               invoiceType === "project" ? selectedEstimateInput : "",
+//             clientName: invoiceType === "project" ? formData.clientName : "",
+//             project: invoiceType === "project" ? formData.project : "",
+//             projectName: invoiceType === "project" ? formData.project : "",
+//             projectCode: invoiceType === "project" ? formData.projectCode : "",
+//             title: formData.title,
+//             lineItems: lineItemsForSave,
+//             items: lineItemsForSave,
+//             totalAmount,
+//             subject,
+//             message,
+
+//             status: "pending_main_admin",
+//             currentApprover: "main_admin",
+//             returnedToRole: "",
+//             returnedToRoleLabel: "",
+//             returnedToCreator: false,
+//             needsCreatorRevision: false,
+
+//             editDate: serverTimestamp(),
+//             updatedAt: serverTimestamp(),
+//           },
+//         );
+
+//         toast({ title: "Budget request resubmitted" });
+//       }
+
+//       onSuccess?.();
+//       resetForm();
+//     } catch (err) {
+//       console.error(err);
+//       toast({
+//         title: "Error",
+//         description: "Failed to submit Budget Request.",
+//         variant: "destructive",
+//       });
+//     } finally {
+//       setLoading(false);
+//     }
+//   }
+
+//   useEffect(() => {
+//     if (!editingInvoice) return;
+
+//     setInvoiceType(editingInvoice.invoiceType || "project");
+//     setSelectedEstimateId(editingInvoice.estimateId || "");
+//     setSelectedEstimateInput(
+//       editingInvoice.estimateNumber || editingInvoice.estimateId || "",
+//     );
+//     setSubject(editingInvoice.subject || "");
+//     setMessage(editingInvoice.message || "");
+
+//     setFormData({
+//       requestId: editingInvoice.requestId || "",
+//       clientName: editingInvoice.clientName || "",
+//       project: editingInvoice.project || editingInvoice.projectName || "",
+//       projectCode: editingInvoice.projectCode || "",
+//       title: editingInvoice.title || "",
+//       comment: editingInvoice.comment || "",
+//     });
+
+//     const sourceItems = editingInvoice.lineItems?.length
+//       ? editingInvoice.lineItems
+//       : editingInvoice.items?.length
+//         ? editingInvoice.items
+//         : [];
+
+//     setLineItems(
+//       sourceItems.length
+//         ? normalizeLineItemsForSave(sourceItems)
+//         : [getEmptyLineItem(1)],
+//     );
+//   }, [editingInvoice]);
+
+//   const tableColumns: Record<TableColumnKey, TableColumnConfig> = {
+//     date: {
+//       label: "Date",
+//       headerClassName: "min-w-[150px] px-3 text-left font-semibold",
+//       headerContentClassName: "justify-start",
+//       cellClassName: "px-3 py-3 align-top",
+//       render: (item) => (
+//         <Popover>
+//           <PopoverTrigger asChild>
+//             <Button
+//               type="button"
+//               variant="outline"
+//               className="h-10 w-[180px] justify-start rounded-xl border-slate-200 bg-white text-left font-normal"
+//             >
+//               <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
+//               {item.date ? format(new Date(item.date), "PPP") : "Pick date"}
+//             </Button>
+//           </PopoverTrigger>
+
+//           <PopoverContent className="w-auto rounded-xl p-0">
+//             <Calendar
+//               mode="single"
+//               selected={item.date ? new Date(item.date) : undefined}
+//               onSelect={(date) =>
+//                 updateLineItem(item.id, "date", date?.toISOString() || "")
+//               }
+//               initialFocus
+//             />
+//           </PopoverContent>
+//         </Popover>
+//       ),
+//     },
+//     service: {
+//       label: "Service",
+//       headerClassName: "min-w-[160px] px-3 text-left font-semibold",
+//       headerContentClassName: "justify-start",
+//       cellClassName: "px-3 py-3 align-top",
+//       render: (item) => (
+//         <Input
+//           className="h-10 rounded-xl border-slate-200 bg-slate-50/60 text-sm"
+//           value={item.service}
+//           onChange={(e) => updateLineItem(item.id, "service", e.target.value)}
+//           placeholder="Service"
+//         />
+//       ),
+//     },
+//     description: {
+//       label: "Description",
+//       headerClassName: "min-w-[240px] px-3 text-left font-semibold",
+//       headerContentClassName: "justify-start",
+//       cellClassName: "px-3 py-3 align-top",
+//       render: (item) => (
+//         <AutoResizeTextarea
+//           value={item.description}
+//           minWidthCh={24}
+//           maxWidthCh={78}
+//           minHeight={40}
+//           maxHeight={160}
+//           placeholder="Enter description"
+//           className="rounded-xl border-slate-200 bg-slate-50/60"
+//           onChange={(e) =>
+//             updateLineItem(item.id, "description", e.target.value)
+//           }
+//         />
+//       ),
+//     },
+//     vendor: {
+//       label: "Vendor",
+//       headerClassName: "min-w-[190px] px-3 text-left font-semibold",
+//       headerContentClassName: "justify-start",
+//       cellClassName: "px-3 py-3 align-top",
+//       render: (item) => (
+//         <>
+//           <Input
+//             list={`vendor-options-${item.id}`}
+//             className="h-10 rounded-xl border-slate-200 bg-slate-50/60 text-sm"
+//             value={item.vendor}
+//             onChange={(e) => updateLineItem(item.id, "vendor", e.target.value)}
+//             placeholder="Enter vendor name"
+//           />
+
+//           <datalist id={`vendor-options-${item.id}`}>
+//             {suppliers.map((supplier) => {
+//               const supplierName = getSupplierDisplayName(supplier);
+//               if (!supplierName) return null;
+
+//               return (
+//                 <option key={supplier.id} value={supplierName}>
+//                   {supplierName}
+//                 </option>
+//               );
+//             })}
+//           </datalist>
+//         </>
+//       ),
+//     },
+//     units: {
+//       label: "Units",
+//       headerClassName: "w-[100px] px-3 text-center font-semibold",
+//       headerContentClassName: "justify-center",
+//       cellClassName: "px-3 py-3 align-top",
+//       render: (item) => (
+//         <Input
+//           type="text"
+//           inputMode="decimal"
+//           className="h-10 rounded-xl border-slate-200 bg-slate-50/60 text-center text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+//           value={item.units}
+//           onChange={(e) =>
+//             updateLineItem(
+//               item.id,
+//               "units",
+//               sanitizeDecimalInput(e.target.value),
+//             )
+//           }
+//           placeholder="0"
+//         />
+//       ),
+//     },
+//     unitRate: {
+//       label: "Rate",
+//       headerClassName: "w-[130px] px-3 text-center font-semibold",
+//       headerContentClassName: "justify-center",
+//       cellClassName: "px-3 py-3 align-top",
+//       render: (item) => (
+//         <AutoResizeTextarea
+//           value={formatNumberWithCommas(item.unitRate)}
+//           inputMode="decimal"
+//           minWidthCh={8}
+//           maxWidthCh={18}
+//           minHeight={40}
+//           maxHeight={90}
+//           className="rounded-xl border-slate-200 bg-slate-50/60 text-center"
+//           placeholder="0"
+//           onKeyDown={(e) => {
+//             if (e.key === "Enter") e.preventDefault();
+//           }}
+//           onChange={(e) =>
+//             updateLineItem(
+//               item.id,
+//               "unitRate",
+//               sanitizeDecimalInput(e.target.value),
+//             )
+//           }
+//         />
+//       ),
+//     },
+//     total: {
+//       label: "Total",
+//       headerClassName: "w-[130px] px-3 text-right font-semibold",
+//       headerContentClassName: "justify-end",
+//       cellClassName:
+//         "px-3 py-4 text-right align-top font-semibold text-slate-950",
+//       render: (item) => formatAmount(item.total),
+//     },
+//     comment: {
+//       label: "Comment",
+//       headerClassName: "min-w-[210px] px-3 text-left font-semibold",
+//       headerContentClassName: "justify-start",
+//       cellClassName: "px-3 py-3 align-top",
+//       render: (item) => (
+//         <Input
+//           className="h-10 rounded-xl border-slate-200 bg-slate-50/60 text-sm"
+//           value={item.comment}
+//           onChange={(e) => updateLineItem(item.id, "comment", e.target.value)}
+//           placeholder="Comment"
+//         />
+//       ),
+//     },
+//     actions: {
+//       label: "Action",
+//       headerClassName: "w-[110px] px-3 text-center font-semibold",
+//       headerContentClassName: "justify-center",
+//       cellClassName: "px-3 py-4 text-center align-top",
+//       render: (item) => (
+//         <div className="flex items-center justify-center gap-1">
+//           <span
+//             role="button"
+//             tabIndex={0}
+//             draggable
+//             onDragStart={(event) => handleRowDragStart(event, item.id)}
+//             onDragEnd={handleRowDragEnd}
+//             className="inline-flex cursor-grab items-center justify-center rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 active:cursor-grabbing"
+//             title="Drag to reorder row"
+//           >
+//             <GripVertical size={18} />
+//           </span>
+
+//           <button
+//             type="button"
+//             onClick={() => removeLineItem(item.id)}
+//             className="rounded-full p-2 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+//             title="Delete row"
+//             disabled={lineItems.length === 1}
+//           >
+//             <Trash2 size={18} />
+//           </button>
+//         </div>
+//       ),
+//     },
+//   };
+
+//   return (
+//     <Dialog
+//       open={isOpen}
+//       onOpenChange={() => {
+//         // Keep the popup open for overlay clicks, Escape, and Radix default close events.
+//         // The modal only closes through the explicit close button below.
+//       }}
+//     >
+//       <DialogContent
+//         className="left-0 top-0 h-[100dvh] max-h-none w-screen max-w-none translate-x-0 translate-y-0 overflow-hidden rounded-none border-0 bg-slate-50 p-0 text-slate-950 shadow-none sm:rounded-none [&>button]:hidden"
+//         onEscapeKeyDown={(event) => event.preventDefault()}
+//         onPointerDownOutside={(event) => event.preventDefault()}
+//         onInteractOutside={(event) => event.preventDefault()}
+//       >
+//         <div className="flex h-full min-h-0 flex-col">
+//           <DialogHeader className="border-b border-slate-200 bg-white/95 px-6 py-4 shadow-sm backdrop-blur">
+//             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+//               <div>
+//                 <div className="mb-2 flex flex-wrap items-center gap-2">
+//                   <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white">
+//                     Budget Request
+//                   </span>
+//                   <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-500">
+//                     {editingInvoice ? "Editing draft" : "New submission"}
+//                   </span>
+//                 </div>
+
+//                 <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">
+//                   {editingInvoice
+//                     ? "Edit Budget Request"
+//                     : "Create Budget Request"}
+//                 </DialogTitle>
+
+//                 <p className="mt-1 text-sm text-slate-500">
+//                   Full-screen workspace with controlled close, clean line items,
+//                   and export-ready request data.
+//                 </p>
+//               </div>
+
+//               <div className="flex flex-wrap items-center gap-2">
+//                 {/* <Button
+//                   type="button"
+//                   variant="outline"
+//                   onClick={handleExportPdf}
+//                   className="gap-2 rounded-full border-slate-200 bg-white shadow-sm hover:bg-slate-50"
+//                 >
+//                   <FileText className="h-4 w-4" />
+//                   Export PDF
+//                 </Button>
+
+//                 <Button
+//                   type="button"
+//                   variant="outline"
+//                   onClick={handleExportExcel}
+//                   className="gap-2 rounded-full border-slate-200 bg-white shadow-sm hover:bg-slate-50"
+//                 >
+//                   <FileSpreadsheet className="h-4 w-4" />
+//                   Export Excel
+//                 </Button> */}
+
+//                 <Button
+//                   type="button"
+//                   variant="ghost"
+//                   size="icon"
+//                   onClick={onClose}
+//                   aria-label="Close budget request popup"
+//                   className="rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+//                 >
+//                   <X className="h-5 w-5" />
+//                 </Button>
+//               </div>
+//             </div>
+//           </DialogHeader>
+
+//           <form
+//             onSubmit={handleSubmit}
+//             className="flex min-h-0 flex-1 flex-col"
+//           >
+//             <div className="flex-1 overflow-y-auto px-6 py-6">
+//               <div className="mx-auto flex w-full flex-col gap-6">
+//                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+//                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+//                       Total Amount
+//                     </p>
+//                     <p className="mt-2 text-2xl font-semibold text-slate-950">
+//                       Rs {formatAmount(totalAmount)}
+//                     </p>
+//                   </div>
+
+//                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+//                       Request Type
+//                     </p>
+//                     <p className="mt-2 text-2xl font-semibold capitalize text-slate-950">
+//                       {invoiceType}
+//                     </p>
+//                   </div>
+
+//                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+//                       Service Rows
+//                     </p>
+//                     <p className="mt-2 text-2xl font-semibold text-slate-950">
+//                       {lineItems.length}
+//                     </p>
+//                   </div>
+//                 </div>
+
+//                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//                   <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+//                     <div>
+//                       <h3 className="text-base font-semibold text-slate-950">
+//                         Request Details
+//                       </h3>
+//                       <p className="text-sm text-slate-500">
+//                         Select the request mode and fill the required details.
+//                       </p>
+//                     </div>
+
+//                     <div className="inline-flex w-fit rounded-full bg-slate-100 p-1">
+//                       <Button
+//                         type="button"
+//                         variant={
+//                           invoiceType === "general" ? "default" : "ghost"
+//                         }
+//                         onClick={() => setInvoiceType("general")}
+//                         className="rounded-full px-5"
+//                       >
+//                         General
+//                       </Button>
+
+//                       <Button
+//                         type="button"
+//                         variant={
+//                           invoiceType === "project" ? "default" : "ghost"
+//                         }
+//                         onClick={() => setInvoiceType("project")}
+//                         className="rounded-full px-5"
+//                       >
+//                         Project
+//                       </Button>
+//                     </div>
+//                   </div>
+
+//                   {invoiceType === "general" && (
+//                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+//                       <div className="space-y-2">
+//                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                           Title *
+//                         </Label>
+//                         <Input
+//                           value={formData.title}
+//                           onChange={(e) =>
+//                             setFormData({ ...formData, title: e.target.value })
+//                           }
+//                           placeholder="Enter request title"
+//                           required
+//                           className="h-11 rounded-xl border-slate-200 bg-slate-50/60"
+//                         />
+//                       </div>
+
+//                       <div className="space-y-2">
+//                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                           Subject
+//                         </Label>
+//                         <Input
+//                           value={subject}
+//                           onChange={(e) => setSubject(e.target.value)}
+//                           placeholder="Enter request subject"
+//                           className="h-11 rounded-xl border-slate-200 bg-slate-50/60"
+//                         />
+//                       </div>
+
+//                       <div className="space-y-2 md:col-span-2">
+//                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                           Message
+//                         </Label>
+//                         <Textarea
+//                           value={message}
+//                           onChange={(e) => setMessage(e.target.value)}
+//                           placeholder="Enter request message"
+//                           rows={4}
+//                           className="rounded-xl border-slate-200 bg-slate-50/60"
+//                         />
+//                       </div>
+//                     </div>
+//                   )}
+
+//                   {invoiceType === "project" && (
+//                     <div className="space-y-4">
+//                       <div className="space-y-2">
+//                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                           Estimate No *
+//                         </Label>
+//                         <Input
+//                           list="estimate-options"
+//                           value={selectedEstimateInput}
+//                           onChange={(e) => handleEstimateSelect(e.target.value)}
+//                           placeholder="Select or type estimate number"
+//                           required
+//                           className="h-11 rounded-xl border-slate-200 bg-slate-50/60"
+//                         />
+
+//                         <datalist id="estimate-options">
+//                           {estimates.map((e) => (
+//                             <option
+//                               key={e.id}
+//                               value={getEstimateDisplayNo(e)}
+//                             />
+//                           ))}
+//                         </datalist>
+//                       </div>
+
+//                       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+//                         <div className="space-y-2">
+//                           <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                             Client Name
+//                           </Label>
+//                           <Input
+//                             value={formData.clientName}
+//                             readOnly
+//                             className="h-11 rounded-xl border-slate-200 bg-slate-100 text-slate-600"
+//                             placeholder="Auto-filled from estimate"
+//                           />
+//                         </div>
+
+//                         <div className="space-y-2">
+//                           <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                             Subject
+//                           </Label>
+//                           <Input
+//                             value={formData.title}
+//                             readOnly
+//                             className="h-11 rounded-xl border-slate-200 bg-slate-100 text-slate-600"
+//                             placeholder="Auto-filled from estimate"
+//                           />
+//                         </div>
+
+//                         <div className="space-y-2">
+//                           <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                             Project
+//                           </Label>
+//                           <Input
+//                             value={formData.project}
+//                             readOnly
+//                             className="h-11 rounded-xl border-slate-200 bg-slate-100 text-slate-600"
+//                             placeholder="Auto-filled from estimate"
+//                           />
+//                         </div>
+
+//                         <div className="space-y-2">
+//                           <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                             Project Code *
+//                           </Label>
+//                           <Input
+//                             value={formData.projectCode}
+//                             onChange={(e) =>
+//                               setFormData({
+//                                 ...formData,
+//                                 projectCode: e.target.value,
+//                               })
+//                             }
+//                             placeholder="Auto-filled from estimate"
+//                             required
+//                             className="h-11 rounded-xl border-slate-200 bg-slate-50/60"
+//                           />
+//                         </div>
+//                       </div>
+//                     </div>
+//                   )}
+//                 </section>
+
+//                 <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+//                   <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
+//                     <div>
+//                       <h3 className="text-base font-semibold text-slate-950">
+//                         Services & Costing
+//                       </h3>
+//                       <p className="text-sm text-slate-500">
+//                         Add each service row with vendor, units, rate, and
+//                         comments.
+//                       </p>
+//                     </div>
+
+//                     <Button
+//                       type="button"
+//                       onClick={addLineItem}
+//                       variant="outline"
+//                       className="gap-2 rounded-full border-slate-200 bg-white shadow-sm hover:bg-slate-50"
+//                     >
+//                       <Plus className="h-4 w-4" />
+//                       Add Service Row
+//                     </Button>
+//                   </div>
+
+//                   <div className="overflow-auto">
+//                     <table className="w-full min-w-[1250px] border-collapse text-sm">
+//                       <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+//                         <tr className="h-12 border-b border-slate-200">
+//                           {DEFAULT_TABLE_COLUMN_ORDER.map((columnKey) => {
+//                             const column = tableColumns[columnKey];
+
+//                             return (
+//                               <th
+//                                 key={columnKey}
+//                                 scope="col"
+//                                 className={column.headerClassName}
+//                               >
+//                                 <span
+//                                   className={`flex items-center gap-1.5 ${column.headerContentClassName}`}
+//                                 >
+//                                   <span>{column.label}</span>
+//                                 </span>
+//                               </th>
+//                             );
+//                           })}
+//                         </tr>
+//                       </thead>
+
+//                       <tbody>
+//                         {lineItems.map((item) => {
+//                           const isDragging = draggedRowId === item.id;
+//                           const isDropTarget =
+//                             dragOverRowId === item.id &&
+//                             draggedRowId !== item.id;
+
+//                           return (
+//                             <tr
+//                               key={item.id}
+//                               onDragOver={(event) =>
+//                                 handleRowDragOver(event, item.id)
+//                               }
+//                               onDragLeave={() =>
+//                                 setDragOverRowId((current) =>
+//                                   current === item.id ? null : current,
+//                                 )
+//                               }
+//                               onDrop={(event) => handleRowDrop(event, item.id)}
+//                               className={`border-b border-slate-100 transition-colors hover:bg-slate-50/70 ${
+//                                 isDragging ? "opacity-60" : ""
+//                               } ${
+//                                 isDropTarget
+//                                   ? "bg-blue-50 ring-1 ring-inset ring-blue-200"
+//                                   : ""
+//                               }`}
+//                             >
+//                               {DEFAULT_TABLE_COLUMN_ORDER.map((columnKey) => {
+//                                 const column = tableColumns[columnKey];
+
+//                                 return (
+//                                   <td
+//                                     key={`${item.id}-${columnKey}`}
+//                                     className={column.cellClassName}
+//                                   >
+//                                     {column.render(item)}
+//                                   </td>
+//                                 );
+//                               })}
+//                             </tr>
+//                           );
+//                         })}
+//                       </tbody>
+//                     </table>
+//                   </div>
+//                 </section>
+//               </div>
+//             </div>
+
+//             <div className="border-t border-slate-200 bg-white px-6 py-4 shadow-[0_-8px_30px_rgba(15,23,42,0.04)]">
+//               <div className="mx-auto flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
+//                 <div>
+//                   <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+//                     Request Total
+//                   </p>
+//                   <p className="text-xl font-semibold text-slate-950">
+//                     Rs {formatAmount(totalAmount)}
+//                   </p>
+//                 </div>
+
+//                 <div className="flex flex-wrap items-center gap-2">
+//                   <Button
+//                     type="button"
+//                     variant="outline"
+//                     onClick={handleExportPdf}
+//                     className="gap-2 rounded-full border-slate-200 bg-white"
+//                   >
+//                     <FileText className="h-4 w-4" />
+//                     PDF
+//                   </Button>
+
+//                   <Button
+//                     type="button"
+//                     variant="outline"
+//                     onClick={handleExportExcel}
+//                     className="gap-2 rounded-full border-slate-200 bg-white"
+//                   >
+//                     <FileSpreadsheet className="h-4 w-4" />
+//                     Excel
+//                   </Button>
+
+//                   <Button
+//                     type="submit"
+//                     disabled={loading}
+//                     className="rounded-full px-7"
+//                   >
+//                     {loading
+//                       ? "Submitting..."
+//                       : editingInvoice
+//                         ? "Update & Resubmit"
+//                         : "Submit Request"}
+//                   </Button>
+//                 </div>
+//               </div>
+//             </div>
+//           </form>
+//         </div>
+//       </DialogContent>
+//     </Dialog>
+//   );
+// }
+
+// import {
+//   useEffect,
+//   useRef,
+//   useState,
+//   type DragEvent,
+//   type FormEvent,
+//   type ReactNode,
+//   type TextareaHTMLAttributes,
+// } from "react";
+// import { useAuth } from "@/contexts/AuthContext";
+// import {
+//   Trash2,
+//   CalendarIcon,
+//   X,
+//   FileText,
+//   FileSpreadsheet,
+//   GripVertical,
+//   Plus,
+// } from "lucide-react";
+// import {
+//   collection,
+//   addDoc,
+//   serverTimestamp,
+//   doc,
+//   updateDoc,
+//   runTransaction,
+//   getDocs,
+// } from "firebase/firestore";
+// import { db } from "@/lib/firebase";
+// import {
+//   Dialog,
+//   DialogContent,
+//   DialogHeader,
+//   DialogTitle,
+// } from "@/components/ui/dialog";
+// import { Button } from "@/components/ui/button";
+// import { Input } from "@/components/ui/input";
+// import { Label } from "@/components/ui/label";
+// import { Textarea } from "@/components/ui/textarea";
+// import { useToast } from "@/hooks/use-toast";
+// import { Calendar } from "@/components/ui/calendar";
+// import {
+//   Popover,
+//   PopoverContent,
+//   PopoverTrigger,
+// } from "@/components/ui/popover";
+// import { format } from "date-fns";
+// import jsPDF from "jspdf";
+// import autoTable from "jspdf-autotable";
+// import * as XLSX from "xlsx";
+
+// const PANEL_ID = "IEDGE-SYSTEM";
+
+// type InvoiceType = "general" | "project" | "asset";
+
+// type LineItem = {
+//   id: number;
+//   date: string;
+//   service: string;
+//   description: string;
+//   vendor: string;
+//   units: string;
+//   unitRate: string;
+//   total: number;
+//   comment: string;
+// };
+
+// type TableColumnKey =
+//   | "date"
+//   | "service"
+//   | "description"
+//   | "vendor"
+//   | "units"
+//   | "unitRate"
+//   | "total"
+//   | "comment"
+//   | "actions";
+
+// type TableColumnConfig = {
+//   label: string;
+//   headerClassName: string;
+//   headerContentClassName: string;
+//   cellClassName: string;
+//   render: (item: LineItem) => ReactNode;
+// };
+
+// const DEFAULT_TABLE_COLUMN_ORDER: TableColumnKey[] = [
+//   "date",
+//   "service",
+//   "description",
+//   "vendor",
+//   "units",
+//   "unitRate",
+//   "total",
+//   "comment",
+//   "actions",
+// ];
+
+// type BudgetRequestModalProps = {
+//   isOpen: boolean;
+//   onClose: () => void;
+//   onSuccess?: () => void;
+//   editingInvoice?: any | null;
+// };
+
+// type AutoResizeTextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
+//   minHeight?: number;
+//   maxHeight?: number;
+//   minWidthCh?: number;
+//   maxWidthCh?: number;
+// };
+
+// function parseAmount(value: any): number {
+//   if (value === null || value === undefined || value === "") return 0;
+//   const parsed = Number(String(value).replace(/,/g, ""));
+//   return Number.isFinite(parsed) ? parsed : 0;
+// }
+
+// function formatNumberWithCommas(
+//   value: any,
+//   removeTrailingZeroes = false,
+// ): string {
+//   if (value === null || value === undefined || value === "") return "";
+
+//   const rawValue = String(value).replace(/,/g, "").trim();
+//   if (!rawValue || rawValue === ".") return rawValue;
+
+//   const [integerPart, decimalPart] = rawValue.split(".");
+//   const safeIntegerPart = integerPart || "0";
+//   const formattedInteger = safeIntegerPart.replace(
+//     /\B(?=(\d{3})+(?!\d))/g,
+//     ",",
+//   );
+
+//   if (decimalPart !== undefined) {
+//     const trimmedDecimal = removeTrailingZeroes
+//       ? decimalPart.replace(/0+$/, "")
+//       : decimalPart;
+
+//     if (trimmedDecimal) return `${formattedInteger}.${trimmedDecimal}`;
+
+//     // While typing editable fields, keep a trailing decimal point like "1,000."
+//     // so the user can continue entering decimal digits naturally.
+//     return removeTrailingZeroes ? formattedInteger : `${formattedInteger}.`;
+//   }
+
+//   return formattedInteger;
+// }
+
+// function formatAmount(value: any): string {
+//   const amount = parseAmount(value);
+
+//   return amount.toLocaleString("en-PK", {
+//     minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+//     maximumFractionDigits: 2,
+//   });
+// }
+
+// function sanitizeDecimalInput(value: string) {
+//   let cleanValue = value.replace(/,/g, "").replace(/[^\d.]/g, "");
+
+//   const parts = cleanValue.split(".");
+//   if (parts.length > 2) {
+//     cleanValue = `${parts[0]}.${parts.slice(1).join("")}`;
+//   }
+
+//   return cleanValue;
+// }
+
+// function formatDateForDisplay(value: any) {
+//   if (!value) return "";
+
+//   const date = value instanceof Date ? value : new Date(value);
+//   if (Number.isNaN(date.getTime())) return String(value);
+
+//   return format(date, "dd MMM yyyy");
+// }
+
+// function normalizeInvoiceType(value: any): InvoiceType {
+//   if (value === "general" || value === "project" || value === "asset") {
+//     return value;
+//   }
+
+//   return "project";
+// }
+
+// function getInvoiceTypeLabel(type: InvoiceType) {
+//   if (type === "project") return "Project";
+//   if (type === "asset") return "Asset";
+//   return "General";
+// }
+
+// function getLineItemLabel(type: InvoiceType) {
+//   return type === "asset" ? "Asset" : "Service";
+// }
+
+// function safeExportFileName(value: string) {
+//   return value
+//     .trim()
+//     .replace(/[^a-z0-9-_]+/gi, "-")
+//     .replace(/-+/g, "-")
+//     .replace(/^-|-$/g, "")
+//     .slice(0, 80);
+// }
+
+// function getAutoWidth(value: any, minWidthCh = 10, maxWidthCh = 45) {
+//   const text = String(value || "");
+//   const longestLine = text
+//     .split("\n")
+//     .reduce((longest, line) => Math.max(longest, line.length), 0);
+
+//   return `${Math.min(Math.max(longestLine + 2, minWidthCh), maxWidthCh)}ch`;
+// }
+
+// function AutoResizeTextarea({
+//   value,
+//   onChange,
+//   className = "",
+//   minHeight = 36,
+//   maxHeight = 140,
+//   minWidthCh = 10,
+//   maxWidthCh = 45,
+//   style,
+//   ...props
+// }: AutoResizeTextareaProps) {
+//   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+
+//   function resizeTextarea() {
+//     const el = textareaRef.current;
+//     if (!el) return;
+
+//     el.style.height = "auto";
+
+//     const nextHeight = Math.min(
+//       Math.max(el.scrollHeight, minHeight),
+//       maxHeight,
+//     );
+
+//     el.style.height = `${nextHeight}px`;
+//     el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
+//   }
+
+//   useEffect(() => {
+//     resizeTextarea();
+//   }, [value]);
+
+//   return (
+//     <Textarea
+//       ref={textareaRef}
+//       value={value}
+//       rows={1}
+//       onChange={(e) => {
+//         onChange?.(e);
+//         requestAnimationFrame(resizeTextarea);
+//       }}
+//       className={`resize-none overflow-hidden text-sm leading-5 ${className}`}
+//       style={{
+//         minHeight,
+//         width: getAutoWidth(value, minWidthCh, maxWidthCh),
+//         ...style,
+//       }}
+//       {...props}
+//     />
+//   );
+// }
+
+// function getRoleKey(role: any): string {
+//   return String(role || "")
+//     .toLowerCase()
+//     .trim()
+//     .replace(/[\s-]+/g, "_");
+// }
+
+// function getRoleLabel(role: string) {
+//   const normalizedRole = getRoleKey(role);
+
+//   const roleLabels: Record<string, string> = {
+//     admin: "Admin",
+//     main_admin: "Admin",
+//     super_admin: "Super Admin",
+//     finance_admin: "Finance Admin",
+//     financial_admin: "Finance Admin",
+//     finance: "Finance",
+//     operation: "Operation",
+//     operations: "Operation",
+//     operational_admin: "Operation Admin",
+//     operation_admin: "Operation Admin",
+//     creative: "Creative",
+//     sales: "Sales",
+//   };
+
+//   return (
+//     roleLabels[normalizedRole] ||
+//     normalizedRole
+//       .replace(/_/g, " ")
+//       .replace(/\b\w/g, (letter) => letter.toUpperCase())
+//   );
+// }
+
+// function canRoleCreateBudgetRequest(role: string) {
+//   const roleKey = getRoleKey(role);
+
+//   // Only Admin roles are blocked. Finance and Finance Admin can create requests.
+//   const blockedRoles = ["admin", "main_admin", "super_admin"];
+
+//   return !!roleKey && !blockedRoles.includes(roleKey);
+// }
+
+// export default function InvoiceRequestModal({
+//   isOpen,
+//   onClose,
+//   onSuccess,
+//   editingInvoice = null,
+// }: BudgetRequestModalProps) {
+//   const { userProfile } = useAuth();
+//   const { toast } = useToast();
+
+//   const currentUserRole = getRoleKey(userProfile?.role || "");
+//   const canSubmitBudgetRequest = canRoleCreateBudgetRequest(currentUserRole);
+
+//   const [loading, setLoading] = useState(false);
+//   const [invoiceType, setInvoiceType] = useState<InvoiceType>("general");
+
+//   const [estimates, setEstimates] = useState<any[]>([]);
+//   const [suppliers, setSuppliers] = useState<any[]>([]);
+//   const [selectedEstimateId, setSelectedEstimateId] = useState("");
+//   const [selectedEstimateInput, setSelectedEstimateInput] = useState("");
+//   const [subject, setSubject] = useState("");
+//   const [message, setMessage] = useState("");
+
+//   const [formData, setFormData] = useState({
+//     requestId: "",
+//     clientName: "",
+//     project: "",
+//     projectCode: "",
+//     title: "",
+//     comment: "",
+//   });
+
+//   const [lineItems, setLineItems] = useState<LineItem[]>([
+//     {
+//       id: 1,
+//       date: "",
+//       service: "",
+//       description: "",
+//       vendor: "",
+//       units: "",
+//       unitRate: "",
+//       total: 0,
+//       comment: "",
+//     },
+//   ]);
+//   const [draggedRowId, setDraggedRowId] = useState<number | null>(null);
+//   const [dragOverRowId, setDragOverRowId] = useState<number | null>(null);
+
+//   function getEmptyLineItem(id = 1): LineItem {
+//     return {
+//       id,
+//       date: "",
+//       service: "",
+//       description: "",
+//       vendor: "",
+//       units: "",
+//       unitRate: "",
+//       total: 0,
+//       comment: "",
+//     };
+//   }
+
+//   function resetForm() {
+//     setInvoiceType("general");
+//     setSelectedEstimateId("");
+//     setSelectedEstimateInput("");
+//     setSubject("");
+//     setMessage("");
+//     setFormData({
+//       requestId: "",
+//       clientName: "",
+//       project: "",
+//       projectCode: "",
+//       title: "",
+//       comment: "",
+//     });
+//     setLineItems([getEmptyLineItem(1)]);
+//   }
+
+//   function getSupplierDisplayName(supplier: any) {
+//     return (
+//       supplier?.supplierName ||
+//       supplier?.vendorName ||
+//       supplier?.name ||
+//       supplier?.companyName ||
+//       supplier?.businessName ||
+//       supplier?.title ||
+//       ""
+//     );
+//   }
+
+//   function getEstimateProjectCode(estimate: any) {
+//     return (
+//       estimate?.projectCode ||
+//       estimate?.projectcode ||
+//       estimate?.project_code ||
+//       estimate?.code ||
+//       ""
+//     );
+//   }
+
+//   function getEstimateTitle(estimate: any) {
+//     return estimate?.subject || estimate?.title || "";
+//   }
+
+//   function getEstimateClientName(estimate: any) {
+//     return estimate?.client || estimate?.clientName || "";
+//   }
+
+//   function getEstimateProjectName(estimate: any) {
+//     return (
+//       estimate?.projectOwner || estimate?.project || estimate?.projectName || ""
+//     );
+//   }
+
+//   function getEstimateDisplayNo(estimate: any) {
+//     return (
+//       estimate?.estimateNo || estimate?.estimateNumber || estimate?.id || ""
+//     );
+//   }
+
+//   useEffect(() => {
+//     if (!isOpen || editingInvoice) return;
+//     resetForm();
+//   }, [isOpen, editingInvoice]);
+
+//   useEffect(() => {
+//     if (!isOpen) return;
+
+//     const fetchSuppliers = async () => {
+//       try {
+//         const snap = await getDocs(
+//           collection(db, "Panels", PANEL_ID, "suppliers"),
+//         );
+
+//         const data = snap.docs
+//           .map((d) => ({
+//             id: d.id,
+//             ...d.data(),
+//           }))
+//           .sort((a, b) =>
+//             getSupplierDisplayName(a).localeCompare(getSupplierDisplayName(b)),
+//           );
+
+//         setSuppliers(data);
+//       } catch (error) {
+//         console.error("Failed to fetch suppliers:", error);
+//       }
+//     };
+
+//     fetchSuppliers();
+//   }, [isOpen]);
+
+//   useEffect(() => {
+//     if (!isOpen || invoiceType !== "project") return;
+
+//     const fetchEstimates = async () => {
+//       try {
+//         const snap = await getDocs(
+//           collection(db, "Panels", PANEL_ID, "estimates"),
+//         );
+
+//         setEstimates(
+//           snap.docs.map((d) => ({
+//             id: d.id,
+//             ...d.data(),
+//           })),
+//         );
+//       } catch (error) {
+//         console.error("Failed to fetch estimates:", error);
+//       }
+//     };
+
+//     fetchEstimates();
+//   }, [isOpen, invoiceType]);
+
+//   useEffect(() => {
+//     if (invoiceType !== "project") {
+//       setSelectedEstimateId("");
+//       setSelectedEstimateInput("");
+//       setFormData((prev) => ({
+//         ...prev,
+//         clientName: "",
+//         project: "",
+//         projectCode: "",
+//       }));
+//     }
+//   }, [invoiceType]);
+
+//   useEffect(() => {
+//     if (!selectedEstimateId || !estimates.length) return;
+
+//     const matchedEstimate = estimates.find((e) => e.id === selectedEstimateId);
+//     if (matchedEstimate) {
+//       setSelectedEstimateInput(getEstimateDisplayNo(matchedEstimate));
+//     }
+//   }, [selectedEstimateId, estimates]);
+
+//   function handleEstimateSelect(value: string) {
+//     setSelectedEstimateInput(value);
+
+//     const normalizedValue = value.trim().toLowerCase();
+
+//     const est = estimates.find((e) => {
+//       const displayNo = getEstimateDisplayNo(e).trim().toLowerCase();
+//       return e.id === value || displayNo === normalizedValue;
+//     });
+
+//     if (!est) {
+//       setSelectedEstimateId(value);
+//       setFormData((prev) => ({
+//         ...prev,
+//         clientName: "",
+//         title: "",
+//         project: "",
+//         projectCode: "",
+//       }));
+//       return;
+//     }
+
+//     setSelectedEstimateId(est.id);
+
+//     setFormData((prev) => ({
+//       ...prev,
+//       clientName: getEstimateClientName(est),
+//       title: getEstimateTitle(est),
+//       project: getEstimateProjectName(est),
+//       projectCode: getEstimateProjectCode(est),
+//     }));
+//   }
+
+//   function updateLineItem(id: number, field: keyof LineItem, value: string) {
+//     setLineItems((prev) =>
+//       prev.map((item) => {
+//         if (item.id !== id) return item;
+
+//         const updated = { ...item, [field]: value };
+
+//         const units = parseAmount(updated.units);
+//         const rate = parseAmount(updated.unitRate);
+
+//         updated.total = units * rate;
+
+//         return updated;
+//       }),
+//     );
+//   }
+
+//   function addLineItem() {
+//     setLineItems((prev) => {
+//       const nextId =
+//         prev.length > 0 ? Math.max(...prev.map((item) => item.id || 0)) + 1 : 1;
+
+//       return [...prev, getEmptyLineItem(nextId)];
+//     });
+//   }
+
+//   function removeLineItem(id: number) {
+//     if (lineItems.length > 1) {
+//       setLineItems((prev) => prev.filter((i) => i.id !== id));
+//     }
+//   }
+
+//   function moveLineItemRow(sourceRowId: number, targetRowId: number) {
+//     if (sourceRowId === targetRowId) return;
+
+//     setLineItems((prev) => {
+//       const sourceIndex = prev.findIndex((item) => item.id === sourceRowId);
+//       const targetIndex = prev.findIndex((item) => item.id === targetRowId);
+
+//       if (sourceIndex === -1 || targetIndex === -1) return prev;
+
+//       const nextItems = [...prev];
+//       const [movedItem] = nextItems.splice(sourceIndex, 1);
+//       nextItems.splice(targetIndex, 0, movedItem);
+
+//       return nextItems;
+//     });
+//   }
+
+//   function handleRowDragStart(
+//     event: DragEvent<HTMLSpanElement>,
+//     rowId: number,
+//   ) {
+//     setDraggedRowId(rowId);
+//     event.dataTransfer.effectAllowed = "move";
+//     event.dataTransfer.setData("text/plain", String(rowId));
+//   }
+
+//   function handleRowDragOver(
+//     event: DragEvent<HTMLTableRowElement>,
+//     rowId: number,
+//   ) {
+//     if (draggedRowId === rowId) return;
+
+//     event.preventDefault();
+//     event.dataTransfer.dropEffect = "move";
+//     setDragOverRowId(rowId);
+//   }
+
+//   function handleRowDrop(
+//     event: DragEvent<HTMLTableRowElement>,
+//     targetRowId: number,
+//   ) {
+//     event.preventDefault();
+
+//     const sourceRowId =
+//       draggedRowId ?? Number(event.dataTransfer.getData("text/plain"));
+
+//     if (Number.isFinite(sourceRowId)) {
+//       moveLineItemRow(sourceRowId, targetRowId);
+//     }
+
+//     setDraggedRowId(null);
+//     setDragOverRowId(null);
+//   }
+
+//   function handleRowDragEnd() {
+//     setDraggedRowId(null);
+//     setDragOverRowId(null);
+//   }
+
+//   function normalizeLineItemsForSave(items: any[]): LineItem[] {
+//     return items.map((item, index) => {
+//       const unitsValue =
+//         item.units ?? item.unit ?? item.quantity ?? item.qty ?? "";
+
+//       const unitRateValue = item.unitRate ?? item.rate ?? item.price ?? "";
+
+//       const units = parseAmount(unitsValue);
+//       const unitRate = parseAmount(unitRateValue);
+//       const savedTotal = parseAmount(item.total);
+
+//       return {
+//         id: item.id || index + 1,
+//         date: item.date || "",
+//         service: item.service || "",
+//         description: item.description || "",
+//         vendor: item.vendor || "",
+//         units: String(unitsValue),
+//         unitRate: String(unitRateValue),
+//         total: savedTotal || units * unitRate,
+//         comment: item.comment || "",
+//       };
+//     });
+//   }
+
+//   const totalAmount = lineItems.reduce(
+//     (sum, item) => sum + parseAmount(item.total),
+//     0,
+//   );
+
+//   function getRequestNumber() {
+//     return formData.requestId || editingInvoice?.requestId || "DRAFT";
+//   }
+
+//   function getRequestTitle() {
+//     return formData.title || subject || "Budget Request";
+//   }
+
+//   function getExportFileName(extension: "pdf" | "xlsx") {
+//     const baseName = safeExportFileName(
+//       `${getRequestNumber()}-${getRequestTitle()}`,
+//     );
+
+//     return `${baseName || "budget-request"}.${extension}`;
+//   }
+
+//   function getExportMetaRows() {
+//     return [
+//       ["Request ID", getRequestNumber()],
+//       ["Request Type", getInvoiceTypeLabel(invoiceType)],
+//       ["Title", getRequestTitle()],
+//       ["Subject", subject || formData.title || "-"],
+//       [
+//         "Estimate No",
+//         invoiceType === "project" ? selectedEstimateInput || "-" : "-",
+//       ],
+//       ["Client", invoiceType === "project" ? formData.clientName || "-" : "-"],
+//       ["Project", invoiceType === "project" ? formData.project || "-" : "-"],
+//       [
+//         "Project Code",
+//         invoiceType === "project" ? formData.projectCode || "-" : "-",
+//       ],
+//       [
+//         "Prepared By",
+//         userProfile?.displayName ||
+//           (userProfile as any)?.name ||
+//           userProfile?.email ||
+//           "-",
+//       ],
+//       ["Prepared On", formatDateForDisplay(new Date())],
+//       ["Total", `Rs ${formatAmount(totalAmount)}`],
+//     ];
+//   }
+
+//   function handleExportPdf() {
+//     try {
+//       const exportItems = normalizeLineItemsForSave(lineItems);
+//       const doc = new jsPDF({
+//         orientation: "landscape",
+//         unit: "pt",
+//         format: "a4",
+//       });
+//       const pageWidth = doc.internal.pageSize.getWidth();
+//       const metaRows = getExportMetaRows();
+
+//       doc.setProperties({ title: `Budget Request - ${getRequestNumber()}` });
+//       doc.setFont("helvetica", "bold");
+//       doc.setFontSize(22);
+//       doc.text("Budget Request", 40, 44);
+
+//       doc.setFont("helvetica", "normal");
+//       doc.setFontSize(10);
+//       doc.setTextColor(90);
+//       doc.text(
+//         `Generated ${formatDateForDisplay(new Date())}`,
+//         pageWidth - 40,
+//         44,
+//         {
+//           align: "right",
+//         },
+//       );
+
+//       doc.setTextColor(30);
+//       metaRows.forEach(([label, value], index) => {
+//         const column = index % 3;
+//         const row = Math.floor(index / 3);
+//         const x = 40 + column * 260;
+//         const y = 78 + row * 34;
+
+//         doc.setFont("helvetica", "bold");
+//         doc.setFontSize(8);
+//         doc.setTextColor(100);
+//         doc.text(label, x, y);
+
+//         doc.setFont("helvetica", "normal");
+//         doc.setFontSize(10);
+//         doc.setTextColor(25);
+//         doc.text(String(value || "-"), x, y + 14, { maxWidth: 220 });
+//       });
+
+//       autoTable(doc, {
+//         startY: 220,
+//         head: [
+//           [
+//             "#",
+//             "Date",
+//             getLineItemLabel(invoiceType),
+//             "Description",
+//             "Vendor",
+//             "Units",
+//             "Rate",
+//             "Total",
+//             "Comment",
+//           ],
+//         ],
+//         body: exportItems.map((item, index) => [
+//           String(index + 1),
+//           formatDateForDisplay(item.date) || "-",
+//           item.service || "-",
+//           item.description || "-",
+//           item.vendor || "-",
+//           item.units || "0",
+//           formatAmount(item.unitRate),
+//           formatAmount(item.total),
+//           item.comment || "-",
+//         ]),
+//         foot: [
+//           [
+//             "",
+//             "",
+//             "",
+//             "",
+//             "",
+//             "",
+//             "Total",
+//             `Rs ${formatAmount(totalAmount)}`,
+//             "",
+//           ],
+//         ],
+//         styles: {
+//           font: "helvetica",
+//           fontSize: 8,
+//           cellPadding: 5,
+//           lineColor: [229, 231, 235],
+//           lineWidth: 0.5,
+//           overflow: "linebreak",
+//           valign: "top",
+//         },
+//         headStyles: {
+//           fillColor: [15, 23, 42],
+//           textColor: [255, 255, 255],
+//           fontStyle: "bold",
+//         },
+//         footStyles: {
+//           fillColor: [248, 250, 252],
+//           textColor: [15, 23, 42],
+//           fontStyle: "bold",
+//         },
+//         columnStyles: {
+//           0: { cellWidth: 24, halign: "center" },
+//           1: { cellWidth: 70 },
+//           2: { cellWidth: 90 },
+//           3: { cellWidth: 150 },
+//           4: { cellWidth: 100 },
+//           5: { cellWidth: 45, halign: "right" },
+//           6: { cellWidth: 65, halign: "right" },
+//           7: { cellWidth: 70, halign: "right" },
+//           8: { cellWidth: 120 },
+//         },
+//         margin: { left: 40, right: 40 },
+//       });
+
+//       const lastTableY = (doc as any).lastAutoTable?.finalY || 220;
+//       if (message && lastTableY < doc.internal.pageSize.getHeight() - 70) {
+//         doc.setFont("helvetica", "bold");
+//         doc.setFontSize(9);
+//         doc.text("Message", 40, lastTableY + 28);
+//         doc.setFont("helvetica", "normal");
+//         doc.setFontSize(9);
+//         doc.text(message, 40, lastTableY + 44, { maxWidth: pageWidth - 80 });
+//       }
+
+//       doc.save(getExportFileName("pdf"));
+//       toast({ title: "PDF exported" });
+//     } catch (error) {
+//       console.error("Failed to export PDF:", error);
+//       toast({
+//         title: "Export failed",
+//         description: "Could not export the Budget Request PDF.",
+//         variant: "destructive",
+//       });
+//     }
+//   }
+
+//   function handleExportExcel() {
+//     try {
+//       const exportItems = normalizeLineItemsForSave(lineItems);
+//       const rows: Array<Array<string | number>> = [
+//         ["Budget Request"],
+//         [],
+//         ...getExportMetaRows(),
+//         [],
+//         ["Line Items"],
+//         [
+//           "#",
+//           "Date",
+//           getLineItemLabel(invoiceType),
+//           "Description",
+//           "Vendor",
+//           "Units",
+//           "Rate",
+//           "Total",
+//           "Comment",
+//         ],
+//         ...exportItems.map((item, index) => [
+//           index + 1,
+//           formatDateForDisplay(item.date),
+//           item.service,
+//           item.description,
+//           item.vendor,
+//           parseAmount(item.units),
+//           parseAmount(item.unitRate),
+//           parseAmount(item.total),
+//           item.comment,
+//         ]),
+//         ["", "", "", "", "", "", "Total", totalAmount, ""],
+//       ];
+
+//       if (message) {
+//         rows.push([], ["Message", message]);
+//       }
+
+//       const worksheet = XLSX.utils.aoa_to_sheet(rows);
+//       worksheet["!cols"] = [
+//         { wch: 6 },
+//         { wch: 14 },
+//         { wch: 24 },
+//         { wch: 36 },
+//         { wch: 24 },
+//         { wch: 10 },
+//         { wch: 14 },
+//         { wch: 14 },
+//         { wch: 28 },
+//       ];
+
+//       const workbook = XLSX.utils.book_new();
+//       XLSX.utils.book_append_sheet(workbook, worksheet, "Budget Request");
+//       XLSX.writeFile(workbook, getExportFileName("xlsx"));
+
+//       toast({ title: "Excel exported" });
+//     } catch (error) {
+//       console.error("Failed to export Excel:", error);
+//       toast({
+//         title: "Export failed",
+//         description: "Could not export the Budget Request Excel file.",
+//         variant: "destructive",
+//       });
+//     }
+//   }
+
+//   async function generateRequestId() {
+//     const counterRef = doc(
+//       db,
+//       "Panels",
+//       PANEL_ID,
+//       "counters",
+//       "invoiceRequests",
+//     );
+
+//     return await runTransaction(db, async (transaction) => {
+//       const snap = await transaction.get(counterRef);
+
+//       let count = 1;
+
+//       if (!snap.exists()) {
+//         transaction.set(counterRef, { count: 1 });
+//       } else {
+//         count = (snap.data().count || 0) + 1;
+//         transaction.update(counterRef, { count });
+//       }
+
+//       const year = new Date().getFullYear();
+//       return `PR-${year}-${String(count).padStart(4, "0")}`;
+//     });
+//   }
+
+//   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+//     e.preventDefault();
+
+//     if (!userProfile || !canSubmitBudgetRequest) {
+//       toast({
+//         title: "Permission denied",
+//         description: "Only Admin users cannot create Budget Requests.",
+//         variant: "destructive",
+//       });
+//       return;
+//     }
+
+//     try {
+//       setLoading(true);
+
+//       const lineItemsForSave = normalizeLineItemsForSave(lineItems);
+//       const submittedBy =
+//         (userProfile as any).id ||
+//         (userProfile as any).uid ||
+//         (userProfile as any).userId ||
+//         userProfile.email ||
+//         "";
+//       const submittedByName =
+//         userProfile.displayName ||
+//         (userProfile as any).name ||
+//         userProfile.email ||
+//         "";
+
+//       if (!editingInvoice) {
+//         const requestId = await generateRequestId();
+
+//         await addDoc(collection(db, "Panels", PANEL_ID, "invoiceRequests"), {
+//           requestId,
+//           invoiceType,
+//           estimateId: selectedEstimateId || "",
+//           estimateNumber:
+//             invoiceType === "project" ? selectedEstimateInput : "",
+//           clientName: invoiceType === "project" ? formData.clientName : "",
+//           project: invoiceType === "project" ? formData.project : "",
+//           projectName: invoiceType === "project" ? formData.project : "",
+//           projectCode: invoiceType === "project" ? formData.projectCode : "",
+//           title: formData.title,
+//           lineItems: lineItemsForSave,
+//           items: lineItemsForSave,
+//           totalAmount,
+//           subject,
+//           message,
+
+//           status: "pending_main_admin",
+//           currentApprover: "main_admin",
+
+//           returnedToRole: "",
+//           returnedToRoleLabel: "",
+//           returnedToCreator: false,
+//           needsCreatorRevision: false,
+
+//           submittedAt: serverTimestamp(),
+//           editDate: null,
+//           submittedBy,
+//           createdBy: submittedBy,
+//           submittedByRole: currentUserRole,
+//           submittedByRoleLabel: getRoleLabel(currentUserRole),
+//           submittedByName,
+//           createdByName: submittedByName,
+//           updatedAt: serverTimestamp(),
+//         });
+
+//         toast({ title: "Budget request submitted" });
+//       } else {
+//         await updateDoc(
+//           doc(db, "Panels", PANEL_ID, "invoiceRequests", editingInvoice.id),
+//           {
+//             invoiceType,
+//             estimateId: selectedEstimateId || "",
+//             estimateNumber:
+//               invoiceType === "project" ? selectedEstimateInput : "",
+//             clientName: invoiceType === "project" ? formData.clientName : "",
+//             project: invoiceType === "project" ? formData.project : "",
+//             projectName: invoiceType === "project" ? formData.project : "",
+//             projectCode: invoiceType === "project" ? formData.projectCode : "",
+//             title: formData.title,
+//             lineItems: lineItemsForSave,
+//             items: lineItemsForSave,
+//             totalAmount,
+//             subject,
+//             message,
+
+//             status: "pending_main_admin",
+//             currentApprover: "main_admin",
+//             returnedToRole: "",
+//             returnedToRoleLabel: "",
+//             returnedToCreator: false,
+//             needsCreatorRevision: false,
+
+//             editDate: serverTimestamp(),
+//             updatedAt: serverTimestamp(),
+//           },
+//         );
+
+//         toast({ title: "Budget request resubmitted" });
+//       }
+
+//       onSuccess?.();
+//       resetForm();
+//     } catch (err) {
+//       console.error(err);
+//       toast({
+//         title: "Error",
+//         description: "Failed to submit Budget Request.",
+//         variant: "destructive",
+//       });
+//     } finally {
+//       setLoading(false);
+//     }
+//   }
+
+//   useEffect(() => {
+//     if (!editingInvoice) return;
+
+//     setInvoiceType(normalizeInvoiceType(editingInvoice.invoiceType));
+//     setSelectedEstimateId(editingInvoice.estimateId || "");
+//     setSelectedEstimateInput(
+//       editingInvoice.estimateNumber || editingInvoice.estimateId || "",
+//     );
+//     setSubject(editingInvoice.subject || "");
+//     setMessage(editingInvoice.message || "");
+
+//     setFormData({
+//       requestId: editingInvoice.requestId || "",
+//       clientName: editingInvoice.clientName || "",
+//       project: editingInvoice.project || editingInvoice.projectName || "",
+//       projectCode: editingInvoice.projectCode || "",
+//       title: editingInvoice.title || "",
+//       comment: editingInvoice.comment || "",
+//     });
+
+//     const sourceItems = editingInvoice.lineItems?.length
+//       ? editingInvoice.lineItems
+//       : editingInvoice.items?.length
+//         ? editingInvoice.items
+//         : [];
+
+//     setLineItems(
+//       sourceItems.length
+//         ? normalizeLineItemsForSave(sourceItems)
+//         : [getEmptyLineItem(1)],
+//     );
+//   }, [editingInvoice]);
+
+//   const tableColumns: Record<TableColumnKey, TableColumnConfig> = {
+//     date: {
+//       label: "Date",
+//       headerClassName: "min-w-[150px] px-3 text-left font-semibold",
+//       headerContentClassName: "justify-start",
+//       cellClassName: "px-3 py-3 align-top",
+//       render: (item) => (
+//         <Popover>
+//           <PopoverTrigger asChild>
+//             <Button
+//               type="button"
+//               variant="outline"
+//               className="h-10 w-[180px] justify-start rounded-xl border-slate-200 bg-white text-left font-normal"
+//             >
+//               <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
+//               {item.date ? format(new Date(item.date), "PPP") : "Pick date"}
+//             </Button>
+//           </PopoverTrigger>
+
+//           <PopoverContent className="w-auto rounded-xl p-0">
+//             <Calendar
+//               mode="single"
+//               selected={item.date ? new Date(item.date) : undefined}
+//               onSelect={(date) =>
+//                 updateLineItem(item.id, "date", date?.toISOString() || "")
+//               }
+//               initialFocus
+//             />
+//           </PopoverContent>
+//         </Popover>
+//       ),
+//     },
+//     service: {
+//       label: getLineItemLabel(invoiceType),
+//       headerClassName: "min-w-[160px] px-3 text-left font-semibold",
+//       headerContentClassName: "justify-start",
+//       cellClassName: "px-3 py-3 align-top",
+//       render: (item) => (
+//         <Input
+//           className="h-10 rounded-xl border-slate-200 bg-slate-50/60 text-sm"
+//           value={item.service}
+//           onChange={(e) => updateLineItem(item.id, "service", e.target.value)}
+//           placeholder={invoiceType === "asset" ? "Asset name" : "Service"}
+//         />
+//       ),
+//     },
+//     description: {
+//       label: "Description",
+//       headerClassName: "min-w-[240px] px-3 text-left font-semibold",
+//       headerContentClassName: "justify-start",
+//       cellClassName: "px-3 py-3 align-top",
+//       render: (item) => (
+//         <AutoResizeTextarea
+//           value={item.description}
+//           minWidthCh={24}
+//           maxWidthCh={78}
+//           minHeight={40}
+//           maxHeight={160}
+//           placeholder="Enter description"
+//           className="rounded-xl border-slate-200 bg-slate-50/60"
+//           onChange={(e) =>
+//             updateLineItem(item.id, "description", e.target.value)
+//           }
+//         />
+//       ),
+//     },
+//     vendor: {
+//       label: "Vendor",
+//       headerClassName: "min-w-[190px] px-3 text-left font-semibold",
+//       headerContentClassName: "justify-start",
+//       cellClassName: "px-3 py-3 align-top",
+//       render: (item) => (
+//         <>
+//           <Input
+//             list={`vendor-options-${item.id}`}
+//             className="h-10 rounded-xl border-slate-200 bg-slate-50/60 text-sm"
+//             value={item.vendor}
+//             onChange={(e) => updateLineItem(item.id, "vendor", e.target.value)}
+//             placeholder="Enter vendor name"
+//           />
+
+//           <datalist id={`vendor-options-${item.id}`}>
+//             {suppliers.map((supplier) => {
+//               const supplierName = getSupplierDisplayName(supplier);
+//               if (!supplierName) return null;
+
+//               return (
+//                 <option key={supplier.id} value={supplierName}>
+//                   {supplierName}
+//                 </option>
+//               );
+//             })}
+//           </datalist>
+//         </>
+//       ),
+//     },
+//     units: {
+//       label: "Units",
+//       headerClassName: "w-[100px] px-3 text-center font-semibold",
+//       headerContentClassName: "justify-center",
+//       cellClassName: "px-3 py-3 align-top",
+//       render: (item) => (
+//         <Input
+//           type="text"
+//           inputMode="decimal"
+//           className="h-10 rounded-xl border-slate-200 bg-slate-50/60 text-center text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+//           value={item.units}
+//           onChange={(e) =>
+//             updateLineItem(
+//               item.id,
+//               "units",
+//               sanitizeDecimalInput(e.target.value),
+//             )
+//           }
+//           placeholder="0"
+//         />
+//       ),
+//     },
+//     unitRate: {
+//       label: "Rate",
+//       headerClassName: "w-[130px] px-3 text-center font-semibold",
+//       headerContentClassName: "justify-center",
+//       cellClassName: "px-3 py-3 align-top",
+//       render: (item) => (
+//         <AutoResizeTextarea
+//           value={formatNumberWithCommas(item.unitRate)}
+//           inputMode="decimal"
+//           minWidthCh={8}
+//           maxWidthCh={18}
+//           minHeight={40}
+//           maxHeight={90}
+//           className="rounded-xl border-slate-200 bg-slate-50/60 text-center"
+//           placeholder="0"
+//           onKeyDown={(e) => {
+//             if (e.key === "Enter") e.preventDefault();
+//           }}
+//           onChange={(e) =>
+//             updateLineItem(
+//               item.id,
+//               "unitRate",
+//               sanitizeDecimalInput(e.target.value),
+//             )
+//           }
+//         />
+//       ),
+//     },
+//     total: {
+//       label: "Total",
+//       headerClassName: "w-[130px] px-3 text-right font-semibold",
+//       headerContentClassName: "justify-end",
+//       cellClassName:
+//         "px-3 py-4 text-right align-top font-semibold text-slate-950",
+//       render: (item) => formatAmount(item.total),
+//     },
+//     comment: {
+//       label: "Comment",
+//       headerClassName: "min-w-[210px] px-3 text-left font-semibold",
+//       headerContentClassName: "justify-start",
+//       cellClassName: "px-3 py-3 align-top",
+//       render: (item) => (
+//         <Input
+//           className="h-10 rounded-xl border-slate-200 bg-slate-50/60 text-sm"
+//           value={item.comment}
+//           onChange={(e) => updateLineItem(item.id, "comment", e.target.value)}
+//           placeholder="Comment"
+//         />
+//       ),
+//     },
+//     actions: {
+//       label: "Action",
+//       headerClassName: "w-[110px] px-3 text-center font-semibold",
+//       headerContentClassName: "justify-center",
+//       cellClassName: "px-3 py-4 text-center align-top",
+//       render: (item) => (
+//         <div className="flex items-center justify-center gap-1">
+//           <span
+//             role="button"
+//             tabIndex={0}
+//             draggable
+//             onDragStart={(event) => handleRowDragStart(event, item.id)}
+//             onDragEnd={handleRowDragEnd}
+//             className="inline-flex cursor-grab items-center justify-center rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 active:cursor-grabbing"
+//             title="Drag to reorder row"
+//           >
+//             <GripVertical size={18} />
+//           </span>
+
+//           <button
+//             type="button"
+//             onClick={() => removeLineItem(item.id)}
+//             className="rounded-full p-2 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+//             title="Delete row"
+//             disabled={lineItems.length === 1}
+//           >
+//             <Trash2 size={18} />
+//           </button>
+//         </div>
+//       ),
+//     },
+//   };
+
+//   return (
+//     <Dialog
+//       open={isOpen}
+//       onOpenChange={() => {
+//         // Keep the popup open for overlay clicks, Escape, and Radix default close events.
+//         // The modal only closes through the explicit close button below.
+//       }}
+//     >
+//       <DialogContent
+//         className="left-0 top-0 h-[100dvh] max-h-none w-screen max-w-none translate-x-0 translate-y-0 overflow-hidden rounded-none border-0 bg-slate-50 p-0 text-slate-950 shadow-none sm:rounded-none [&>button]:hidden"
+//         onEscapeKeyDown={(event) => event.preventDefault()}
+//         onPointerDownOutside={(event) => event.preventDefault()}
+//         onInteractOutside={(event) => event.preventDefault()}
+//       >
+//         <div className="flex h-full min-h-0 flex-col">
+//           <DialogHeader className="border-b border-slate-200 bg-white/95 px-6 py-4 shadow-sm backdrop-blur">
+//             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+//               <div>
+//                 <div className="mb-2 flex flex-wrap items-center gap-2">
+//                   <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white">
+//                     Budget Request
+//                   </span>
+//                   <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-500">
+//                     {editingInvoice ? "Editing draft" : "New submission"}
+//                   </span>
+//                 </div>
+
+//                 <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">
+//                   {editingInvoice
+//                     ? "Edit Budget Request"
+//                     : "Create Budget Request"}
+//                 </DialogTitle>
+
+//                 <p className="mt-1 text-sm text-slate-500">
+//                   Full-screen workspace with controlled close, clean line items,
+//                   and export-ready request data.
+//                 </p>
+//               </div>
+
+//               <div className="flex flex-wrap items-center gap-2">
+//                 {/* <Button
+//                   type="button"
+//                   variant="outline"
+//                   onClick={handleExportPdf}
+//                   className="gap-2 rounded-full border-slate-200 bg-white shadow-sm hover:bg-slate-50"
+//                 >
+//                   <FileText className="h-4 w-4" />
+//                   Export PDF
+//                 </Button>
+
+//                 <Button
+//                   type="button"
+//                   variant="outline"
+//                   onClick={handleExportExcel}
+//                   className="gap-2 rounded-full border-slate-200 bg-white shadow-sm hover:bg-slate-50"
+//                 >
+//                   <FileSpreadsheet className="h-4 w-4" />
+//                   Export Excel
+//                 </Button> */}
+
+//                 <Button
+//                   type="button"
+//                   variant="ghost"
+//                   size="icon"
+//                   onClick={onClose}
+//                   aria-label="Close budget request popup"
+//                   className="rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+//                 >
+//                   <X className="h-5 w-5" />
+//                 </Button>
+//               </div>
+//             </div>
+//           </DialogHeader>
+
+//           <form
+//             onSubmit={handleSubmit}
+//             className="flex min-h-0 flex-1 flex-col"
+//           >
+//             <div className="flex-1 overflow-y-auto px-6 py-6">
+//               <div className="mx-auto flex w-full flex-col gap-6">
+//                 <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+//                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+//                       Total Amount
+//                     </p>
+//                     <p className="mt-2 text-2xl font-semibold text-slate-950">
+//                       Rs {formatAmount(totalAmount)}
+//                     </p>
+//                   </div>
+
+//                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+//                       Request Type
+//                     </p>
+//                     <p className="mt-2 text-2xl font-semibold capitalize text-slate-950">
+//                       {getInvoiceTypeLabel(invoiceType)}
+//                     </p>
+//                   </div>
+
+//                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+//                       {invoiceType === "asset" ? "Asset Rows" : "Service Rows"}
+//                     </p>
+//                     <p className="mt-2 text-2xl font-semibold text-slate-950">
+//                       {lineItems.length}
+//                     </p>
+//                   </div>
+//                 </div>
+
+//                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//                   <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+//                     <div>
+//                       <h3 className="text-base font-semibold text-slate-950">
+//                         Request Details
+//                       </h3>
+//                       <p className="text-sm text-slate-500">
+//                         Select the request mode and fill the required details.
+//                       </p>
+//                     </div>
+
+//                     <div className="inline-flex w-fit rounded-full bg-slate-100 p-1">
+//                       <Button
+//                         type="button"
+//                         variant={
+//                           invoiceType === "general" ? "default" : "ghost"
+//                         }
+//                         onClick={() => setInvoiceType("general")}
+//                         className="rounded-full px-5"
+//                       >
+//                         General
+//                       </Button>
+
+//                       <Button
+//                         type="button"
+//                         variant={
+//                           invoiceType === "project" ? "default" : "ghost"
+//                         }
+//                         onClick={() => setInvoiceType("project")}
+//                         className="rounded-full px-5"
+//                       >
+//                         Project
+//                       </Button>
+
+//                       <Button
+//                         type="button"
+//                         variant={invoiceType === "asset" ? "default" : "ghost"}
+//                         onClick={() => setInvoiceType("asset")}
+//                         className="rounded-full px-5"
+//                       >
+//                         Asset
+//                       </Button>
+//                     </div>
+//                   </div>
+
+//                   {invoiceType !== "project" && (
+//                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+//                       <div className="space-y-2">
+//                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                           {invoiceType === "asset" ? "Asset Title *" : "Title *"}
+//                         </Label>
+//                         <Input
+//                           value={formData.title}
+//                           onChange={(e) =>
+//                             setFormData({ ...formData, title: e.target.value })
+//                           }
+//                           placeholder={
+//                             invoiceType === "asset"
+//                               ? "Enter asset request title"
+//                               : "Enter request title"
+//                           }
+//                           required
+//                           className="h-11 rounded-xl border-slate-200 bg-slate-50/60"
+//                         />
+//                       </div>
+
+//                       <div className="space-y-2">
+//                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                           {invoiceType === "asset" ? "Asset Subject" : "Subject"}
+//                         </Label>
+//                         <Input
+//                           value={subject}
+//                           onChange={(e) => setSubject(e.target.value)}
+//                           placeholder={
+//                             invoiceType === "asset"
+//                               ? "Enter asset subject"
+//                               : "Enter request subject"
+//                           }
+//                           className="h-11 rounded-xl border-slate-200 bg-slate-50/60"
+//                         />
+//                       </div>
+
+//                       <div className="space-y-2 md:col-span-2">
+//                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                           {invoiceType === "asset" ? "Asset Details" : "Message"}
+//                         </Label>
+//                         <Textarea
+//                           value={message}
+//                           onChange={(e) => setMessage(e.target.value)}
+//                           placeholder={
+//                             invoiceType === "asset"
+//                               ? "Enter asset details or justification"
+//                               : "Enter request message"
+//                           }
+//                           rows={4}
+//                           className="rounded-xl border-slate-200 bg-slate-50/60"
+//                         />
+//                       </div>
+//                     </div>
+//                   )}
+
+//                   {invoiceType === "project" && (
+//                     <div className="space-y-4">
+//                       <div className="space-y-2">
+//                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                           Estimate No *
+//                         </Label>
+//                         <Input
+//                           list="estimate-options"
+//                           value={selectedEstimateInput}
+//                           onChange={(e) => handleEstimateSelect(e.target.value)}
+//                           placeholder="Select or type estimate number"
+//                           required
+//                           className="h-11 rounded-xl border-slate-200 bg-slate-50/60"
+//                         />
+
+//                         <datalist id="estimate-options">
+//                           {estimates.map((e) => (
+//                             <option
+//                               key={e.id}
+//                               value={getEstimateDisplayNo(e)}
+//                             />
+//                           ))}
+//                         </datalist>
+//                       </div>
+
+//                       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+//                         <div className="space-y-2">
+//                           <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                             Client Name
+//                           </Label>
+//                           <Input
+//                             value={formData.clientName}
+//                             readOnly
+//                             className="h-11 rounded-xl border-slate-200 bg-slate-100 text-slate-600"
+//                             placeholder="Auto-filled from estimate"
+//                           />
+//                         </div>
+
+//                         <div className="space-y-2">
+//                           <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                             Subject
+//                           </Label>
+//                           <Input
+//                             value={formData.title}
+//                             readOnly
+//                             className="h-11 rounded-xl border-slate-200 bg-slate-100 text-slate-600"
+//                             placeholder="Auto-filled from estimate"
+//                           />
+//                         </div>
+
+//                         <div className="space-y-2">
+//                           <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                             Project
+//                           </Label>
+//                           <Input
+//                             value={formData.project}
+//                             readOnly
+//                             className="h-11 rounded-xl border-slate-200 bg-slate-100 text-slate-600"
+//                             placeholder="Auto-filled from estimate"
+//                           />
+//                         </div>
+
+//                         <div className="space-y-2">
+//                           <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                             Project Code *
+//                           </Label>
+//                           <Input
+//                             value={formData.projectCode}
+//                             onChange={(e) =>
+//                               setFormData({
+//                                 ...formData,
+//                                 projectCode: e.target.value,
+//                               })
+//                             }
+//                             placeholder="Auto-filled from estimate"
+//                             required
+//                             className="h-11 rounded-xl border-slate-200 bg-slate-50/60"
+//                           />
+//                         </div>
+//                       </div>
+//                     </div>
+//                   )}
+//                 </section>
+
+//                 <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+//                   <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
+//                     <div>
+//                       <h3 className="text-base font-semibold text-slate-950">
+//                         {invoiceType === "asset"
+//                           ? "Assets & Costing"
+//                           : "Services & Costing"}
+//                       </h3>
+//                       <p className="text-sm text-slate-500">
+//                         {invoiceType === "asset"
+//                           ? "Add each asset with vendor, quantity, rate, and comments."
+//                           : "Add each service row with vendor, units, rate, and comments."}
+//                       </p>
+//                     </div>
+
+//                     <Button
+//                       type="button"
+//                       onClick={addLineItem}
+//                       variant="outline"
+//                       className="gap-2 rounded-full border-slate-200 bg-white shadow-sm hover:bg-slate-50"
+//                     >
+//                       <Plus className="h-4 w-4" />
+//                       {invoiceType === "asset"
+//                         ? "Add Asset Row"
+//                         : "Add Service Row"}
+//                     </Button>
+//                   </div>
+
+//                   <div className="overflow-auto">
+//                     <table className="w-full min-w-[1250px] border-collapse text-sm">
+//                       <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+//                         <tr className="h-12 border-b border-slate-200">
+//                           {DEFAULT_TABLE_COLUMN_ORDER.map((columnKey) => {
+//                             const column = tableColumns[columnKey];
+
+//                             return (
+//                               <th
+//                                 key={columnKey}
+//                                 scope="col"
+//                                 className={column.headerClassName}
+//                               >
+//                                 <span
+//                                   className={`flex items-center gap-1.5 ${column.headerContentClassName}`}
+//                                 >
+//                                   <span>{column.label}</span>
+//                                 </span>
+//                               </th>
+//                             );
+//                           })}
+//                         </tr>
+//                       </thead>
+
+//                       <tbody>
+//                         {lineItems.map((item) => {
+//                           const isDragging = draggedRowId === item.id;
+//                           const isDropTarget =
+//                             dragOverRowId === item.id &&
+//                             draggedRowId !== item.id;
+
+//                           return (
+//                             <tr
+//                               key={item.id}
+//                               onDragOver={(event) =>
+//                                 handleRowDragOver(event, item.id)
+//                               }
+//                               onDragLeave={() =>
+//                                 setDragOverRowId((current) =>
+//                                   current === item.id ? null : current,
+//                                 )
+//                               }
+//                               onDrop={(event) => handleRowDrop(event, item.id)}
+//                               className={`border-b border-slate-100 transition-colors hover:bg-slate-50/70 ${
+//                                 isDragging ? "opacity-60" : ""
+//                               } ${
+//                                 isDropTarget
+//                                   ? "bg-blue-50 ring-1 ring-inset ring-blue-200"
+//                                   : ""
+//                               }`}
+//                             >
+//                               {DEFAULT_TABLE_COLUMN_ORDER.map((columnKey) => {
+//                                 const column = tableColumns[columnKey];
+
+//                                 return (
+//                                   <td
+//                                     key={`${item.id}-${columnKey}`}
+//                                     className={column.cellClassName}
+//                                   >
+//                                     {column.render(item)}
+//                                   </td>
+//                                 );
+//                               })}
+//                             </tr>
+//                           );
+//                         })}
+//                       </tbody>
+//                     </table>
+//                   </div>
+//                 </section>
+//               </div>
+//             </div>
+
+//             <div className="border-t border-slate-200 bg-white px-6 py-4 shadow-[0_-8px_30px_rgba(15,23,42,0.04)]">
+//               <div className="mx-auto flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
+//                 <div>
+//                   <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+//                     Request Total
+//                   </p>
+//                   <p className="text-xl font-semibold text-slate-950">
+//                     Rs {formatAmount(totalAmount)}
+//                   </p>
+//                 </div>
+
+//                 <div className="flex flex-wrap items-center gap-2">
+//                   <Button
+//                     type="button"
+//                     variant="outline"
+//                     onClick={handleExportPdf}
+//                     className="gap-2 rounded-full border-slate-200 bg-white"
+//                   >
+//                     <FileText className="h-4 w-4" />
+//                     PDF
+//                   </Button>
+
+//                   <Button
+//                     type="button"
+//                     variant="outline"
+//                     onClick={handleExportExcel}
+//                     className="gap-2 rounded-full border-slate-200 bg-white"
+//                   >
+//                     <FileSpreadsheet className="h-4 w-4" />
+//                     Excel
+//                   </Button>
+
+//                   <Button
+//                     type="submit"
+//                     disabled={loading}
+//                     className="rounded-full px-7"
+//                   >
+//                     {loading
+//                       ? "Submitting..."
+//                       : editingInvoice
+//                         ? "Update & Resubmit"
+//                         : "Submit Request"}
+//                   </Button>
+//                 </div>
+//               </div>
+//             </div>
+//           </form>
+//         </div>
+//       </DialogContent>
+//     </Dialog>
+//   );
+// }
+
 import {
   useEffect,
   useRef,
@@ -5965,7 +9387,7 @@ import * as XLSX from "xlsx";
 
 const PANEL_ID = "IEDGE-SYSTEM";
 
-type InvoiceType = "general" | "project";
+type InvoiceType = "general" | "project" | "asset";
 
 type LineItem = {
   id: number;
@@ -5973,6 +9395,8 @@ type LineItem = {
   service: string;
   description: string;
   vendor: string;
+  supplierId: string;
+  supplierName: string;
   units: string;
   unitRate: string;
   total: number;
@@ -6088,6 +9512,24 @@ function formatDateForDisplay(value: any) {
   if (Number.isNaN(date.getTime())) return String(value);
 
   return format(date, "dd MMM yyyy");
+}
+
+function normalizeInvoiceType(value: any): InvoiceType {
+  if (value === "general" || value === "project" || value === "asset") {
+    return value;
+  }
+
+  return "project";
+}
+
+function getInvoiceTypeLabel(type: InvoiceType) {
+  if (type === "project") return "Project";
+  if (type === "asset") return "Asset";
+  return "General";
+}
+
+function getLineItemLabel(type: InvoiceType) {
+  return type === "asset" ? "Asset" : "Service";
 }
 
 function safeExportFileName(value: string) {
@@ -6240,6 +9682,8 @@ export default function InvoiceRequestModal({
       service: "",
       description: "",
       vendor: "",
+      supplierId: "",
+      supplierName: "",
       units: "",
       unitRate: "",
       total: 0,
@@ -6256,6 +9700,8 @@ export default function InvoiceRequestModal({
       service: "",
       description: "",
       vendor: "",
+      supplierId: "",
+      supplierName: "",
       units: "",
       unitRate: "",
       total: 0,
@@ -6289,6 +9735,38 @@ export default function InvoiceRequestModal({
       supplier?.businessName ||
       supplier?.title ||
       ""
+    );
+  }
+
+  function normalizeVendorLookup(value: any) {
+    return String(value || "")
+      .trim()
+      .toLowerCase()
+      .replace(/&/g, " and ")
+      .replace(/[^a-z0-9]+/g, " ")
+      .replace(/\s+/g, " ")
+      .trim();
+  }
+
+  function findSupplierByVendorValue(value: any) {
+    const lookup = normalizeVendorLookup(value);
+    if (!lookup) return null;
+
+    return (
+      suppliers.find((supplier) => {
+        const supplierNames = [
+          supplier?.supplierName,
+          supplier?.vendorName,
+          supplier?.name,
+          supplier?.companyName,
+          supplier?.businessName,
+          supplier?.title,
+        ];
+
+        return supplierNames.some(
+          (name) => normalizeVendorLookup(name) === lookup,
+        );
+      }) || null
     );
   }
 
@@ -6378,7 +9856,7 @@ export default function InvoiceRequestModal({
   }, [isOpen, invoiceType]);
 
   useEffect(() => {
-    if (invoiceType === "general") {
+    if (invoiceType !== "project") {
       setSelectedEstimateId("");
       setSelectedEstimateInput("");
       setFormData((prev) => ({
@@ -6438,6 +9916,15 @@ export default function InvoiceRequestModal({
         if (item.id !== id) return item;
 
         const updated = { ...item, [field]: value };
+
+        if (field === "vendor") {
+          const matchedSupplier = findSupplierByVendorValue(value);
+
+          updated.supplierId = matchedSupplier?.id || "";
+          updated.supplierName = matchedSupplier
+            ? getSupplierDisplayName(matchedSupplier)
+            : "";
+        }
 
         const units = parseAmount(updated.units);
         const rate = parseAmount(updated.unitRate);
@@ -6534,12 +10021,26 @@ export default function InvoiceRequestModal({
       const unitRate = parseAmount(unitRateValue);
       const savedTotal = parseAmount(item.total);
 
+      const vendorName =
+        item.vendor || item.vendorName || item.supplierName || "";
+      const matchedSupplier =
+        suppliers.find(
+          (supplier) =>
+            String(supplier?.id || "") ===
+            String(item.supplierId || item.vendorId || ""),
+        ) || findSupplierByVendorValue(vendorName);
+
       return {
         id: item.id || index + 1,
         date: item.date || "",
         service: item.service || "",
         description: item.description || "",
-        vendor: item.vendor || "",
+        vendor: vendorName,
+        supplierId:
+          matchedSupplier?.id || item.supplierId || item.vendorId || "",
+        supplierName: matchedSupplier
+          ? getSupplierDisplayName(matchedSupplier)
+          : item.supplierName || "",
         units: String(unitsValue),
         unitRate: String(unitRateValue),
         total: savedTotal || units * unitRate,
@@ -6572,7 +10073,7 @@ export default function InvoiceRequestModal({
   function getExportMetaRows() {
     return [
       ["Request ID", getRequestNumber()],
-      ["Request Type", invoiceType === "project" ? "Project" : "General"],
+      ["Request Type", getInvoiceTypeLabel(invoiceType)],
       ["Title", getRequestTitle()],
       ["Subject", subject || formData.title || "-"],
       [
@@ -6649,7 +10150,7 @@ export default function InvoiceRequestModal({
           [
             "#",
             "Date",
-            "Service",
+            getLineItemLabel(invoiceType),
             "Description",
             "Vendor",
             "Units",
@@ -6749,7 +10250,7 @@ export default function InvoiceRequestModal({
         [
           "#",
           "Date",
-          "Service",
+          getLineItemLabel(invoiceType),
           "Description",
           "Vendor",
           "Units",
@@ -6948,7 +10449,7 @@ export default function InvoiceRequestModal({
   useEffect(() => {
     if (!editingInvoice) return;
 
-    setInvoiceType(editingInvoice.invoiceType || "project");
+    setInvoiceType(normalizeInvoiceType(editingInvoice.invoiceType));
     setSelectedEstimateId(editingInvoice.estimateId || "");
     setSelectedEstimateInput(
       editingInvoice.estimateNumber || editingInvoice.estimateId || "",
@@ -7011,7 +10512,7 @@ export default function InvoiceRequestModal({
       ),
     },
     service: {
-      label: "Service",
+      label: getLineItemLabel(invoiceType),
       headerClassName: "min-w-[160px] px-3 text-left font-semibold",
       headerContentClassName: "justify-start",
       cellClassName: "px-3 py-3 align-top",
@@ -7020,7 +10521,7 @@ export default function InvoiceRequestModal({
           className="h-10 rounded-xl border-slate-200 bg-slate-50/60 text-sm"
           value={item.service}
           onChange={(e) => updateLineItem(item.id, "service", e.target.value)}
-          placeholder="Service"
+          placeholder={invoiceType === "asset" ? "Asset name" : "Service"}
         />
       ),
     },
@@ -7057,6 +10558,7 @@ export default function InvoiceRequestModal({
             value={item.vendor}
             onChange={(e) => updateLineItem(item.id, "vendor", e.target.value)}
             placeholder="Enter vendor name"
+            required
           />
 
           <datalist id={`vendor-options-${item.id}`}>
@@ -7274,13 +10776,13 @@ export default function InvoiceRequestModal({
                       Request Type
                     </p>
                     <p className="mt-2 text-2xl font-semibold capitalize text-slate-950">
-                      {invoiceType}
+                      {getInvoiceTypeLabel(invoiceType)}
                     </p>
                   </div>
 
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
-                      Service Rows
+                      {invoiceType === "asset" ? "Asset Rows" : "Service Rows"}
                     </p>
                     <p className="mt-2 text-2xl font-semibold text-slate-950">
                       {lineItems.length}
@@ -7321,21 +10823,36 @@ export default function InvoiceRequestModal({
                       >
                         Project
                       </Button>
+
+                      <Button
+                        type="button"
+                        variant={invoiceType === "asset" ? "default" : "ghost"}
+                        onClick={() => setInvoiceType("asset")}
+                        className="rounded-full px-5"
+                      >
+                        Asset
+                      </Button>
                     </div>
                   </div>
 
-                  {invoiceType === "general" && (
+                  {invoiceType !== "project" && (
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div className="space-y-2">
                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Title *
+                          {invoiceType === "asset"
+                            ? "Asset Title *"
+                            : "Title *"}
                         </Label>
                         <Input
                           value={formData.title}
                           onChange={(e) =>
                             setFormData({ ...formData, title: e.target.value })
                           }
-                          placeholder="Enter request title"
+                          placeholder={
+                            invoiceType === "asset"
+                              ? "Enter asset request title"
+                              : "Enter request title"
+                          }
                           required
                           className="h-11 rounded-xl border-slate-200 bg-slate-50/60"
                         />
@@ -7343,24 +10860,36 @@ export default function InvoiceRequestModal({
 
                       <div className="space-y-2">
                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Subject
+                          {invoiceType === "asset"
+                            ? "Asset Subject"
+                            : "Subject"}
                         </Label>
                         <Input
                           value={subject}
                           onChange={(e) => setSubject(e.target.value)}
-                          placeholder="Enter request subject"
+                          placeholder={
+                            invoiceType === "asset"
+                              ? "Enter asset subject"
+                              : "Enter request subject"
+                          }
                           className="h-11 rounded-xl border-slate-200 bg-slate-50/60"
                         />
                       </div>
 
                       <div className="space-y-2 md:col-span-2">
                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          Message
+                          {invoiceType === "asset"
+                            ? "Asset Details"
+                            : "Message"}
                         </Label>
                         <Textarea
                           value={message}
                           onChange={(e) => setMessage(e.target.value)}
-                          placeholder="Enter request message"
+                          placeholder={
+                            invoiceType === "asset"
+                              ? "Enter asset details or justification"
+                              : "Enter request message"
+                          }
                           rows={4}
                           className="rounded-xl border-slate-200 bg-slate-50/60"
                         />
@@ -7456,11 +10985,14 @@ export default function InvoiceRequestModal({
                   <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
                     <div>
                       <h3 className="text-base font-semibold text-slate-950">
-                        Services & Costing
+                        {invoiceType === "asset"
+                          ? "Assets & Costing"
+                          : "Services & Costing"}
                       </h3>
                       <p className="text-sm text-slate-500">
-                        Add each service row with vendor, units, rate, and
-                        comments.
+                        {invoiceType === "asset"
+                          ? "Add each asset with vendor, quantity, rate, and comments."
+                          : "Add each service row with vendor, units, rate, and comments."}
                       </p>
                     </div>
 
@@ -7471,7 +11003,9 @@ export default function InvoiceRequestModal({
                       className="gap-2 rounded-full border-slate-200 bg-white shadow-sm hover:bg-slate-50"
                     >
                       <Plus className="h-4 w-4" />
-                      Add Service Row
+                      {invoiceType === "asset"
+                        ? "Add Asset Row"
+                        : "Add Service Row"}
                     </Button>
                   </div>
 
