@@ -14,7 +14,7 @@ interface RejectionModalProps {
   isOpen: boolean;
   onClose: () => void;
   onConfirm: (comment: string) => void;
-  itemType: "invoice request" | "expense sheet";
+  itemType: "invoice request" | "expense sheet" | "purchase order";
   loading?: boolean;
 }
 
@@ -48,7 +48,8 @@ export default function RejectionModal({
             <span>Reject {itemType}</span>
           </DialogTitle>
           <DialogDescription>
-            Please provide a reason for rejecting this {itemType}. This comment will be visible to everyone.
+            Please provide a reason for rejecting this {itemType}. This comment
+            will be visible to everyone.
           </DialogDescription>
         </DialogHeader>
 
