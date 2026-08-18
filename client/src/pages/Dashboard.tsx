@@ -1,2751 +1,2218 @@
-import {
-  useCallback,
-  useEffect,
-  useMemo,
-  useState,
-  type ReactNode,
-} from "react";
-import {
-  collection,
-  collectionGroup,
-  doc,
-  getDoc,
-  getDocs,
-  onSnapshot,
-  type DocumentData,
-  type QueryDocumentSnapshot,
-} from "firebase/firestore";
+// import { useEffect, useMemo, useState } from "react";
+// import { collection, getDocs } from "firebase/firestore";
+// import { db } from "@/lib/firebase";
+
+// import {
+//   createPaymentAccount,
+//   fetchPaymentAccounts,
+//   updatePaymentAccount,
+// } from "@/lib/payments/paymentAccounts";
+// import { PaymentAccount } from "@/lib/payments/types";
+// import { useToast } from "@/hooks/use-toast";
+
+// import * as XLSX from "xlsx";
+// import jsPDF from "jspdf";
+// import autoTable from "jspdf-autotable";
+
+// import {
+//   BarChart,
+//   Bar,
+//   XAxis,
+//   YAxis,
+//   Tooltip,
+//   ResponsiveContainer,
+//   PieChart,
+//   Pie,
+//   Cell,
+// } from "recharts";
+
+// import { Button } from "@/components/ui/button";
+// import { Input } from "@/components/ui/input";
+// import { Label } from "@/components/ui/label";
+// import { Textarea } from "@/components/ui/textarea";
+// import {
+//   Dialog,
+//   DialogContent,
+//   DialogHeader,
+//   DialogTitle,
+//   DialogTrigger,
+// } from "@/components/ui/dialog";
+
+// type AccountFormData = {
+//   accountName: string;
+//   accountNumber: string;
+//   bankName: string;
+//   iban: string;
+//   swiftCode: string;
+//   branchName: string;
+//   branchCode: string;
+//   currency: string;
+//   openingBalance: string;
+//   notes: string;
+// };
+
+// const emptyForm: AccountFormData = {
+//   accountName: "",
+//   accountNumber: "",
+//   bankName: "",
+//   iban: "",
+//   swiftCode: "",
+//   branchName: "",
+//   branchCode: "",
+//   currency: "PKR",
+//   openingBalance: "",
+//   notes: "",
+// };
+
+// export default function AccountsDashboard() {
+//   const { toast } = useToast();
+
+//   const [payments, setPayments] = useState<any[]>([]);
+//   const [invoices, setInvoices] = useState<any[]>([]);
+//   const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
+
+//   const [startDate, setStartDate] = useState("");
+//   const [endDate, setEndDate] = useState("");
+
+//   const [createModalOpen, setCreateModalOpen] = useState(false);
+//   const [listModalOpen, setListModalOpen] = useState(false);
+//   const [editModalOpen, setEditModalOpen] = useState(false);
+
+//   const [accountLoading, setAccountLoading] = useState(false);
+//   const [editingAccount, setEditingAccount] = useState<PaymentAccount | null>(
+//     null,
+//   );
+//   const [formData, setFormData] = useState<AccountFormData>(emptyForm);
+
+//   useEffect(() => {
+//     fetchData();
+//     loadAccounts();
+//   }, []);
+
+//   const fetchData = async () => {
+//     try {
+//       const paySnap = await getDocs(
+//         collection(db, "Panels", "IEDGE-SYSTEM", "payments"),
+//       );
+
+//       const invSnap = await getDocs(
+//         collection(db, "Panels", "IEDGE-SYSTEM", "estimateInvoices"),
+//       );
+
+//       const payData: any[] = [];
+//       const invData: any[] = [];
+
+//       paySnap.forEach((doc) => {
+//         payData.push({ id: doc.id, ...doc.data() });
+//       });
+
+//       invSnap.forEach((doc) => {
+//         invData.push({ id: doc.id, ...doc.data() });
+//       });
+
+//       payData.sort(
+//         (a, b) =>
+//           new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime(),
+//       );
+
+//       setPayments(payData);
+//       setInvoices(invData);
+//     } catch (error) {
+//       console.error("Failed to load dashboard data:", error);
+//       toast({
+//         title: "Error",
+//         description: "Failed to load dashboard data",
+//         variant: "destructive",
+//       });
+//     }
+//   };
+
+//   async function loadAccounts() {
+//     try {
+//       const rows = await fetchPaymentAccounts();
+//       setAccounts(rows);
+//     } catch (error) {
+//       console.error("Failed to load payment accounts:", error);
+//       toast({
+//         title: "Error",
+//         description: "Failed to load payment accounts",
+//         variant: "destructive",
+//       });
+//     }
+//   }
+
+//   function getAccountLabel(value: string) {
+//     const found = accounts.find((account) => account.id === value);
+
+//     if (found) {
+//       return found.accountName || found.bankName || "Unnamed Account";
+//     }
+
+//     if (!value) return "-";
+
+//     return value;
+//   }
+
+//   function openCreateModal() {
+//     setEditingAccount(null);
+//     setFormData(emptyForm);
+//     setCreateModalOpen(true);
+//   }
+
+//   function openEditModal(account: PaymentAccount) {
+//     setEditingAccount(account);
+//     setFormData({
+//       accountName: account.accountName || "",
+//       accountNumber: account.accountNumber || "",
+//       bankName: account.bankName || "",
+//       iban: account.iban || "",
+//       swiftCode: (account as any).swiftCode || "",
+//       branchName: account.branchName || "",
+//       branchCode: account.branchCode || "",
+//       currency: account.currency || "PKR",
+//       openingBalance: String(account.openingBalance ?? 0),
+//       notes: account.notes || "",
+//     });
+//     setEditModalOpen(true);
+//   }
+
+//   function resetFormAndClose() {
+//     setFormData(emptyForm);
+//     setEditingAccount(null);
+//     setCreateModalOpen(false);
+//     setEditModalOpen(false);
+//   }
+
+//   async function handleCreateAccount(e: React.FormEvent) {
+//     e.preventDefault();
+
+//     if (!formData.accountName.trim()) {
+//       toast({
+//         title: "Error",
+//         description: "Account name is required",
+//         variant: "destructive",
+//       });
+//       return;
+//     }
+
+//     if (!formData.accountNumber.trim()) {
+//       toast({
+//         title: "Error",
+//         description: "Account number is required",
+//         variant: "destructive",
+//       });
+//       return;
+//     }
+
+//     if (!formData.bankName.trim()) {
+//       toast({
+//         title: "Error",
+//         description: "Bank name is required",
+//         variant: "destructive",
+//       });
+//       return;
+//     }
+
+//     try {
+//       setAccountLoading(true);
+
+//       await createPaymentAccount({
+//         accountName: formData.accountName,
+//         accountNumber: formData.accountNumber,
+//         bankName: formData.bankName,
+//         iban: formData.iban,
+//         swiftCode: formData.swiftCode,
+//         branchName: formData.branchName,
+//         branchCode: formData.branchCode,
+//         currency: formData.currency || "PKR",
+//         openingBalance: Number(formData.openingBalance || 0),
+//         currentBalance: Number(formData.openingBalance || 0),
+//         notes: formData.notes,
+//         isActive: true,
+//       } as any);
+
+//       toast({
+//         title: "Success",
+//         description: "Payment account created successfully",
+//       });
+
+//       await loadAccounts();
+//       resetFormAndClose();
+//     } catch (error: any) {
+//       console.error("Failed to create payment account:", error);
+//       toast({
+//         title: "Error",
+//         description: error?.message || "Failed to create payment account",
+//         variant: "destructive",
+//       });
+//     } finally {
+//       setAccountLoading(false);
+//     }
+//   }
+
+//   async function handleEditAccount(e: React.FormEvent) {
+//     e.preventDefault();
+
+//     if (!editingAccount) return;
+
+//     if (!formData.accountName.trim()) {
+//       toast({
+//         title: "Error",
+//         description: "Account name is required",
+//         variant: "destructive",
+//       });
+//       return;
+//     }
+
+//     if (!formData.accountNumber.trim()) {
+//       toast({
+//         title: "Error",
+//         description: "Account number is required",
+//         variant: "destructive",
+//       });
+//       return;
+//     }
+
+//     if (!formData.bankName.trim()) {
+//       toast({
+//         title: "Error",
+//         description: "Bank name is required",
+//         variant: "destructive",
+//       });
+//       return;
+//     }
+
+//     try {
+//       setAccountLoading(true);
+
+//       await updatePaymentAccount(editingAccount.id, {
+//         accountName: formData.accountName,
+//         accountNumber: formData.accountNumber,
+//         bankName: formData.bankName,
+//         iban: formData.iban,
+//         swiftCode: formData.swiftCode,
+//         branchName: formData.branchName,
+//         branchCode: formData.branchCode,
+//         currency: formData.currency || "PKR",
+//         openingBalance: Number(formData.openingBalance || 0),
+//         notes: formData.notes,
+//       } as any);
+
+//       toast({
+//         title: "Success",
+//         description: "Account updated successfully",
+//       });
+
+//       await loadAccounts();
+//       resetFormAndClose();
+//     } catch (error: any) {
+//       console.error("Failed to update account:", error);
+//       toast({
+//         title: "Error",
+//         description: error?.message || "Failed to update account",
+//         variant: "destructive",
+//       });
+//     } finally {
+//       setAccountLoading(false);
+//     }
+//   }
+
+//   async function toggleAccountStatus(account: PaymentAccount) {
+//     try {
+//       await updatePaymentAccount(account.id, {
+//         isActive: !(account.isActive !== false),
+//       });
+
+//       toast({
+//         title: "Success",
+//         description: "Account updated successfully",
+//       });
+
+//       await loadAccounts();
+//     } catch (error: any) {
+//       console.error("Failed to update account:", error);
+//       toast({
+//         title: "Error",
+//         description: error?.message || "Failed to update account",
+//         variant: "destructive",
+//       });
+//     }
+//   }
+
+//   const filteredPayments = payments.filter((p) => {
+//     if (!startDate || !endDate) return true;
+
+//     const date = new Date(p.paymentDate);
+//     return date >= new Date(startDate) && date <= new Date(endDate);
+//   });
+
+//   const totalReceived = filteredPayments.reduce(
+//     (sum, p) => sum + Number(p.amount || 0),
+//     0,
+//   );
+
+//   const totalPending = invoices.reduce(
+//     (sum, i) => sum + Number(i.balance ?? i.total ?? 0),
+//     0,
+//   );
+
+//   const activeAccountsCount = useMemo(
+//     () => accounts.filter((a) => a.isActive !== false).length,
+//     [accounts],
+//   );
+
+//   const totalAccountsCount = accounts.length;
+
+//   const dynamicBarData = useMemo(() => {
+//     const grouped: Record<string, number> = {};
+
+//     filteredPayments.forEach((payment) => {
+//       const key = getAccountLabel(payment.depositTo);
+//       grouped[key] = (grouped[key] || 0) + Number(payment.amount || 0);
+//     });
+
+//     return Object.entries(grouped)
+//       .map(([name, received]) => ({ name, received }))
+//       .sort((a, b) => b.received - a.received)
+//       .slice(0, 6);
+//   }, [filteredPayments, accounts]);
+
+//   const pieData = [
+//     { name: "Received", value: totalReceived },
+//     { name: "Pending", value: totalPending },
+//   ];
+
+//   const COLORS = ["#0f172a", "#cbd5e1"];
+
+//   const exportExcel = () => {
+//     const worksheet = XLSX.utils.json_to_sheet(
+//       filteredPayments.map((p) => ({
+//         ...p,
+//         depositTo: getAccountLabel(p.depositTo),
+//       })),
+//     );
+
+//     const workbook = XLSX.utils.book_new();
+//     XLSX.utils.book_append_sheet(workbook, worksheet, "Payments");
+//     XLSX.writeFile(workbook, "Accounts_Report.xlsx");
+//   };
+
+//   const exportPDF = () => {
+//     const doc = new jsPDF();
+
+//     autoTable(doc, {
+//       head: [["Date", "Client", "Method", "Account", "Reference", "Amount"]],
+//       body: filteredPayments.map((p) => [
+//         p.paymentDate,
+//         p.client,
+//         p.method,
+//         getAccountLabel(p.depositTo),
+//         p.reference,
+//         p.amount,
+//       ]),
+//     });
+
+//     doc.save("Accounts_Report.pdf");
+//   };
+
+//   function renderAccountForm(
+//     onSubmit: (e: React.FormEvent) => Promise<void>,
+//     submitLabel: string,
+//   ) {
+//     return (
+//       <form onSubmit={onSubmit} className="space-y-6">
+//         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+//           <div className="space-y-2">
+//             <Label>Account Name *</Label>
+//             <Input
+//               className="h-11 rounded-xl border-slate-200"
+//               value={formData.accountName}
+//               onChange={(e) =>
+//                 setFormData((prev) => ({
+//                   ...prev,
+//                   accountName: e.target.value,
+//                 }))
+//               }
+//               placeholder="Meezan PKR Collection"
+//             />
+//           </div>
+
+//           <div className="space-y-2">
+//             <Label>Account Number *</Label>
+//             <Input
+//               className="h-11 rounded-xl border-slate-200"
+//               value={formData.accountNumber}
+//               onChange={(e) =>
+//                 setFormData((prev) => ({
+//                   ...prev,
+//                   accountNumber: e.target.value,
+//                 }))
+//               }
+//               placeholder="Enter account number"
+//             />
+//           </div>
+
+//           <div className="space-y-2">
+//             <Label>Bank Name *</Label>
+//             <Input
+//               className="h-11 rounded-xl border-slate-200"
+//               value={formData.bankName}
+//               onChange={(e) =>
+//                 setFormData((prev) => ({
+//                   ...prev,
+//                   bankName: e.target.value,
+//                 }))
+//               }
+//               placeholder="Enter bank name"
+//             />
+//           </div>
+
+//           <div className="space-y-2">
+//             <Label>Currency</Label>
+//             <Input
+//               className="h-11 rounded-xl border-slate-200"
+//               value={formData.currency}
+//               onChange={(e) =>
+//                 setFormData((prev) => ({
+//                   ...prev,
+//                   currency: e.target.value,
+//                 }))
+//               }
+//               placeholder="PKR"
+//             />
+//           </div>
+
+//           <div className="space-y-2">
+//             <Label>IBAN</Label>
+//             <Input
+//               className="h-11 rounded-xl border-slate-200"
+//               value={formData.iban}
+//               onChange={(e) =>
+//                 setFormData((prev) => ({
+//                   ...prev,
+//                   iban: e.target.value,
+//                 }))
+//               }
+//               placeholder="Enter IBAN"
+//             />
+//           </div>
+
+//           <div className="space-y-2">
+//             <Label>SWIFT Code</Label>
+//             <Input
+//               className="h-11 rounded-xl border-slate-200"
+//               value={formData.swiftCode}
+//               onChange={(e) =>
+//                 setFormData((prev) => ({
+//                   ...prev,
+//                   swiftCode: e.target.value,
+//                 }))
+//               }
+//               placeholder="Enter SWIFT code"
+//             />
+//           </div>
+
+//           <div className="space-y-2">
+//             <Label>Branch Name</Label>
+//             <Input
+//               className="h-11 rounded-xl border-slate-200"
+//               value={formData.branchName}
+//               onChange={(e) =>
+//                 setFormData((prev) => ({
+//                   ...prev,
+//                   branchName: e.target.value,
+//                 }))
+//               }
+//               placeholder="Enter branch name"
+//             />
+//           </div>
+
+//           <div className="space-y-2">
+//             <Label>Branch Code</Label>
+//             <Input
+//               className="h-11 rounded-xl border-slate-200"
+//               value={formData.branchCode}
+//               onChange={(e) =>
+//                 setFormData((prev) => ({
+//                   ...prev,
+//                   branchCode: e.target.value,
+//                 }))
+//               }
+//               placeholder="Enter branch code"
+//             />
+//           </div>
+
+//           <div className="space-y-2 md:col-span-2">
+//             <Label>Opening Balance</Label>
+//             <Input
+//               type="number"
+//               className="h-11 rounded-xl border-slate-200"
+//               value={formData.openingBalance}
+//               onChange={(e) =>
+//                 setFormData((prev) => ({
+//                   ...prev,
+//                   openingBalance: e.target.value,
+//                 }))
+//               }
+//               placeholder="0"
+//             />
+//           </div>
+
+//           <div className="space-y-2 md:col-span-2">
+//             <Label>Notes</Label>
+//             <Textarea
+//               className="min-h-[110px] rounded-xl border-slate-200"
+//               value={formData.notes}
+//               onChange={(e) =>
+//                 setFormData((prev) => ({
+//                   ...prev,
+//                   notes: e.target.value,
+//                 }))
+//               }
+//               placeholder="Optional notes"
+//             />
+//           </div>
+//         </div>
+
+//         <div className="flex justify-end gap-3 pt-2">
+//           <Button
+//             type="button"
+//             variant="outline"
+//             className="rounded-xl border-slate-200"
+//             onClick={resetFormAndClose}
+//           >
+//             Cancel
+//           </Button>
+
+//           <Button
+//             type="submit"
+//             disabled={accountLoading}
+//             className="rounded-xl px-5"
+//           >
+//             {accountLoading ? "Saving..." : submitLabel}
+//           </Button>
+//         </div>
+//       </form>
+//     );
+//   }
+
+//   return (
+//     <div className="min-h-screen bg-slate-50 p-6 md:p-8">
+//       <div className="mx-auto space-y-8">
+//         <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+//           <div>
+//             <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+//               Accounts Dashboard
+//             </h1>
+//             <p className="mt-1 text-sm text-slate-500">
+//               Manage payment accounts and review financial activity.
+//             </p>
+//           </div>
+
+//           <div className="flex flex-wrap items-center justify-end gap-3">
+//             <Dialog open={listModalOpen} onOpenChange={setListModalOpen}>
+//               <DialogTrigger asChild>
+//                 <Button
+//                   variant="outline"
+//                   className="h-11 rounded-xl border-slate-200 bg-white px-5 shadow-sm hover:bg-slate-50"
+//                 >
+//                   Account List ({accounts.length})
+//                 </Button>
+//               </DialogTrigger>
+
+//               <DialogContent className="max-w-6xl max-h-[85vh] overflow-y-auto rounded-2xl border-0 p-0">
+//                 <div className="border-b border-slate-200 px-6 py-5">
+//                   <DialogHeader>
+//                     <DialogTitle className="text-xl font-semibold text-slate-900">
+//                       Saved Payment Accounts
+//                     </DialogTitle>
+//                   </DialogHeader>
+//                 </div>
+
+//                 <div className="px-6 py-6">
+//                   {accounts.length === 0 ? (
+//                     <div className="rounded-2xl border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
+//                       No payment accounts found.
+//                     </div>
+//                   ) : (
+//                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+//                       {accounts.map((account) => (
+//                         <div
+//                           key={account.id}
+//                           className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm transition-all hover:shadow-md"
+//                         >
+//                           <div className="mb-4 flex items-start justify-between gap-3">
+//                             <div className="min-w-0">
+//                               <h3 className="truncate text-base font-semibold text-slate-900">
+//                                 {account.accountName || "-"}
+//                               </h3>
+//                               <p className="truncate text-sm text-slate-500">
+//                                 {account.bankName || "-"}
+//                               </p>
+//                             </div>
+
+//                             <span
+//                               className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-medium ${
+//                                 account.isActive !== false
+//                                   ? "bg-emerald-50 text-emerald-700"
+//                                   : "bg-rose-50 text-rose-700"
+//                               }`}
+//                             >
+//                               {account.isActive !== false
+//                                 ? "Active"
+//                                 : "Inactive"}
+//                             </span>
+//                           </div>
+
+//                           <div className="space-y-2 text-sm text-slate-600">
+//                             <div className="flex justify-between gap-3">
+//                               <span className="text-slate-400">Account No</span>
+//                               <span className="text-right font-medium">
+//                                 {account.accountNumber || "-"}
+//                               </span>
+//                             </div>
+
+//                             <div className="flex justify-between gap-3">
+//                               <span className="text-slate-400">IBAN</span>
+//                               <span className="text-right font-medium">
+//                                 {account.iban || "-"}
+//                               </span>
+//                             </div>
+
+//                             <div className="flex justify-between gap-3">
+//                               <span className="text-slate-400">SWIFT</span>
+//                               <span className="text-right font-medium">
+//                                 {(account as any).swiftCode || "-"}
+//                               </span>
+//                             </div>
+
+//                             <div className="flex justify-between gap-3">
+//                               <span className="text-slate-400">Branch</span>
+//                               <span className="text-right font-medium">
+//                                 {account.branchName || "-"}
+//                               </span>
+//                             </div>
+
+//                             <div className="flex justify-between gap-3">
+//                               <span className="text-slate-400">Currency</span>
+//                               <span className="text-right font-medium">
+//                                 {account.currency || "PKR"}
+//                               </span>
+//                             </div>
+
+//                             <div className="flex justify-between gap-3">
+//                               <span className="text-slate-400">
+//                                 Opening Balance
+//                               </span>
+//                               <span className="text-right font-semibold text-slate-900">
+//                                 Rs{" "}
+//                                 {Number(
+//                                   account.openingBalance || 0,
+//                                 ).toLocaleString()}
+//                               </span>
+//                             </div>
+
+//                             <div className="flex justify-between gap-3">
+//                               <span className="text-slate-400">
+//                                 Current Balance
+//                               </span>
+//                               <span className="text-right font-semibold text-slate-900">
+//                                 Rs{" "}
+//                                 {Number(
+//                                   (account as any).currentBalance ??
+//                                     (account as any).balance ??
+//                                     0,
+//                                 ).toLocaleString()}
+//                               </span>
+//                             </div>
+//                           </div>
+
+//                           {account.notes ? (
+//                             <div className="mt-4 rounded-xl bg-slate-50 p-3 text-sm text-slate-600">
+//                               {account.notes}
+//                             </div>
+//                           ) : null}
+
+//                           <div className="mt-5 flex items-center gap-2">
+//                             <Button
+//                               type="button"
+//                               variant="outline"
+//                               className="flex-1 rounded-xl border-slate-200"
+//                               onClick={() => openEditModal(account)}
+//                             >
+//                               Edit
+//                             </Button>
+
+//                             <Button
+//                               type="button"
+//                               variant="outline"
+//                               className="flex-1 rounded-xl border-slate-200"
+//                               onClick={() => toggleAccountStatus(account)}
+//                             >
+//                               {account.isActive !== false
+//                                 ? "Deactivate"
+//                                 : "Activate"}
+//                             </Button>
+//                           </div>
+//                         </div>
+//                       ))}
+//                     </div>
+//                   )}
+//                 </div>
+//               </DialogContent>
+//             </Dialog>
+
+//             <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+//               <DialogTrigger asChild>
+//                 <Button
+//                   onClick={openCreateModal}
+//                   className="h-11 rounded-xl px-5 shadow-sm"
+//                 >
+//                   Create Account
+//                 </Button>
+//               </DialogTrigger>
+
+//               <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl border-0 p-0">
+//                 <div className="border-b border-slate-200 px-6 py-5">
+//                   <DialogHeader>
+//                     <DialogTitle className="text-xl font-semibold text-slate-900">
+//                       Create Payment Account
+//                     </DialogTitle>
+//                   </DialogHeader>
+//                 </div>
+
+//                 <div className="px-6 py-6">
+//                   {renderAccountForm(handleCreateAccount, "Save Account")}
+//                 </div>
+//               </DialogContent>
+//             </Dialog>
+
+//             <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+//               <DialogContent className="max-w-4xl max-h-[85vh] overflow-y-auto rounded-2xl border-0 p-0">
+//                 <div className="border-b border-slate-200 px-6 py-5">
+//                   <DialogHeader>
+//                     <DialogTitle className="text-xl font-semibold text-slate-900">
+//                       Edit Payment Account
+//                     </DialogTitle>
+//                   </DialogHeader>
+//                 </div>
+
+//                 <div className="px-6 py-6">
+//                   {renderAccountForm(handleEditAccount, "Update Account")}
+//                 </div>
+//               </DialogContent>
+//             </Dialog>
+//           </div>
+//         </div>
+
+//         <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+//           <div className="flex flex-wrap items-center gap-3">
+//             <Input
+//               type="date"
+//               value={startDate}
+//               onChange={(e) => setStartDate(e.target.value)}
+//               className="h-11 w-[180px] rounded-xl border-slate-200"
+//             />
+
+//             <Input
+//               type="date"
+//               value={endDate}
+//               onChange={(e) => setEndDate(e.target.value)}
+//               className="h-11 w-[180px] rounded-xl border-slate-200"
+//             />
+
+//             <Button
+//               onClick={exportExcel}
+//               variant="outline"
+//               className="h-11 rounded-xl border-slate-200 bg-white"
+//             >
+//               Export Excel
+//             </Button>
+
+//             <Button
+//               onClick={exportPDF}
+//               variant="outline"
+//               className="h-11 rounded-xl border-slate-200 bg-white"
+//             >
+//               Export PDF
+//             </Button>
+//           </div>
+//         </div>
+
+//         <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+//           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//             <div className="text-sm text-slate-500">Total Received</div>
+//             <div className="mt-2 text-2xl font-semibold text-slate-900">
+//               Rs {Number(totalReceived).toLocaleString()}
+//             </div>
+//           </div>
+
+//           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//             <div className="text-sm text-slate-500">Total Pending</div>
+//             <div className="mt-2 text-2xl font-semibold text-slate-900">
+//               Rs {Number(totalPending).toLocaleString()}
+//             </div>
+//           </div>
+
+//           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//             <div className="text-sm text-slate-500">Total Accounts</div>
+//             <div className="mt-2 text-2xl font-semibold text-slate-900">
+//               {totalAccountsCount}
+//             </div>
+//           </div>
+
+//           <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//             <div className="text-sm text-slate-500">Active Accounts</div>
+//             <div className="mt-2 text-2xl font-semibold text-slate-900">
+//               {activeAccountsCount}
+//             </div>
+//           </div>
+//         </div>
+
+//         <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+//           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+//             <h2 className="mb-4 text-base font-semibold text-slate-900">
+//               Account-wise Collections
+//             </h2>
+
+//             <ResponsiveContainer width="100%" height={280}>
+//               <BarChart data={dynamicBarData}>
+//                 <XAxis dataKey="name" />
+//                 <YAxis />
+//                 <Tooltip />
+//                 <Bar dataKey="received" />
+//               </BarChart>
+//             </ResponsiveContainer>
+//           </div>
+
+//           <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+//             <h2 className="mb-4 text-base font-semibold text-slate-900">
+//               Received vs Pending
+//             </h2>
+
+//             <ResponsiveContainer width="100%" height={280}>
+//               <PieChart>
+//                 <Pie data={pieData} dataKey="value" outerRadius={105} label>
+//                   {pieData.map((entry, index) => (
+//                     <Cell key={index} fill={COLORS[index]} />
+//                   ))}
+//                 </Pie>
+//               </PieChart>
+//             </ResponsiveContainer>
+//           </div>
+//         </div>
+
+//         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+//           <div className="mb-4 flex items-center justify-between">
+//             <h2 className="text-base font-semibold text-slate-900">
+//               Latest Transactions
+//             </h2>
+//             <span className="text-sm text-slate-500">
+//               {filteredPayments.length} record(s)
+//             </span>
+//           </div>
+
+//           <div className="overflow-x-auto">
+//             <table className="min-w-[760px] w-full text-sm">
+//               <thead>
+//                 <tr className="border-b border-slate-200 text-slate-500">
+//                   <th className="px-3 py-3 text-left font-medium">Date</th>
+//                   <th className="px-3 py-3 text-left font-medium">Client</th>
+//                   <th className="px-3 py-3 text-left font-medium">Method</th>
+//                   <th className="px-3 py-3 text-left font-medium">Account</th>
+//                   <th className="px-3 py-3 text-left font-medium">Reference</th>
+//                   <th className="px-3 py-3 text-right font-medium">Amount</th>
+//                 </tr>
+//               </thead>
+
+//               <tbody>
+//                 {filteredPayments.length > 0 ? (
+//                   filteredPayments.map((p) => (
+//                     <tr key={p.id} className="border-b border-slate-100">
+//                       <td className="px-3 py-3 text-slate-700">
+//                         {p.paymentDate}
+//                       </td>
+//                       <td className="px-3 py-3 text-slate-700">{p.client}</td>
+//                       <td className="px-3 py-3 text-slate-700">{p.method}</td>
+//                       <td className="px-3 py-3 text-slate-700">
+//                         {getAccountLabel(p.depositTo)}
+//                       </td>
+//                       <td className="px-3 py-3 text-slate-700">
+//                         {p.reference}
+//                       </td>
+//                       <td className="px-3 py-3 text-right font-semibold text-slate-900">
+//                         Rs {Number(p.amount || 0).toLocaleString()}
+//                       </td>
+//                     </tr>
+//                   ))
+//                 ) : (
+//                   <tr>
+//                     <td
+//                       colSpan={6}
+//                       className="px-3 py-10 text-center text-sm text-slate-500"
+//                     >
+//                       No transactions found.
+//                     </td>
+//                   </tr>
+//                 )}
+//               </tbody>
+//             </table>
+//           </div>
+//         </div>
+//       </div>
+//     </div>
+//   );
+// }
+
+import { useEffect, useMemo, useState } from "react";
+import { collection, getDocs } from "firebase/firestore";
 import { db } from "@/lib/firebase";
-import { useAuth } from "@/contexts/AuthContext";
-import { Card, CardContent } from "@/components/ui/card";
-import { Button } from "@/components/ui/button";
-import InvoiceRequestModal from "@/components/BudgetRequestModal";
+
 import {
-  Activity,
-  AlertTriangle,
-  ArrowDownRight,
-  ArrowUpRight,
-  BadgeCheck,
-  Banknote,
-  BarChart3,
-  Building2,
-  CalendarClock,
-  CheckCircle2,
-  CircleDollarSign,
-  Clock3,
-  CreditCard,
-  FileCheck2,
-  FileSpreadsheet,
-  FileText,
-  Landmark,
-  ListChecks,
-  PackageCheck,
-  Plus,
-  ReceiptText,
-  RefreshCcw,
-  TrendingUp,
-  Users,
-  Wallet,
-  XCircle,
-  type LucideIcon,
-} from "lucide-react";
+  createPaymentAccount,
+  fetchPaymentAccounts,
+  updatePaymentAccount,
+} from "@/lib/payments/paymentAccounts";
+import { PaymentAccount } from "@/lib/payments/types";
+import { useToast } from "@/hooks/use-toast";
+
+import * as XLSX from "xlsx";
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
+
 import {
-  Area,
-  AreaChart,
-  Bar,
   BarChart,
-  CartesianGrid,
-  Cell,
-  ResponsiveContainer,
-  Tooltip,
+  Bar,
   XAxis,
   YAxis,
+  Tooltip,
+  ResponsiveContainer,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
 
-const PANEL_ID = "IEDGE-SYSTEM";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 
-type AnyRow = Record<string, any> & { id: string };
-
-type ActivityItem = {
-  id: string;
-  module: string;
-  title: string;
-  description: string;
-  status: string;
-  date: Date | null;
+type AccountFormData = {
+  accountName: string;
+  accountNumber: string;
+  bankName: string;
+  iban: string;
+  swiftCode: string;
+  branchName: string;
+  branchCode: string;
+  currency: string;
+  openingBalance: string;
+  notes: string;
 };
 
-type MoneyEvent = {
-  date: Date | null;
-  amount: number;
+const emptyForm: AccountFormData = {
+  accountName: "",
+  accountNumber: "",
+  bankName: "",
+  iban: "",
+  swiftCode: "",
+  branchName: "",
+  branchCode: "",
+  currency: "PKR",
+  openingBalance: "",
+  notes: "",
 };
 
-type DashboardData = {
-  invoiceRequests: AnyRow[];
-  estimates: AnyRow[];
-  estimateInvoices: AnyRow[];
-  payments: AnyRow[];
-  expenseSheets: AnyRow[];
-  directClaims: AnyRow[];
-  meetingClaims: AnyRow[];
-  records: AnyRow[];
-  purchaseOrders: AnyRow[];
-  manualEntries: AnyRow[];
-  openingBalance: number;
-};
+const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
+const COLORS = ["#2563eb", "#cbd5e1"];
 
-const EMPTY_DATA: DashboardData = {
-  invoiceRequests: [],
-  estimates: [],
-  estimateInvoices: [],
-  payments: [],
-  expenseSheets: [],
-  directClaims: [],
-  meetingClaims: [],
-  records: [],
-  purchaseOrders: [],
-  manualEntries: [],
-  openingBalance: 0,
-};
+export default function AccountsDashboard() {
+  const { toast } = useToast();
 
-const normalizeText = (value: any) =>
-  String(value || "")
-    .trim()
-    .toLowerCase();
+  const [payments, setPayments] = useState<any[]>([]);
+  const [invoices, setInvoices] = useState<any[]>([]);
+  const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
 
-const safeNumber = (value: any): number => {
-  if (value === null || value === undefined || value === "") return 0;
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
 
-  const parsed =
-    typeof value === "number"
-      ? value
-      : Number(String(value).replace(/,/g, ""));
+  const [currentPage, setCurrentPage] = useState(1);
+  const [rowsPerPage, setRowsPerPage] = useState(10);
 
-  return Number.isFinite(parsed) ? parsed : 0;
-};
+  const [createModalOpen, setCreateModalOpen] = useState(false);
+  const [listModalOpen, setListModalOpen] = useState(false);
+  const [editModalOpen, setEditModalOpen] = useState(false);
 
-const firstText = (...values: any[]): string => {
-  for (const value of values) {
-    if (value === null || value === undefined || typeof value === "object") {
-      continue;
+  const [accountLoading, setAccountLoading] = useState(false);
+  const [editingAccount, setEditingAccount] = useState<PaymentAccount | null>(
+    null,
+  );
+  const [formData, setFormData] = useState<AccountFormData>(emptyForm);
+
+  useEffect(() => {
+    fetchData();
+    loadAccounts();
+  }, []);
+
+  const fetchData = async () => {
+    try {
+      const paySnap = await getDocs(
+        collection(db, "Panels", "IEDGE-SYSTEM", "payments"),
+      );
+
+      const invSnap = await getDocs(
+        collection(db, "Panels", "IEDGE-SYSTEM", "estimateInvoices"),
+      );
+
+      const payData: any[] = [];
+      const invData: any[] = [];
+
+      paySnap.forEach((doc) => {
+        payData.push({ id: doc.id, ...doc.data() });
+      });
+
+      invSnap.forEach((doc) => {
+        invData.push({ id: doc.id, ...doc.data() });
+      });
+
+      payData.sort(
+        (a, b) =>
+          new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime(),
+      );
+
+      setPayments(payData);
+      setInvoices(invData);
+    } catch (error) {
+      console.error("Failed to load dashboard data:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load dashboard data",
+        variant: "destructive",
+      });
     }
+  };
 
-    const text = String(value).trim();
-    if (text) return text;
+  async function loadAccounts() {
+    try {
+      const rows = await fetchPaymentAccounts();
+      setAccounts(rows);
+    } catch (error) {
+      console.error("Failed to load payment accounts:", error);
+      toast({
+        title: "Error",
+        description: "Failed to load payment accounts",
+        variant: "destructive",
+      });
+    }
   }
 
-  return "";
-};
+  function formatCurrency(value: number | string | undefined | null) {
+    return `Rs ${Number(value || 0).toLocaleString()}`;
+  }
 
-const toDate = (value: any): Date | null => {
-  if (!value) return null;
+  function getAccountLabel(value: string) {
+    const found = accounts.find((account) => account.id === value);
 
-  try {
-    if (value instanceof Date) {
-      return Number.isNaN(value.getTime()) ? null : value;
+    if (found) {
+      return found.accountName || found.bankName || "Unnamed Account";
     }
 
-    if (typeof value?.toDate === "function") {
-      const date = value.toDate();
-      return Number.isNaN(date?.getTime?.()) ? null : date;
+    if (!value) return "-";
+
+    return value;
+  }
+
+  function openCreateModal() {
+    setEditingAccount(null);
+    setFormData(emptyForm);
+    setCreateModalOpen(true);
+  }
+
+  function openEditModal(account: PaymentAccount) {
+    setEditingAccount(account);
+    setFormData({
+      accountName: account.accountName || "",
+      accountNumber: account.accountNumber || "",
+      bankName: account.bankName || "",
+      iban: account.iban || "",
+      swiftCode: (account as any).swiftCode || "",
+      branchName: account.branchName || "",
+      branchCode: account.branchCode || "",
+      currency: account.currency || "PKR",
+      openingBalance: String(account.openingBalance ?? 0),
+      notes: account.notes || "",
+    });
+    setEditModalOpen(true);
+  }
+
+  function resetFormAndClose() {
+    setFormData(emptyForm);
+    setEditingAccount(null);
+    setCreateModalOpen(false);
+    setEditModalOpen(false);
+  }
+
+  async function handleCreateAccount(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!formData.accountName.trim()) {
+      toast({
+        title: "Error",
+        description: "Account name is required",
+        variant: "destructive",
+      });
+      return;
     }
 
-    if (typeof value?.seconds === "number") {
-      const date = new Date(value.seconds * 1000);
-      return Number.isNaN(date.getTime()) ? null : date;
+    if (!formData.accountNumber.trim()) {
+      toast({
+        title: "Error",
+        description: "Account number is required",
+        variant: "destructive",
+      });
+      return;
     }
 
-    if (typeof value === "string") {
-      const trimmed = value.trim();
+    if (!formData.bankName.trim()) {
+      toast({
+        title: "Error",
+        description: "Bank name is required",
+        variant: "destructive",
+      });
+      return;
+    }
 
-      const ymd = trimmed.match(/^(\d{4})[-/](\d{1,2})[-/](\d{1,2})/);
-      if (ymd) {
-        const date = new Date(
-          Number(ymd[1]),
-          Number(ymd[2]) - 1,
-          Number(ymd[3]),
-        );
-        return Number.isNaN(date.getTime()) ? null : date;
+    try {
+      setAccountLoading(true);
+
+      await createPaymentAccount({
+        accountName: formData.accountName,
+        accountNumber: formData.accountNumber,
+        bankName: formData.bankName,
+        iban: formData.iban,
+        swiftCode: formData.swiftCode,
+        branchName: formData.branchName,
+        branchCode: formData.branchCode,
+        currency: formData.currency || "PKR",
+        openingBalance: Number(formData.openingBalance || 0),
+        currentBalance: Number(formData.openingBalance || 0),
+        notes: formData.notes,
+        isActive: true,
+      } as any);
+
+      toast({
+        title: "Success",
+        description: "Payment account created successfully",
+      });
+
+      await loadAccounts();
+      resetFormAndClose();
+    } catch (error: any) {
+      console.error("Failed to create payment account:", error);
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to create payment account",
+        variant: "destructive",
+      });
+    } finally {
+      setAccountLoading(false);
+    }
+  }
+
+  async function handleEditAccount(e: React.FormEvent) {
+    e.preventDefault();
+
+    if (!editingAccount) return;
+
+    if (!formData.accountName.trim()) {
+      toast({
+        title: "Error",
+        description: "Account name is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.accountNumber.trim()) {
+      toast({
+        title: "Error",
+        description: "Account number is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    if (!formData.bankName.trim()) {
+      toast({
+        title: "Error",
+        description: "Bank name is required",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      setAccountLoading(true);
+
+      await updatePaymentAccount(editingAccount.id, {
+        accountName: formData.accountName,
+        accountNumber: formData.accountNumber,
+        bankName: formData.bankName,
+        iban: formData.iban,
+        swiftCode: formData.swiftCode,
+        branchName: formData.branchName,
+        branchCode: formData.branchCode,
+        currency: formData.currency || "PKR",
+        openingBalance: Number(formData.openingBalance || 0),
+        notes: formData.notes,
+      } as any);
+
+      toast({
+        title: "Success",
+        description: "Account updated successfully",
+      });
+
+      await loadAccounts();
+      resetFormAndClose();
+    } catch (error: any) {
+      console.error("Failed to update account:", error);
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to update account",
+        variant: "destructive",
+      });
+    } finally {
+      setAccountLoading(false);
+    }
+  }
+
+  async function toggleAccountStatus(account: PaymentAccount) {
+    try {
+      await updatePaymentAccount(account.id, {
+        isActive: !(account.isActive !== false),
+      });
+
+      toast({
+        title: "Success",
+        description: "Account updated successfully",
+      });
+
+      await loadAccounts();
+    } catch (error: any) {
+      console.error("Failed to update account:", error);
+      toast({
+        title: "Error",
+        description: error?.message || "Failed to update account",
+        variant: "destructive",
+      });
+    }
+  }
+
+  const filteredPayments = useMemo(() => {
+    return payments.filter((p) => {
+      if (!startDate && !endDate) return true;
+
+      const date = new Date(p.paymentDate);
+      if (Number.isNaN(date.getTime())) return true;
+
+      if (startDate) {
+        const start = new Date(startDate);
+        if (date < start) return false;
       }
 
-      const dmy = trimmed.match(/^(\d{1,2})[-/](\d{1,2})[-/](\d{4})/);
-      if (dmy) {
-        const date = new Date(
-          Number(dmy[3]),
-          Number(dmy[2]) - 1,
-          Number(dmy[1]),
-        );
-        return Number.isNaN(date.getTime()) ? null : date;
+      if (endDate) {
+        const end = new Date(endDate);
+        end.setHours(23, 59, 59, 999);
+        if (date > end) return false;
       }
+
+      return true;
+    });
+  }, [payments, startDate, endDate]);
+
+  const totalReceived = useMemo(() => {
+    return filteredPayments.reduce((sum, p) => sum + Number(p.amount || 0), 0);
+  }, [filteredPayments]);
+
+  const totalPending = useMemo(() => {
+    return invoices.reduce(
+      (sum, i) => sum + Number(i.balance ?? i.total ?? 0),
+      0,
+    );
+  }, [invoices]);
+
+  const activeAccountsCount = useMemo(
+    () => accounts.filter((a) => a.isActive !== false).length,
+    [accounts],
+  );
+
+  const totalAccountsCount = accounts.length;
+
+  const dynamicBarData = useMemo(() => {
+    const grouped: Record<string, number> = {};
+
+    filteredPayments.forEach((payment) => {
+      const key = getAccountLabel(payment.depositTo);
+      grouped[key] = (grouped[key] || 0) + Number(payment.amount || 0);
+    });
+
+    return Object.entries(grouped)
+      .map(([name, received]) => ({ name, received }))
+      .sort((a, b) => b.received - a.received)
+      .slice(0, 6);
+  }, [filteredPayments, accounts]);
+
+  const pieData = useMemo(
+    () => [
+      { name: "Received", value: totalReceived },
+      { name: "Pending", value: totalPending },
+    ],
+    [totalReceived, totalPending],
+  );
+
+  const totalPages = Math.max(
+    1,
+    Math.ceil(filteredPayments.length / rowsPerPage),
+  );
+
+  const paginatedPayments = useMemo(() => {
+    const start = (currentPage - 1) * rowsPerPage;
+    return filteredPayments.slice(start, start + rowsPerPage);
+  }, [filteredPayments, currentPage, rowsPerPage]);
+
+  const pageNumbers = useMemo(() => {
+    const maxVisiblePages = 5;
+    const startPage = Math.max(
+      1,
+      Math.min(currentPage - 2, totalPages - maxVisiblePages + 1),
+    );
+    const endPage = Math.min(totalPages, startPage + maxVisiblePages - 1);
+
+    return Array.from(
+      { length: endPage - startPage + 1 },
+      (_, index) => startPage + index,
+    );
+  }, [currentPage, totalPages]);
+
+  const firstRecord =
+    filteredPayments.length === 0 ? 0 : (currentPage - 1) * rowsPerPage + 1;
+  const lastRecord = Math.min(
+    currentPage * rowsPerPage,
+    filteredPayments.length,
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [startDate, endDate, rowsPerPage]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) {
+      setCurrentPage(totalPages);
     }
+  }, [currentPage, totalPages]);
 
-    const date = new Date(value);
-    return Number.isNaN(date.getTime()) ? null : date;
-  } catch {
-    return null;
-  }
-};
-
-const getEntityDate = (source: any): Date | null =>
-  toDate(source?.paymentReleasedAt) ||
-  toDate(source?.releasePaymentAt) ||
-  toDate(source?.releasedAt) ||
-  toDate(source?.paymentDate) ||
-  toDate(source?.submittedAt) ||
-  toDate(source?.createdAt) ||
-  toDate(source?.updatedAt) ||
-  toDate(source?.invoiceDate) ||
-  toDate(source?.date) ||
-  toDate(source?.issueDate) ||
-  null;
-
-const getRequestDate = (source: any): Date | null =>
-  toDate(source?.submitDate) ||
-  toDate(source?.submittedAt) ||
-  toDate(source?.submissionDate) ||
-  toDate(source?.requestDate) ||
-  toDate(source?.createdAt) ||
-  toDate(source?.date) ||
-  toDate(source?.updatedAt) ||
-  null;
-
-const formatPKR = (value: any): string =>
-  `Rs ${safeNumber(value).toLocaleString("en-PK", {
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 2,
-  })}`;
-
-const formatCompactPKR = (value: any): string => {
-  const number = safeNumber(value);
-
-  if (Math.abs(number) >= 1_000_000_000) {
-    return `Rs ${(number / 1_000_000_000).toFixed(1)}B`;
-  }
-
-  if (Math.abs(number) >= 1_000_000) {
-    return `Rs ${(number / 1_000_000).toFixed(1)}M`;
-  }
-
-  if (Math.abs(number) >= 1_000) {
-    return `Rs ${(number / 1_000).toFixed(1)}K`;
-  }
-
-  return formatPKR(number);
-};
-
-const formatRelativeTime = (date: Date | null): string => {
-  if (!date) return "Date unavailable";
-
-  const diffMinutes = Math.floor((Date.now() - date.getTime()) / 60_000);
-
-  if (diffMinutes < 1) return "Just now";
-  if (diffMinutes < 60) return `${diffMinutes} min ago`;
-  if (diffMinutes < 1_440) return `${Math.floor(diffMinutes / 60)} hr ago`;
-  if (diffMinutes < 10_080)
-    return `${Math.floor(diffMinutes / 1_440)} days ago`;
-
-  return date.toLocaleDateString("en-PK", {
-    day: "2-digit",
-    month: "short",
-    year: "numeric",
-  });
-};
-
-const humanize = (value: any): string =>
-  String(value || "Unknown")
-    .replace(/_/g, " ")
-    .replace(/\b\w/g, (letter) => letter.toUpperCase());
-
-const getApprovedRequestAmount = (request: any): number =>
-  safeNumber(
-    request?.approvedAmount ??
-      request?.totalApprovedAmount ??
-      request?.approvedTotal ??
-      request?.totalAmount ??
-      request?.amount,
-  );
-
-const getReleaseAmount = (entry: any): number =>
-  safeNumber(
-    entry?.amount ??
-      entry?.releaseAmount ??
-      entry?.releasedAmount ??
-      entry?.paymentAmount,
-  );
-
-const getPaymentReleaseHistory = (request: any): any[] => {
-  const history = Array.isArray(request?.paymentReleaseHistory)
-    ? request.paymentReleaseHistory
-    : [];
-
-  const validHistory = history.filter(
-    (entry: any) => getReleaseAmount(entry) > 0,
-  );
-
-  if (validHistory.length > 0) return validHistory;
-
-  const legacy = request?.paymentDetails || request?.latestPaymentRelease;
-  if (legacy && getReleaseAmount(legacy) > 0) {
-    return [
-      {
-        ...legacy,
-        releasedAt:
-          legacy?.releasedAt ||
-          request?.paymentReleasedAt ||
-          request?.releasePaymentAt ||
-          request?.updatedAt,
-      },
-    ];
-  }
-
-  return [];
-};
-
-const getReleasedRequestAmount = (request: any): number => {
-  const explicit = safeNumber(request?.totalReleasedAmount);
-  if (explicit > 0) return explicit;
-
-  const historyTotal = getPaymentReleaseHistory(request).reduce(
-    (sum, entry) => sum + getReleaseAmount(entry),
-    0,
-  );
-
-  if (historyTotal > 0) return historyTotal;
-
-  const status = normalizeText(request?.status);
-  if (
-    ["payment_released", "released"].includes(status) ||
-    request?.paymentReleased === true
-  ) {
-    return getApprovedRequestAmount(request);
-  }
-
-  return safeNumber(
-    request?.releasedAmount ??
-      request?.paidAmount ??
-      request?.paymentAmount,
-  );
-};
-
-const getRemainingRequestAmount = (request: any): number => {
-  if (
-    request?.remainingReleaseAmount !== undefined &&
-    request?.remainingReleaseAmount !== null
-  ) {
-    return Math.max(safeNumber(request.remainingReleaseAmount), 0);
-  }
-
-  return Math.max(
-    getApprovedRequestAmount(request) - getReleasedRequestAmount(request),
-    0,
-  );
-};
-
-const isFullyReleased = (request: any): boolean => {
-  const approved = getApprovedRequestAmount(request);
-  const released = getReleasedRequestAmount(request);
-  const remaining = getRemainingRequestAmount(request);
-  const status = normalizeText(request?.status);
-
-  if (approved > 0 && (remaining <= 0.009 || released >= approved - 0.009)) {
-    return true;
-  }
-
-  return ["payment_released", "released"].includes(status);
-};
-
-const isPartiallyReleased = (request: any): boolean =>
-  getReleasedRequestAmount(request) > 0 && !isFullyReleased(request);
-
-const getInvoiceStatus = (invoice: any): string => {
-  const raw = normalizeText(invoice?.status || invoice?.paymentStatus);
-
-  if (raw === "paid") return "paid";
-  if (["partially paid", "partially_paid", "partial"].includes(raw)) {
-    return "partial";
-  }
-
-  return "unpaid";
-};
-
-const getClaimStatus = (claim: any): string => {
-  const status = normalizeText(claim?.status || claim?.approvalStatus);
-
-  if (status === "approved") return "approved";
-  if (status === "rejected") return "rejected";
-  return "pending";
-};
-
-const getClaimAmount = (claim: any): number =>
-  safeNumber(
-    claim?.claimAmount ??
-      claim?.amount ??
-      claim?.approvedAmount ??
-      claim?.paidAmount,
-  );
-
-const getClaimPaidAmount = (claim: any): number => {
-  if (normalizeText(claim?.paymentStatus) !== "paid") return 0;
-
-  return safeNumber(
-    claim?.paidAmount ??
-      claim?.approvedAmount ??
-      claim?.claimAmount ??
-      claim?.amount,
-  );
-};
-
-const getExpenseAmount = (expense: any): number =>
-  safeNumber(expense?.totalAmount ?? expense?.amount);
-
-const getPurchaseOrderAmount = (purchaseOrder: any): number =>
-  safeNumber(
-    purchaseOrder?.totalAmount ??
-      purchaseOrder?.total ??
-      purchaseOrder?.amount,
-  );
-
-const getEstimateAmount = (estimate: any): number =>
-  safeNumber(estimate?.total ?? estimate?.totalAmount ?? estimate?.amount);
-
-const getEstimateInvoiceAmount = (invoice: any): number =>
-  safeNumber(invoice?.total ?? invoice?.totalAmount ?? invoice?.amount);
-
-const getVendorNames = (request: any): string[] => {
-  const names = new Set<string>();
-
-  const direct = firstText(
-    request?.vendorName,
-    request?.supplierName,
-    request?.payeeName,
-    request?.payee,
-  );
-  if (direct) names.add(direct);
-
-  const items = [
-    ...(Array.isArray(request?.approvalItems) ? request.approvalItems : []),
-    ...(Array.isArray(request?.lineItems) ? request.lineItems : []),
-    ...(Array.isArray(request?.items) ? request.items : []),
-  ];
-
-  items.forEach((item: any) => {
-    const name = firstText(
-      item?.vendor,
-      item?.vendorName,
-      item?.supplier,
-      item?.supplierName,
-      item?.original?.vendor,
-      item?.original?.supplier,
+  const exportExcel = () => {
+    const worksheet = XLSX.utils.json_to_sheet(
+      filteredPayments.map((p) => ({
+        ...p,
+        depositTo: getAccountLabel(p.depositTo),
+      })),
     );
 
-    if (name) names.add(name);
-  });
-
-  return Array.from(names);
-};
-
-const isOverdueDate = (value: any): boolean => {
-  const date = toDate(value);
-  if (!date) return false;
-
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  date.setHours(0, 0, 0, 0);
-
-  return date < today;
-};
-
-const snapshotToRows = (
-  snapshot: { docs: QueryDocumentSnapshot<DocumentData>[] },
-): AnyRow[] =>
-  snapshot.docs.map((document) => ({
-    id: document.id,
-    ...document.data(),
-  }));
-
-
-const FULL_DASHBOARD_ROLES = new Set([
-  "main_admin",
-  "mainadmin",
-  "finance",
-  "finance_admin",
-  "financial_admin",
-]);
-
-const SCOPE_FIELD_NAMES = [
-  "id",
-  "uid",
-  "userId",
-  "userUID",
-  "profileId",
-  "employeeId",
-  "employeeUID",
-  "email",
-  "userEmail",
-  "employeeEmail",
-  "displayName",
-  "fullName",
-  "name",
-  "createdBy",
-  "createdById",
-  "createdByUid",
-  "createdByEmail",
-  "creatorId",
-  "creatorEmail",
-  "submittedBy",
-  "submittedById",
-  "submittedByUid",
-  "submittedByEmail",
-  "requestedBy",
-  "requestedById",
-  "requestedByEmail",
-  "owner",
-  "ownerId",
-  "ownerEmail",
-  "assignedTo",
-  "assignedToId",
-  "assignedUserId",
-  "assignedUserEmail",
-  "assignee",
-  "assigneeId",
-  "assigneeEmail",
-  "personId",
-  "personEmail",
-  "salesPersonId",
-  "salesPersonEmail",
-  "teamMemberId",
-  "teamMemberEmail",
-  "department",
-  "departmentId",
-  "team",
-  "teamId",
-  "role",
-  "createdByRole",
-  "assignedRole",
-  "projectId",
-  "projectCode",
-  "assignedProjectId",
-];
-
-const NESTED_SCOPE_FIELD_NAMES = [
-  "createdByUser",
-  "submittedByUser",
-  "requestedByUser",
-  "ownerUser",
-  "assignedUser",
-  "assigneeUser",
-  "employee",
-  "user",
-  "profile",
-  "teamMembers",
-  "assignedUsers",
-  "assignedToUsers",
-  "members",
-  "assignedProjects",
-  "projectIds",
-  "allowedProjectIds",
-];
-
-const addScopeValue = (target: Set<string>, value: any) => {
-  if (value === null || value === undefined || value === "") return;
-
-  if (Array.isArray(value)) {
-    value.forEach((item) => addScopeValue(target, item));
-    return;
-  }
-
-  if (typeof value === "object") {
-    SCOPE_FIELD_NAMES.forEach((field) => addScopeValue(target, value?.[field]));
-    return;
-  }
-
-  const normalized = normalizeText(value);
-  if (normalized) target.add(normalized);
-};
-
-const collectScopeValues = (source: any): Set<string> => {
-  const values = new Set<string>();
-  if (!source) return values;
-
-  SCOPE_FIELD_NAMES.forEach((field) => addScopeValue(values, source?.[field]));
-  NESTED_SCOPE_FIELD_NAMES.forEach((field) =>
-    addScopeValue(values, source?.[field]),
-  );
-
-  return values;
-};
-
-const rowMatchesUserScope = (row: AnyRow, profile: any): boolean => {
-  const profileScope = collectScopeValues(profile);
-  if (profileScope.size === 0) return false;
-
-  const rowScope = collectScopeValues(row);
-  for (const value of rowScope) {
-    if (profileScope.has(value)) return true;
-  }
-
-  return false;
-};
-
-type RestrictedActivity = {
-  id: string;
-  module: string;
-  title: string;
-  description: string;
-  status: string;
-  date: Date | null;
-};
-
-const getRestrictedRoleConfig = (roleKey: string) => {
-  if (["operation", "operations", "operational_admin", "operation_admin"].includes(roleKey)) {
-    return {
-      title: "Operations Workspace",
-      description:
-        "Track the requests, estimates, expenses and reimbursements assigned to your operational scope.",
-      visibleModules: ["requests", "estimates", "expenses", "claims"],
-    };
-  }
-
-  if (["sales", "sales_admin", "business_development"].includes(roleKey)) {
-    return {
-      title: "Sales Workspace",
-      description:
-        "Track your estimates, client invoices, budget requests and submitted expenses without finance-level information.",
-      visibleModules: ["estimates", "invoices", "requests", "expenses"],
-    };
-  }
-
-  if (["creative", "creative_team", "design", "production"].includes(roleKey)) {
-    return {
-      title: "Creative Workspace",
-      description:
-        "View your assigned requests, submitted expenses, reimbursement claims and recent workflow updates.",
-      visibleModules: ["requests", "expenses", "claims", "activity"],
-    };
-  }
-
-  return {
-    title: "My Workspace",
-    description:
-      "View only the operational records assigned to your account, team, department or projects.",
-    visibleModules: ["requests", "estimates", "expenses", "claims"],
-  };
-};
-
-function RestrictedDashboard({
-  userProfile,
-  roleKey,
-  data,
-  refreshing,
-  lastUpdated,
-  unavailableModules,
-  canCreateInvoices,
-  onRefresh,
-  onCreateBudgetRequest,
-}: {
-  userProfile: any;
-  roleKey: string;
-  data: DashboardData;
-  refreshing: boolean;
-  lastUpdated: Date | null;
-  unavailableModules: string[];
-  canCreateInvoices: boolean;
-  onRefresh: () => void;
-  onCreateBudgetRequest: () => void;
-}) {
-  const config = getRestrictedRoleConfig(roleKey);
-
-  const dashboard = useMemo(() => {
-    const requestsPending = data.invoiceRequests.filter((request) => {
-      const status = normalizeText(request?.status);
-      return ![
-        "approved",
-        "rejected",
-        "returned_to_creator",
-        "changes_requested",
-        "payment_released",
-        "released",
-        "completed",
-      ].includes(status);
-    }).length;
-
-    const requestsReturned = data.invoiceRequests.filter((request) =>
-      ["rejected", "returned_to_creator", "changes_requested"].includes(
-        normalizeText(request?.status),
-      ),
-    ).length;
-
-    const requestsCompleted = data.invoiceRequests.filter((request) =>
-      [
-        "approved",
-        "payment_released",
-        "released",
-        "completed",
-        "paid",
-      ].includes(normalizeText(request?.status)),
-    ).length;
-
-    const claims = [...data.directClaims, ...data.meetingClaims];
-    const pendingClaims = claims.filter(
-      (claim) => getClaimStatus(claim) === "pending",
-    ).length;
-
-    const activities: RestrictedActivity[] = [
-      ...data.invoiceRequests.map((request) => ({
-        id: `request-${request.id}`,
-        module: "Budget Request",
-        title: firstText(
-          request?.requestId,
-          request?.title,
-          request?.subject,
-          "Budget request",
-        ),
-        description: firstText(
-          request?.projectName,
-          request?.project,
-          request?.clientName,
-          "Workflow updated",
-        ),
-        status: request?.status || "submitted",
-        date: getRequestDate(request),
-      })),
-      ...data.estimates.map((estimate) => ({
-        id: `estimate-${estimate.id}`,
-        module: "Estimate",
-        title: firstText(
-          estimate?.estimateNo,
-          estimate?.title,
-          estimate?.subject,
-          "Estimate",
-        ),
-        description: firstText(
-          estimate?.projectName,
-          estimate?.clientName,
-          estimate?.client,
-          "Estimate updated",
-        ),
-        status: estimate?.status || "draft",
-        date: getEntityDate(estimate),
-      })),
-      ...data.estimateInvoices.map((invoice) => ({
-        id: `invoice-${invoice.id}`,
-        module: "Client Invoice",
-        title: firstText(invoice?.invoiceNo, invoice?.subject, "Invoice"),
-        description: firstText(
-          invoice?.projectName,
-          invoice?.clientName,
-          invoice?.client,
-          "Invoice updated",
-        ),
-        status: invoice?.status || invoice?.paymentStatus || "unpaid",
-        date: getEntityDate(invoice),
-      })),
-      ...data.expenseSheets.map((expense) => ({
-        id: `expense-${expense.id}`,
-        module: "Expense Sheet",
-        title: firstText(
-          expense?.expenseId,
-          expense?.title,
-          expense?.projectName,
-          "Expense sheet",
-        ),
-        description: firstText(
-          expense?.projectName,
-          expense?.project,
-          expense?.clientName,
-          "Expense submitted",
-        ),
-        status: expense?.status || expense?.paymentStatus || "submitted",
-        date: getEntityDate(expense),
-      })),
-      ...claims.map((claim) => ({
-        id: `claim-${claim.id}`,
-        module: "Reimbursement",
-        title: firstText(
-          claim?.description,
-          claim?.foodItem,
-          claim?.claimType,
-          "Reimbursement claim",
-        ),
-        description: firstText(
-          claim?.projectName,
-          claim?.meetingTitle,
-          "Claim updated",
-        ),
-        status:
-          normalizeText(claim?.paymentStatus) === "paid"
-            ? "paid"
-            : claim?.status || claim?.approvalStatus || "pending",
-        date: getEntityDate(claim),
-      })),
-    ]
-      .sort((a, b) => (b.date?.getTime() || 0) - (a.date?.getTime() || 0))
-      .slice(0, 10);
-
-    return {
-      requestsPending,
-      requestsReturned,
-      requestsCompleted,
-      pendingClaims,
-      activities,
-      totalWorkspaceRecords:
-        data.invoiceRequests.length +
-        data.estimates.length +
-        data.estimateInvoices.length +
-        data.expenseSheets.length +
-        claims.length,
-      claimsCount: claims.length,
-    };
-  }, [data]);
-
-  const moduleCards = [
-    {
-      key: "requests",
-      title: "My Budget Requests",
-      subtitle: "Requests created by or assigned to your user scope.",
-      icon: FileText,
-      items: [
-        { label: "Total", value: String(data.invoiceRequests.length) },
-        { label: "In Progress", value: String(dashboard.requestsPending) },
-        { label: "Returned", value: String(dashboard.requestsReturned), className: "text-rose-600" },
-        { label: "Completed", value: String(dashboard.requestsCompleted), className: "text-emerald-600" },
-      ],
-    },
-    {
-      key: "estimates",
-      title: "My Estimates",
-      subtitle: "Estimates assigned to your account, team or projects.",
-      icon: FileSpreadsheet,
-      items: [
-        { label: "Total", value: String(data.estimates.length) },
-        { label: "Approved", value: String(data.estimates.filter((item) => normalizeText(item?.status) === "approved").length), className: "text-emerald-600" },
-        { label: "Invoiced", value: String(data.estimates.filter((item) => ["invoiced", "payment received"].includes(normalizeText(item?.status))).length), className: "text-blue-600" },
-        { label: "Other", value: String(data.estimates.filter((item) => !["approved", "invoiced", "payment received"].includes(normalizeText(item?.status))).length) },
-      ],
-    },
-    {
-      key: "invoices",
-      title: "My Client Invoices",
-      subtitle: "Invoice workflow status without financial totals.",
-      icon: ReceiptText,
-      items: [
-        { label: "Total", value: String(data.estimateInvoices.length) },
-        { label: "Paid", value: String(data.estimateInvoices.filter((item) => getInvoiceStatus(item) === "paid").length), className: "text-emerald-600" },
-        { label: "Partial", value: String(data.estimateInvoices.filter((item) => getInvoiceStatus(item) === "partial").length), className: "text-blue-600" },
-        { label: "Unpaid", value: String(data.estimateInvoices.filter((item) => getInvoiceStatus(item) === "unpaid").length), className: "text-amber-600" },
-      ],
-    },
-    {
-      key: "expenses",
-      title: "My Expense Sheets",
-      subtitle: "Expense sheets submitted by or assigned to you.",
-      icon: CreditCard,
-      items: [
-        { label: "Total", value: String(data.expenseSheets.length) },
-        { label: "Pending", value: String(data.expenseSheets.filter((item) => normalizeText(item?.status || item?.paymentStatus).includes("pending")).length), className: "text-amber-600" },
-        { label: "Approved", value: String(data.expenseSheets.filter((item) => normalizeText(item?.status || item?.paymentStatus).includes("approved")).length), className: "text-emerald-600" },
-        { label: "Other", value: String(data.expenseSheets.filter((item) => !normalizeText(item?.status || item?.paymentStatus).includes("pending") && !normalizeText(item?.status || item?.paymentStatus).includes("approved")).length) },
-      ],
-    },
-    {
-      key: "claims",
-      title: "My Reimbursements",
-      subtitle: "Your submitted and assigned reimbursement claims.",
-      icon: Users,
-      items: [
-        { label: "Total", value: String(dashboard.claimsCount) },
-        { label: "Pending", value: String(dashboard.pendingClaims), className: "text-amber-600" },
-        { label: "Approved", value: String([...data.directClaims, ...data.meetingClaims].filter((item) => getClaimStatus(item) === "approved").length), className: "text-emerald-600" },
-        { label: "Rejected", value: String([...data.directClaims, ...data.meetingClaims].filter((item) => getClaimStatus(item) === "rejected").length), className: "text-rose-600" },
-      ],
-    },
-    {
-      key: "activity",
-      title: "Workflow Activity",
-      subtitle: "Recent updates visible inside your role scope.",
-      icon: Activity,
-      items: [
-        { label: "Recent Updates", value: String(dashboard.activities.length) },
-        { label: "Workspace Records", value: String(dashboard.totalWorkspaceRecords) },
-        { label: "Pending Requests", value: String(dashboard.requestsPending), className: "text-amber-600" },
-        { label: "Returned Requests", value: String(dashboard.requestsReturned), className: "text-rose-600" },
-      ],
-    },
-  ].filter((card) => config.visibleModules.includes(card.key));
-
-  return (
-    <div className="min-h-screen bg-slate-50/80 p-4 text-slate-900 sm:p-6">
-      <div className="mx-auto space-y-6">
-        <section className="overflow-hidden rounded-[32px] bg-slate-950 p-6 text-white shadow-xl shadow-slate-200/70 sm:p-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-            <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
-                <BadgeCheck className="h-3.5 w-3.5" />
-                Role-Based Access
-              </div>
-
-              <h1 className="mt-5 text-3xl font-black tracking-[-0.04em] sm:text-4xl">
-                {config.title}
-              </h1>
-              <p className="mt-2 text-lg font-bold text-white">
-                Welcome back, {userProfile?.displayName || userProfile?.name || "Team Member"}
-              </p>
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-                {config.description}
-              </p>
-
-              <div className="mt-5 flex flex-wrap gap-3 text-xs text-slate-300">
-                <span className="rounded-full bg-white/10 px-3 py-1.5 font-semibold">
-                  Role: {humanize(userProfile?.role || "User")}
-                </span>
-                <span className="rounded-full bg-white/10 px-3 py-1.5 font-semibold">
-                  Updated: {lastUpdated ? formatRelativeTime(lastUpdated) : "Now"}
-                </span>
-                <span className="rounded-full bg-emerald-400/15 px-3 py-1.5 font-semibold text-emerald-200">
-                  Restricted financial access
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={onRefresh}
-                disabled={refreshing}
-                className="h-11 rounded-2xl border-white/15 bg-white/10 px-4 text-white hover:bg-white/15 hover:text-white"
-              >
-                <RefreshCcw className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`} />
-                {refreshing ? "Refreshing" : "Refresh"}
-              </Button>
-
-              {canCreateInvoices && (
-                <Button
-                  type="button"
-                  onClick={onCreateBudgetRequest}
-                  className="h-11 rounded-2xl bg-white px-4 font-bold text-slate-950 hover:bg-slate-100"
-                >
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Budget Request
-                </Button>
-              )}
-            </div>
-          </div>
-
-          <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-              <p className="text-xs font-semibold text-slate-300">Workspace Records</p>
-              <p className="mt-2 text-2xl font-black">{dashboard.totalWorkspaceRecords}</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-              <p className="text-xs font-semibold text-slate-300">Requests In Progress</p>
-              <p className="mt-2 text-2xl font-black">{dashboard.requestsPending}</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-              <p className="text-xs font-semibold text-slate-300">Returned Requests</p>
-              <p className="mt-2 text-2xl font-black">{dashboard.requestsReturned}</p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/10 p-4">
-              <p className="text-xs font-semibold text-slate-300">Pending Claims</p>
-              <p className="mt-2 text-2xl font-black">{dashboard.pendingClaims}</p>
-            </div>
-          </div>
-        </section>
-
-        {unavailableModules.length > 0 && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
-              <div>
-                <p className="font-bold">Some role-scoped modules are unavailable.</p>
-                <p className="mt-1 text-xs leading-5">
-                  Your available workspace data is still displayed. Check the matching Firestore role rules for: {unavailableModules.join(", ")}.
-                </p>
-              </div>
-            </div>
-          </div>
-        )}
-
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard
-            title="My Requests"
-            value={String(data.invoiceRequests.length)}
-            subtitle="Only requests inside your role scope"
-            icon={FileText}
-            tone="blue"
-          />
-          <MetricCard
-            title="Waiting For Review"
-            value={String(dashboard.requestsPending)}
-            subtitle="Requests still moving through workflow"
-            icon={Clock3}
-            tone="amber"
-          />
-          <MetricCard
-            title="Completed"
-            value={String(dashboard.requestsCompleted)}
-            subtitle="Approved or completed requests"
-            icon={CheckCircle2}
-            tone="emerald"
-          />
-          <MetricCard
-            title="Needs Attention"
-            value={String(dashboard.requestsReturned + dashboard.pendingClaims)}
-            subtitle="Returned requests and pending claims"
-            icon={AlertTriangle}
-            tone="rose"
-          />
-        </section>
-
-        <section>
-          <div className="mb-4">
-            <h2 className="text-xl font-black text-slate-950">Role-Specific Modules</h2>
-            <p className="mt-1 text-sm text-slate-500">
-              Financial balances, payment releases, cheque records, vendor exposure and administrative reports are hidden for this role.
-            </p>
-          </div>
-
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            {moduleCards.map((card) => (
-              <ModuleCard key={card.key} {...card} />
-            ))}
-          </div>
-        </section>
-
-        <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
-          <CardContent className="p-5 sm:p-6">
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <h2 className="text-lg font-black text-slate-950">My Recent Activity</h2>
-                <p className="mt-1 text-xs text-slate-500">
-                  Recent workflow updates matched to your user, team, department or assigned projects.
-                </p>
-              </div>
-              <Activity className="h-5 w-5 text-slate-400" />
-            </div>
-
-            <div className="mt-5 divide-y divide-slate-100">
-              {dashboard.activities.length === 0 ? (
-                <div className="py-12 text-center">
-                  <CalendarClock className="mx-auto h-7 w-7 text-slate-300" />
-                  <p className="mt-3 text-sm font-semibold text-slate-500">
-                    No role-scoped activity was found.
-                  </p>
-                  <p className="mt-1 text-xs text-slate-400">
-                    Make sure your records contain a matching user, team, department or project identifier.
-                  </p>
-                </div>
-              ) : (
-                dashboard.activities.map((activity) => (
-                  <div key={activity.id} className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center">
-                    <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
-                      <Activity className="h-4 w-4" />
-                    </div>
-                    <div className="min-w-0 flex-1">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <p className="truncate text-sm font-black text-slate-900">{activity.title}</p>
-                        <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">{activity.module}</span>
-                      </div>
-                      <p className="mt-1 truncate text-xs text-slate-500">{activity.description}</p>
-                    </div>
-                    <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end">
-                      <StatusBadge status={activity.status} />
-                      <span className="text-[11px] font-semibold text-slate-400">{formatRelativeTime(activity.date)}</span>
-                    </div>
-                  </div>
-                ))
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
-    </div>
-  );
-}
-
-function MetricCard({
-  title,
-  value,
-  subtitle,
-  icon: Icon,
-  tone = "slate",
-  trend,
-}: {
-  title: string;
-  value: string;
-  subtitle: string;
-  icon: LucideIcon;
-  tone?: "slate" | "emerald" | "blue" | "amber" | "rose" | "violet";
-  trend?: "up" | "down";
-}) {
-  const toneClasses = {
-    slate: "bg-slate-100 text-slate-700",
-    emerald: "bg-emerald-50 text-emerald-700",
-    blue: "bg-blue-50 text-blue-700",
-    amber: "bg-amber-50 text-amber-700",
-    rose: "bg-rose-50 text-rose-700",
-    violet: "bg-violet-50 text-violet-700",
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, "Payments");
+    XLSX.writeFile(workbook, "Accounts_Report.xlsx");
   };
 
-  return (
-    <Card className="overflow-hidden rounded-3xl border-slate-200 bg-white shadow-sm">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-4">
-          <div className="min-w-0">
-            <p className="text-xs font-bold uppercase tracking-[0.16em] text-slate-400">
-              {title}
-            </p>
-            <p className="mt-3 truncate text-2xl font-black tracking-tight text-slate-950 xl:text-3xl">
-              {value}
-            </p>
+  const exportPDF = () => {
+    const doc = new jsPDF();
+
+    autoTable(doc, {
+      head: [["Date", "Client", "Method", "Account", "Reference", "Amount"]],
+      body: filteredPayments.map((p) => [
+        p.paymentDate,
+        p.client,
+        p.method,
+        getAccountLabel(p.depositTo),
+        p.reference,
+        p.amount,
+      ]),
+    });
+
+    doc.save("Accounts_Report.pdf");
+  };
+
+  function renderAccountForm(
+    onSubmit: (e: React.FormEvent) => Promise<void>,
+    submitLabel: string,
+  ) {
+    return (
+      <form onSubmit={onSubmit} className="space-y-6">
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Account Name *
+            </Label>
+            <Input
+              className="h-11 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none focus-visible:ring-blue-100"
+              value={formData.accountName}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  accountName: e.target.value,
+                }))
+              }
+              placeholder="Meezan PKR Collection"
+            />
           </div>
 
-          <div
-            className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl ${toneClasses[tone]}`}
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Account Number *
+            </Label>
+            <Input
+              className="h-11 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none focus-visible:ring-blue-100"
+              value={formData.accountNumber}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  accountNumber: e.target.value,
+                }))
+              }
+              placeholder="Enter account number"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Bank Name *
+            </Label>
+            <Input
+              className="h-11 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none focus-visible:ring-blue-100"
+              value={formData.bankName}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  bankName: e.target.value,
+                }))
+              }
+              placeholder="Enter bank name"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Currency
+            </Label>
+            <Input
+              className="h-11 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none focus-visible:ring-blue-100"
+              value={formData.currency}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  currency: e.target.value,
+                }))
+              }
+              placeholder="PKR"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              IBAN
+            </Label>
+            <Input
+              className="h-11 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none focus-visible:ring-blue-100"
+              value={formData.iban}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  iban: e.target.value,
+                }))
+              }
+              placeholder="Enter IBAN"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              SWIFT Code
+            </Label>
+            <Input
+              className="h-11 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none focus-visible:ring-blue-100"
+              value={formData.swiftCode}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  swiftCode: e.target.value,
+                }))
+              }
+              placeholder="Enter SWIFT code"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Branch Name
+            </Label>
+            <Input
+              className="h-11 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none focus-visible:ring-blue-100"
+              value={formData.branchName}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  branchName: e.target.value,
+                }))
+              }
+              placeholder="Enter branch name"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Branch Code
+            </Label>
+            <Input
+              className="h-11 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none focus-visible:ring-blue-100"
+              value={formData.branchCode}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  branchCode: e.target.value,
+                }))
+              }
+              placeholder="Enter branch code"
+            />
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
+            <Label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Opening Balance
+            </Label>
+            <Input
+              type="number"
+              className="h-11 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none focus-visible:ring-blue-100"
+              value={formData.openingBalance}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  openingBalance: e.target.value,
+                }))
+              }
+              placeholder="0"
+            />
+          </div>
+
+          <div className="space-y-2 md:col-span-2">
+            <Label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Notes
+            </Label>
+            <Textarea
+              className="min-h-[110px] rounded-2xl border-slate-200 bg-slate-50/80 shadow-none focus-visible:ring-blue-100"
+              value={formData.notes}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  notes: e.target.value,
+                }))
+              }
+              placeholder="Optional notes"
+            />
+          </div>
+        </div>
+
+        <div className="flex justify-end gap-3 border-t border-slate-100 pt-5">
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 rounded-2xl border-slate-200 bg-white px-5"
+            onClick={resetFormAndClose}
           >
-            <Icon className="h-5 w-5" />
-          </div>
-        </div>
+            Cancel
+          </Button>
 
-        <div className="mt-4 flex items-center gap-2 border-t border-slate-100 pt-3">
-          {trend === "up" && <ArrowUpRight className="h-4 w-4 text-emerald-600" />}
-          {trend === "down" && <ArrowDownRight className="h-4 w-4 text-rose-600" />}
-          <p className="truncate text-xs font-medium text-slate-500">
-            {subtitle}
-          </p>
+          <Button
+            type="submit"
+            disabled={accountLoading}
+            className="h-11 rounded-2xl bg-slate-950 px-6 text-white shadow-sm hover:bg-slate-800"
+          >
+            {accountLoading ? "Saving..." : submitLabel}
+          </Button>
         </div>
-      </CardContent>
-    </Card>
-  );
-}
+      </form>
+    );
+  }
 
-function AlertCard({
-  title,
-  value,
-  description,
-  icon,
-  tone,
-}: {
-  title: string;
-  value: string;
-  description: string;
-  icon: ReactNode;
-  tone: "amber" | "blue" | "rose" | "emerald";
-}) {
-  const classes = {
-    amber: "border-amber-200 bg-amber-50/70 text-amber-800",
-    blue: "border-blue-200 bg-blue-50/70 text-blue-800",
-    rose: "border-rose-200 bg-rose-50/70 text-rose-800",
-    emerald: "border-emerald-200 bg-emerald-50/70 text-emerald-800",
-  };
+  const summaryCards = [
+    {
+      title: "Total Received",
+      value: formatCurrency(totalReceived),
+      subtitle: "Filtered collection amount",
+    },
+    {
+      title: "Total Pending",
+      value: formatCurrency(totalPending),
+      subtitle: "Open invoice balance",
+    },
+    {
+      title: "Total Accounts",
+      value: totalAccountsCount,
+      subtitle: "Saved payment accounts",
+    },
+    {
+      title: "Active Accounts",
+      value: activeAccountsCount,
+      subtitle: "Ready for deposits",
+    },
+  ];
 
   return (
-    <div className={`rounded-2xl border p-4 ${classes[tone]}`}>
-      <div className="flex items-start justify-between gap-3">
-        <div>
-          <p className="text-xs font-bold uppercase tracking-[0.14em] opacity-70">
-            {title}
-          </p>
-          <p className="mt-2 text-2xl font-black">{value}</p>
-          <p className="mt-1 text-xs font-medium leading-5 opacity-75">
-            {description}
-          </p>
-        </div>
-        <div className="rounded-xl bg-white/70 p-2.5 shadow-sm">{icon}</div>
-      </div>
-    </div>
-  );
-}
+    <div className="min-h-screen overflow-x-hidden bg-[#f7f9fc] px-4 py-6 text-slate-900 md:px-8 md:py-8">
+      <div className="mx-auto  space-y-7">
+        <div className="relative overflow-hidden rounded-[2rem] border border-white/80 bg-white p-6 shadow-[0_24px_80px_rgba(15,23,42,0.08)] md:p-8">
+          <div className="pointer-events-none absolute -right-16 -top-20 h-60 w-60 rounded-full bg-blue-100 blur-3xl" />
+          <div className="pointer-events-none absolute -bottom-24 left-1/3 h-56 w-56 rounded-full bg-emerald-100 blur-3xl" />
 
-function ModuleCard({
-  title,
-  subtitle,
-  icon: Icon,
-  items,
-}: {
-  title: string;
-  subtitle: string;
-  icon: LucideIcon;
-  items: Array<{ label: string; value: string; className?: string }>;
-}) {
-  return (
-    <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
-      <CardContent className="p-5">
-        <div className="flex items-start justify-between gap-3">
-          <div>
-            <h3 className="font-black text-slate-950">{title}</h3>
-            <p className="mt-1 text-xs leading-5 text-slate-500">{subtitle}</p>
-          </div>
-          <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
-            <Icon className="h-5 w-5" />
+          <div className="relative flex flex-col gap-6 lg:flex-row lg:items-center lg:justify-between">
+            <div className="max-w-2xl">
+              <span className="inline-flex rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-xs font-semibold uppercase tracking-[0.22em] text-blue-700">
+                Finance Overview
+              </span>
+
+              <h1 className="mt-4 text-3xl font-black tracking-[-0.04em] text-slate-950 md:text-5xl">
+                Accounts Dashboard
+              </h1>
+
+              <p className="mt-3 max-w-xl text-sm leading-6 text-slate-500 md:text-base">
+                Manage payment accounts, monitor collections, review pending
+                balances, and export filtered reports from one clean workspace.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3">
+              <Dialog open={listModalOpen} onOpenChange={setListModalOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="h-11 rounded-2xl border-slate-200 bg-white px-5 shadow-sm hover:bg-slate-50"
+                  >
+                    Account List ({accounts.length})
+                  </Button>
+                </DialogTrigger>
+
+                <DialogContent className="max-h-[85vh] max-w-6xl overflow-y-auto rounded-[1.75rem] border-0 p-0 shadow-2xl">
+                  <div className="border-b border-slate-100 bg-slate-50/70 px-6 py-5">
+                    <DialogHeader>
+                      <DialogTitle className="text-xl font-bold tracking-tight text-slate-950">
+                        Saved Payment Accounts
+                      </DialogTitle>
+                    </DialogHeader>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Review account details, status, and balance information.
+                    </p>
+                  </div>
+
+                  <div className="px-6 py-6">
+                    {accounts.length === 0 ? (
+                      <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
+                        No payment accounts found.
+                      </div>
+                    ) : (
+                      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
+                        {accounts.map((account) => (
+                          <div
+                            key={account.id}
+                            className="group rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm transition-all hover:-translate-y-0.5 hover:border-blue-100 hover:shadow-xl"
+                          >
+                            <div className="mb-4 flex items-start justify-between gap-3">
+                              <div className="min-w-0">
+                                <h3 className="truncate text-base font-bold text-slate-950">
+                                  {account.accountName || "-"}
+                                </h3>
+                                <p className="truncate text-sm text-slate-500">
+                                  {account.bankName || "-"}
+                                </p>
+                              </div>
+
+                              <span
+                                className={`shrink-0 rounded-full px-2.5 py-1 text-xs font-semibold ${
+                                  account.isActive !== false
+                                    ? "bg-emerald-50 text-emerald-700"
+                                    : "bg-rose-50 text-rose-700"
+                                }`}
+                              >
+                                {account.isActive !== false
+                                  ? "Active"
+                                  : "Inactive"}
+                              </span>
+                            </div>
+
+                            <div className="space-y-2 rounded-2xl bg-slate-50/80 p-4 text-sm text-slate-600">
+                              <div className="flex justify-between gap-3">
+                                <span className="text-slate-400">
+                                  Account No
+                                </span>
+                                <span className="text-right font-medium text-slate-700">
+                                  {account.accountNumber || "-"}
+                                </span>
+                              </div>
+
+                              <div className="flex justify-between gap-3">
+                                <span className="text-slate-400">IBAN</span>
+                                <span className="text-right font-medium text-slate-700">
+                                  {account.iban || "-"}
+                                </span>
+                              </div>
+
+                              <div className="flex justify-between gap-3">
+                                <span className="text-slate-400">SWIFT</span>
+                                <span className="text-right font-medium text-slate-700">
+                                  {(account as any).swiftCode || "-"}
+                                </span>
+                              </div>
+
+                              <div className="flex justify-between gap-3">
+                                <span className="text-slate-400">Branch</span>
+                                <span className="text-right font-medium text-slate-700">
+                                  {account.branchName || "-"}
+                                </span>
+                              </div>
+
+                              <div className="flex justify-between gap-3">
+                                <span className="text-slate-400">Currency</span>
+                                <span className="text-right font-medium text-slate-700">
+                                  {account.currency || "PKR"}
+                                </span>
+                              </div>
+
+                              <div className="flex justify-between gap-3 border-t border-slate-200/70 pt-2">
+                                <span className="text-slate-400">
+                                  Opening Balance
+                                </span>
+                                <span className="text-right font-bold text-slate-950">
+                                  {formatCurrency(account.openingBalance || 0)}
+                                </span>
+                              </div>
+
+                              <div className="flex justify-between gap-3">
+                                <span className="text-slate-400">
+                                  Current Balance
+                                </span>
+                                <span className="text-right font-bold text-slate-950">
+                                  {formatCurrency(
+                                    (account as any).currentBalance ??
+                                      (account as any).balance ??
+                                      0,
+                                  )}
+                                </span>
+                              </div>
+                            </div>
+
+                            {account.notes ? (
+                              <div className="mt-4 rounded-2xl border border-slate-100 bg-white p-3 text-sm leading-6 text-slate-600">
+                                {account.notes}
+                              </div>
+                            ) : null}
+
+                            <div className="mt-5 flex items-center gap-2">
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-10 flex-1 rounded-2xl border-slate-200 bg-white"
+                                onClick={() => openEditModal(account)}
+                              >
+                                Edit
+                              </Button>
+
+                              <Button
+                                type="button"
+                                variant="outline"
+                                className="h-10 flex-1 rounded-2xl border-slate-200 bg-white"
+                                onClick={() => toggleAccountStatus(account)}
+                              >
+                                {account.isActive !== false
+                                  ? "Deactivate"
+                                  : "Activate"}
+                              </Button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog open={createModalOpen} onOpenChange={setCreateModalOpen}>
+                <DialogTrigger asChild>
+                  <Button
+                    onClick={openCreateModal}
+                    className="h-11 rounded-2xl bg-slate-950 px-5 text-white shadow-sm hover:bg-slate-800"
+                  >
+                    Create Account
+                  </Button>
+                </DialogTrigger>
+
+                <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto rounded-[1.75rem] border-0 p-0 shadow-2xl">
+                  <div className="border-b border-slate-100 bg-slate-50/70 px-6 py-5">
+                    <DialogHeader>
+                      <DialogTitle className="text-xl font-bold tracking-tight text-slate-950">
+                        Create Payment Account
+                      </DialogTitle>
+                    </DialogHeader>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Add bank or collection account information.
+                    </p>
+                  </div>
+
+                  <div className="px-6 py-6">
+                    {renderAccountForm(handleCreateAccount, "Save Account")}
+                  </div>
+                </DialogContent>
+              </Dialog>
+
+              <Dialog open={editModalOpen} onOpenChange={setEditModalOpen}>
+                <DialogContent className="max-h-[85vh] max-w-4xl overflow-y-auto rounded-[1.75rem] border-0 p-0 shadow-2xl">
+                  <div className="border-b border-slate-100 bg-slate-50/70 px-6 py-5">
+                    <DialogHeader>
+                      <DialogTitle className="text-xl font-bold tracking-tight text-slate-950">
+                        Edit Payment Account
+                      </DialogTitle>
+                    </DialogHeader>
+                    <p className="mt-1 text-sm text-slate-500">
+                      Update payment account information.
+                    </p>
+                  </div>
+
+                  <div className="px-6 py-6">
+                    {renderAccountForm(handleEditAccount, "Update Account")}
+                  </div>
+                </DialogContent>
+              </Dialog>
+            </div>
           </div>
         </div>
 
-        <div className="mt-5 space-y-3">
-          {items.map((item) => (
+        <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+          {summaryCards.map((card) => (
             <div
-              key={item.label}
-              className="flex items-center justify-between gap-3 border-b border-slate-100 pb-3 last:border-0 last:pb-0"
+              key={card.title}
+              className="rounded-[1.5rem] border border-white bg-white p-5 shadow-[0_18px_50px_rgba(15,23,42,0.06)]"
             >
-              <span className="text-sm font-medium text-slate-500">
-                {item.label}
-              </span>
-              <span
-                className={`text-sm font-black text-slate-950 ${item.className || ""}`}
-              >
-                {item.value}
-              </span>
+              <div className="mt-5 text-sm font-medium text-slate-500">
+                {card.title}
+              </div>
+              <div className="mt-2 text-2xl font-black tracking-tight text-slate-950">
+                {card.value}
+              </div>
+              <div className="mt-1 text-xs text-slate-400">{card.subtitle}</div>
             </div>
           ))}
         </div>
-      </CardContent>
-    </Card>
-  );
-}
 
-function StatusBadge({ status }: { status: string }) {
-  const normalized = normalizeText(status);
-
-  const classes = normalized.includes("partial")
-    ? "border-blue-200 bg-blue-50 text-blue-700"
-    : normalized.includes("paid") ||
-        normalized.includes("approved") ||
-        normalized.includes("released")
-      ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-      : normalized.includes("reject") || normalized.includes("cancel")
-        ? "border-rose-200 bg-rose-50 text-rose-700"
-        : normalized.includes("pending") ||
-            normalized.includes("unpaid") ||
-            normalized.includes("open")
-          ? "border-amber-200 bg-amber-50 text-amber-700"
-          : "border-slate-200 bg-slate-50 text-slate-600";
-
-  return (
-    <span
-      className={`inline-flex rounded-full border px-2.5 py-1 text-[11px] font-bold ${classes}`}
-    >
-      {humanize(status)}
-    </span>
-  );
-}
-
-export default function Dashboard() {
-  const { userProfile } = useAuth();
-
-  const roleKey = normalizeText(userProfile?.role).replace(/[^a-z0-9]+/g, "_").replace(/^_+|_+$/g, "");
-  const hasFullDashboardAccess = FULL_DASHBOARD_ROLES.has(roleKey);
-  const canCreateInvoices = [
-    "operation",
-    "operations",
-    "operational_admin",
-    "operation_admin",
-    "creative",
-    "sales",
-  ].includes(roleKey);
-
-  const [data, setData] = useState<DashboardData>(EMPTY_DATA);
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-  const [unavailableModules, setUnavailableModules] = useState<string[]>([]);
-  const [isInvoiceModalOpen, setIsInvoiceModalOpen] = useState(false);
-
-  const loadDashboardData = useCallback(async (silent = false) => {
-    if (silent) setRefreshing(true);
-    else setLoading(true);
-
-    const unavailable = new Set<string>();
-
-    const readCollection = async (
-      path: string[],
-      label: string,
-    ): Promise<AnyRow[]> => {
-      try {
-        const snapshot = await getDocs(
-          collection(db, path[0], ...path.slice(1)),
-        );
-        return snapshotToRows(snapshot as any);
-      } catch (error) {
-        console.warn(`Dashboard could not read ${label}:`, error);
-        unavailable.add(label);
-        return [];
-      }
-    };
-
-    const restrictToCurrentScope = (rows: AnyRow[]) =>
-      rows.filter((row) => rowMatchesUserScope(row, userProfile));
-
-    try {
-      if (!hasFullDashboardAccess) {
-        const [
-          invoiceRequests,
-          estimates,
-          estimateInvoices,
-          expenseSheets,
-          directClaims,
-        ] = await Promise.all([
-          readCollection(["Panels", PANEL_ID, "invoiceRequests"], "Budget Requests"),
-          readCollection(["Panels", PANEL_ID, "estimates"], "Estimates"),
-          readCollection(
-            ["Panels", PANEL_ID, "estimateInvoices"],
-            "Estimate Invoices",
-          ),
-          readCollection(["Panels", PANEL_ID, "expenseSheets"], "Budget Expenses"),
-          readCollection(
-            ["Panels", PANEL_ID, "claimReimbursements"],
-            "Reimbursements",
-          ),
-        ]);
-
-        setData({
-          ...EMPTY_DATA,
-          invoiceRequests: restrictToCurrentScope(invoiceRequests),
-          estimates: restrictToCurrentScope(estimates),
-          estimateInvoices: restrictToCurrentScope(estimateInvoices),
-          expenseSheets: restrictToCurrentScope(expenseSheets),
-          directClaims: restrictToCurrentScope(directClaims),
-        });
-
-        setUnavailableModules(Array.from(unavailable));
-        setLastUpdated(new Date());
-        return;
-      }
-
-      const [
-        invoiceRequests,
-        estimates,
-        estimateInvoices,
-        payments,
-        expenseSheets,
-        directClaims,
-        records,
-        poRows,
-        purchaseOrderRows,
-        manualEntries,
-      ] = await Promise.all([
-        readCollection(["Panels", PANEL_ID, "invoiceRequests"], "Budget Requests"),
-        readCollection(["Panels", PANEL_ID, "estimates"], "Estimates"),
-        readCollection(
-          ["Panels", PANEL_ID, "estimateInvoices"],
-          "Estimate Invoices",
-        ),
-        readCollection(["Panels", PANEL_ID, "payments"], "Payments"),
-        readCollection(["Panels", PANEL_ID, "expenseSheets"], "Budget Expenses"),
-        readCollection(
-          ["Panels", PANEL_ID, "claimReimbursements"],
-          "Reimbursements",
-        ),
-        readCollection(["Panels", PANEL_ID, "Record"], "Records"),
-        readCollection(["Panels", PANEL_ID, "PO"], "Purchase Orders"),
-        readCollection(
-          ["Panels", PANEL_ID, "purchaseOrders"],
-          "Legacy Purchase Orders",
-        ),
-        readCollection(
-          ["Panels", PANEL_ID, "accountStatementManualEntries"],
-          "Manual Statement Entries",
-        ),
-      ]);
-
-      let openingBalance = 0;
-      try {
-        const settingsSnapshot = await getDoc(
-          doc(
-            db,
-            "Panels",
-            PANEL_ID,
-            "accountStatementSettings",
-            "main",
-          ),
-        );
-
-        openingBalance = settingsSnapshot.exists()
-          ? safeNumber(settingsSnapshot.data()?.openingBalance)
-          : 0;
-      } catch (error) {
-        console.warn("Dashboard could not read Account Statement settings:", error);
-        unavailable.add("Account Statement Settings");
-      }
-
-      let meetingClaims: AnyRow[] = [];
-      try {
-        const meetingSnapshot = await getDocs(collectionGroup(db, "meetingUpdates"));
-
-        meetingClaims = meetingSnapshot.docs
-          .map((meetingDocument) => ({
-            id: meetingDocument.id,
-            path: meetingDocument.ref.path,
-            ...meetingDocument.data(),
-          }))
-          .filter((meeting: any) => meeting?.reimbursement?.enabled)
-          .map((meeting: any) => ({
-            id: meeting.id,
-            path: meeting.path,
-            ...meeting.reimbursement,
-            personName:
-              meeting.reimbursement?.approvalSubmittedByName ||
-              meeting.reimbursement?.personName ||
-              meeting.personName ||
-              "Unknown",
-            submittedAt:
-              meeting.reimbursement?.approvalSubmittedAt ||
-              meeting.reimbursement?.submittedAt ||
-              meeting.submittedAt ||
-              meeting.createdAt ||
-              null,
-            meetingUpdatedAt: meeting.updatedAt || null,
-          }));
-      } catch (error) {
-        console.warn("Dashboard could not read nested reimbursements:", error);
-        unavailable.add("Nested Reimbursements");
-      }
-
-      const poMap = new Map<string, AnyRow>();
-      [...poRows, ...purchaseOrderRows].forEach((purchaseOrder) => {
-        const key = firstText(
-          purchaseOrder?.poNumber,
-          purchaseOrder?.purchaseOrderNumber,
-          purchaseOrder?.id,
-        );
-
-        if (!poMap.has(key)) poMap.set(key, purchaseOrder);
-      });
-
-      setData({
-        invoiceRequests,
-        estimates,
-        estimateInvoices,
-        payments,
-        expenseSheets,
-        directClaims,
-        meetingClaims,
-        records,
-        purchaseOrders: Array.from(poMap.values()),
-        manualEntries,
-        openingBalance,
-      });
-
-      setUnavailableModules(Array.from(unavailable));
-      setLastUpdated(new Date());
-    } catch (error) {
-      console.error("Failed to load dashboard data:", error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [hasFullDashboardAccess, userProfile]);
-
-  useEffect(() => {
-    loadDashboardData();
-  }, [loadDashboardData]);
-
-  useEffect(() => {
-    const watchedCollections = hasFullDashboardAccess
-      ? [
-          "invoiceRequests",
-          "estimates",
-          "estimateInvoices",
-          "payments",
-          "expenseSheets",
-          "claimReimbursements",
-          "Record",
-          "PO",
-          "purchaseOrders",
-          "accountStatementManualEntries",
-        ]
-      : [
-          "invoiceRequests",
-          "estimates",
-          "estimateInvoices",
-          "expenseSheets",
-          "claimReimbursements",
-        ];
-
-    let refreshTimer: ReturnType<typeof setTimeout> | null = null;
-    const initialSnapshots = new Set<string>();
-
-    const unsubscribers = watchedCollections.map((collectionName) =>
-      onSnapshot(
-        collection(db, "Panels", PANEL_ID, collectionName),
-        () => {
-          if (!initialSnapshots.has(collectionName)) {
-            initialSnapshots.add(collectionName);
-            return;
-          }
-
-          if (refreshTimer) clearTimeout(refreshTimer);
-          refreshTimer = setTimeout(() => loadDashboardData(true), 700);
-        },
-        (error) => {
-          console.warn(`Dashboard listener failed for ${collectionName}:`, error);
-        },
-      ),
-    );
-
-    return () => {
-      if (refreshTimer) clearTimeout(refreshTimer);
-      unsubscribers.forEach((unsubscribe) => unsubscribe());
-    };
-  }, [hasFullDashboardAccess, loadDashboardData]);
-
-  const summary = useMemo(() => {
-    const now = new Date();
-    const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-
-    const incomeEvents: MoneyEvent[] = [];
-    const expenseEvents: MoneyEvent[] = [];
-
-    data.payments.forEach((payment) => {
-      const amount = safeNumber(payment?.amount);
-      const date =
-        toDate(payment?.paymentDate) ||
-        toDate(payment?.createdAt) ||
-        toDate(payment?.updatedAt);
-
-      if (amount > 0) incomeEvents.push({ amount, date });
-
-      const taxDebit =
-        safeNumber(payment?.whtAmount) + safeNumber(payment?.sstAmount);
-      if (taxDebit > 0) expenseEvents.push({ amount: taxDebit, date });
-    });
-
-    data.invoiceRequests.forEach((request) => {
-      const history = getPaymentReleaseHistory(request);
-
-      if (history.length > 0) {
-        history.forEach((release) => {
-          const amount = getReleaseAmount(release);
-          if (amount <= 0) return;
-
-          expenseEvents.push({
-            amount,
-            date:
-              toDate(release?.releasedAt) ||
-              toDate(release?.createdAt) ||
-              getEntityDate(request),
-          });
-        });
-      } else {
-        const releasedAmount = getReleasedRequestAmount(request);
-        if (releasedAmount > 0) {
-          expenseEvents.push({
-            amount: releasedAmount,
-            date: getEntityDate(request),
-          });
-        }
-      }
-    });
-
-    data.directClaims.forEach((claim) => {
-      const paidAmount = getClaimPaidAmount(claim);
-      if (paidAmount > 0) {
-        expenseEvents.push({
-          amount: paidAmount,
-          date:
-            toDate(claim?.paymentReleasedAt) ||
-            toDate(claim?.updatedAt) ||
-            getEntityDate(claim),
-        });
-      }
-    });
-
-    data.meetingClaims.forEach((claim) => {
-      const paidAmount = getClaimPaidAmount(claim);
-      if (paidAmount > 0) {
-        expenseEvents.push({
-          amount: paidAmount,
-          date:
-            toDate(claim?.paymentReleasedAt) ||
-            toDate(claim?.updatedAt) ||
-            toDate(claim?.meetingUpdatedAt) ||
-            getEntityDate(claim),
-        });
-      }
-    });
-
-    data.records.forEach((record) => {
-      const chequeAmount = safeNumber(record?.chequeAmount);
-      if (chequeAmount > 0) {
-        expenseEvents.push({
-          amount: chequeAmount,
-          date: getEntityDate(record),
-        });
-      }
-    });
-
-    data.manualEntries.forEach((entry) => {
-      const date = toDate(entry?.date) || getEntityDate(entry);
-      const debit = safeNumber(entry?.debit);
-      const credit = safeNumber(entry?.credit);
-
-      if (debit > 0) expenseEvents.push({ amount: debit, date });
-      if (credit > 0) incomeEvents.push({ amount: credit, date });
-    });
-
-    const totalIncome = incomeEvents.reduce((sum, item) => sum + item.amount, 0);
-    const totalExpense = expenseEvents.reduce(
-      (sum, item) => sum + item.amount,
-      0,
-    );
-    const balance = data.openingBalance + totalIncome - totalExpense;
-
-    const monthIncome = incomeEvents
-      .filter((item) => item.date && item.date >= monthStart)
-      .reduce((sum, item) => sum + item.amount, 0);
-
-    const monthExpense = expenseEvents
-      .filter((item) => item.date && item.date >= monthStart)
-      .reduce((sum, item) => sum + item.amount, 0);
-
-    const budgetTotalAmount = data.invoiceRequests.reduce(
-      (sum, request) => sum + getApprovedRequestAmount(request),
-      0,
-    );
-    const budgetReleasedAmount = data.invoiceRequests.reduce(
-      (sum, request) => sum + getReleasedRequestAmount(request),
-      0,
-    );
-    const budgetRemainingAmount = data.invoiceRequests.reduce(
-      (sum, request) => sum + getRemainingRequestAmount(request),
-      0,
-    );
-
-    const budgetPendingAdmin = data.invoiceRequests.filter((request) =>
-      [
-        "pending_operational_admin",
-        "pending_main_admin",
-        "pending_admin",
-      ].includes(normalizeText(request?.status)),
-    ).length;
-
-    const budgetPendingFinance = data.invoiceRequests.filter(
-      (request) => normalizeText(request?.status) === "pending_finance",
-    ).length;
-
-    const budgetReadyForPayment = data.invoiceRequests.filter((request) => {
-      const status = normalizeText(request?.status);
-      return (
-        [
-          "approved",
-          "po_created",
-          "po_submitted",
-          "po_approved",
-          "po_issued",
-          "ready_for_payment",
-          "payment_partially_released",
-        ].includes(status) && !isFullyReleased(request)
-      );
-    }).length;
-
-    const budgetPartial = data.invoiceRequests.filter(isPartiallyReleased).length;
-    const budgetReleased = data.invoiceRequests.filter(isFullyReleased).length;
-    const budgetRejected = data.invoiceRequests.filter((request) =>
-      ["rejected", "returned_to_creator", "changes_requested"].includes(
-        normalizeText(request?.status),
-      ),
-    ).length;
-
-    const estimateTotalAmount = data.estimates.reduce(
-      (sum, estimate) => sum + getEstimateAmount(estimate),
-      0,
-    );
-
-    const estimateApproved = data.estimates.filter(
-      (estimate) => normalizeText(estimate?.status) === "approved",
-    ).length;
-
-    const estimateInvoiced = data.estimates.filter((estimate) =>
-      ["invoiced", "payment received"].includes(
-        normalizeText(estimate?.status),
-      ),
-    ).length;
-
-    const invoiceTotalAmount = data.estimateInvoices.reduce(
-      (sum, invoice) => sum + getEstimateInvoiceAmount(invoice),
-      0,
-    );
-
-    const paidInvoices = data.estimateInvoices.filter(
-      (invoice) => getInvoiceStatus(invoice) === "paid",
-    );
-    const partialInvoices = data.estimateInvoices.filter(
-      (invoice) => getInvoiceStatus(invoice) === "partial",
-    );
-    const unpaidInvoices = data.estimateInvoices.filter(
-      (invoice) => getInvoiceStatus(invoice) === "unpaid",
-    );
-
-    const paidInvoiceAmount = paidInvoices.reduce(
-      (sum, invoice) => sum + getEstimateInvoiceAmount(invoice),
-      0,
-    );
-
-    const receivedInvoiceAmount = data.payments.reduce(
-      (sum, payment) => sum + safeNumber(payment?.amount),
-      0,
-    );
-
-    const invoiceOutstanding = Math.max(
-      invoiceTotalAmount - receivedInvoiceAmount,
-      0,
-    );
-
-    const poTotalAmount = data.purchaseOrders.reduce(
-      (sum, purchaseOrder) => sum + getPurchaseOrderAmount(purchaseOrder),
-      0,
-    );
-
-    const poPaid = data.purchaseOrders.filter(
-      (purchaseOrder) => normalizeText(purchaseOrder?.status) === "paid",
-    ).length;
-
-    const poOpen = data.purchaseOrders.filter((purchaseOrder) =>
-      ["open", "draft"].includes(normalizeText(purchaseOrder?.status)),
-    ).length;
-
-    const poOverdue = data.purchaseOrders.filter((purchaseOrder) => {
-      const status = normalizeText(purchaseOrder?.status);
-      return (
-        !["paid", "cancelled"].includes(status) &&
-        (status === "over due" ||
-          status === "overdue" ||
-          isOverdueDate(purchaseOrder?.dueDate))
-      );
-    }).length;
-
-    const expenseSheetAmount = data.expenseSheets.reduce(
-      (sum, expense) => sum + getExpenseAmount(expense),
-      0,
-    );
-
-    const allClaims = [...data.directClaims, ...data.meetingClaims];
-    const reimbursementAmount = allClaims.reduce(
-      (sum, claim) => sum + getClaimAmount(claim),
-      0,
-    );
-    const reimbursementPending = allClaims.filter(
-      (claim) => getClaimStatus(claim) === "pending",
-    ).length;
-    const reimbursementApproved = allClaims.filter(
-      (claim) => getClaimStatus(claim) === "approved",
-    ).length;
-    const reimbursementPaid = allClaims.filter(
-      (claim) => normalizeText(claim?.paymentStatus) === "paid",
-    ).length;
-    const reimbursementPaidAmount = allClaims.reduce(
-      (sum, claim) => sum + getClaimPaidAmount(claim),
-      0,
-    );
-
-    const recordChequeAmount = data.records.reduce(
-      (sum, record) => sum + safeNumber(record?.chequeAmount),
-      0,
-    );
-    const recordItemAmount = data.records.reduce(
-      (sum, record) => sum + safeNumber(record?.totalItemAmount),
-      0,
-    );
-    const recordRemaining = data.records.reduce(
-      (sum, record) => sum + safeNumber(record?.remainingBalance),
-      0,
-    );
-
-    const vendorNames = new Set<string>();
-    data.invoiceRequests.forEach((request) => {
-      getVendorNames(request).forEach((name) => vendorNames.add(name));
-    });
-
-    const vendorOverdue = data.invoiceRequests.reduce((sum, request) => {
-      const remaining = getRemainingRequestAmount(request);
-      const dueDate =
-        request?.dueDate || request?.paymentDueDate || request?.invoiceDueDate;
-
-      return remaining > 0 && dueDate && isOverdueDate(dueDate)
-        ? sum + remaining
-        : sum;
-    }, 0);
-
-    const lastSixMonths = Array.from({ length: 6 }, (_, index) => {
-      const date = new Date(now.getFullYear(), now.getMonth() - (5 - index), 1);
-      return {
-        key: `${date.getFullYear()}-${date.getMonth()}`,
-        label: date.toLocaleDateString("en-PK", { month: "short" }),
-        income: 0,
-        expense: 0,
-      };
-    });
-
-    const monthMap = new Map(lastSixMonths.map((item) => [item.key, item]));
-
-    incomeEvents.forEach((event) => {
-      if (!event.date) return;
-      const key = `${event.date.getFullYear()}-${event.date.getMonth()}`;
-      const bucket = monthMap.get(key);
-      if (bucket) bucket.income += event.amount;
-    });
-
-    expenseEvents.forEach((event) => {
-      if (!event.date) return;
-      const key = `${event.date.getFullYear()}-${event.date.getMonth()}`;
-      const bucket = monthMap.get(key);
-      if (bucket) bucket.expense += event.amount;
-    });
-
-    const activities: ActivityItem[] = [
-      ...data.invoiceRequests.map((request) => ({
-        id: `budget-${request.id}`,
-        module: "Budget Request",
-        title: firstText(
-          request?.requestId,
-          request?.title,
-          request?.subject,
-          "Budget request",
-        ),
-        description: firstText(
-          request?.projectName,
-          request?.project,
-          request?.clientName,
-          request?.vendorName,
-          "Budget workflow updated",
-        ),
-        status: request?.status || "submitted",
-        date: getRequestDate(request),
-      })),
-      ...data.payments.map((payment) => ({
-        id: `payment-${payment.id}`,
-        module: "Payment Received",
-        title: firstText(
-          payment?.invoiceNo,
-          payment?.reference,
-          payment?.paymentReference,
-          "Invoice payment",
-        ),
-        description: `${firstText(payment?.client, "Payment received")} · ${formatPKR(
-          payment?.amount,
-        )}`,
-        status: "paid",
-        date:
-          toDate(payment?.paymentDate) ||
-          toDate(payment?.createdAt) ||
-          toDate(payment?.updatedAt),
-      })),
-      ...data.estimateInvoices.map((invoice) => ({
-        id: `invoice-${invoice.id}`,
-        module: "Estimate Invoice",
-        title: firstText(invoice?.invoiceNo, invoice?.subject, "Invoice"),
-        description: `${firstText(invoice?.client, "Client invoice")} · ${formatPKR(
-          getEstimateInvoiceAmount(invoice),
-        )}`,
-        status: invoice?.status || "unpaid",
-        date:
-          toDate(invoice?.invoiceDate) ||
-          toDate(invoice?.createdAt) ||
-          toDate(invoice?.updatedAt),
-      })),
-      ...data.purchaseOrders.map((purchaseOrder) => ({
-        id: `po-${purchaseOrder.id}`,
-        module: "Purchase Order",
-        title: firstText(
-          purchaseOrder?.poNumber,
-          purchaseOrder?.purchaseOrderNumber,
-          "Purchase order",
-        ),
-        description: `${firstText(
-          purchaseOrder?.supplierName,
-          purchaseOrder?.vendorName,
-          "Supplier",
-        )} · ${formatPKR(getPurchaseOrderAmount(purchaseOrder))}`,
-        status: purchaseOrder?.status || "draft",
-        date:
-          toDate(purchaseOrder?.createdAt) ||
-          toDate(purchaseOrder?.issueDate) ||
-          toDate(purchaseOrder?.updatedAt),
-      })),
-      ...data.expenseSheets.map((expense) => ({
-        id: `expense-${expense.id}`,
-        module: "Budget Expense",
-        title: firstText(
-          expense?.expenseId,
-          expense?.projectName,
-          expense?.project,
-          "Expense sheet",
-        ),
-        description: `${firstText(
-          expense?.clientName,
-          expense?.submittedByName,
-          "Expense submitted",
-        )} · ${formatPKR(getExpenseAmount(expense))}`,
-        status: expense?.paymentStatus || expense?.status || "submitted",
-        date:
-          toDate(expense?.submittedAt) ||
-          toDate(expense?.createdAt) ||
-          toDate(expense?.updatedAt),
-      })),
-      ...data.directClaims.map((claim) => ({
-        id: `claim-${claim.id}`,
-        module: "Reimbursement",
-        title: firstText(
-          claim?.description,
-          claim?.foodItem,
-          claim?.claimType,
-          "Reimbursement claim",
-        ),
-        description: `${firstText(
-          claim?.submittedByName,
-          claim?.personName,
-          "Employee",
-        )} · ${formatPKR(getClaimAmount(claim))}`,
-        status:
-          normalizeText(claim?.paymentStatus) === "paid"
-            ? "paid"
-            : claim?.status || claim?.approvalStatus || "pending",
-        date:
-          toDate(claim?.submittedAt) ||
-          toDate(claim?.createdAt) ||
-          toDate(claim?.updatedAt),
-      })),
-      ...data.records.map((record) => ({
-        id: `record-${record.id}`,
-        module: "Record",
-        title: firstText(
-          record?.statementTitle,
-          record?.accountTitle,
-          record?.chequeNumber,
-          "Financial record",
-        ),
-        description: `${firstText(record?.bank, record?.accountNo, "Account")} · ${formatPKR(
-          record?.chequeAmount,
-        )}`,
-        status: record?.status || "recorded",
-        date:
-          toDate(record?.createdAt) ||
-          toDate(record?.selectedDate) ||
-          toDate(record?.updatedAt),
-      })),
-    ]
-      .sort((a, b) => (b.date?.getTime() || 0) - (a.date?.getTime() || 0))
-      .slice(0, 12);
-
-    const workflowData = [
-      { name: "Admin", value: budgetPendingAdmin, color: "#f59e0b" },
-      { name: "Finance", value: budgetPendingFinance, color: "#8b5cf6" },
-      { name: "Ready", value: budgetReadyForPayment, color: "#3b82f6" },
-      { name: "Partial", value: budgetPartial, color: "#06b6d4" },
-      { name: "Released", value: budgetReleased, color: "#10b981" },
-      { name: "Returned", value: budgetRejected, color: "#f43f5e" },
-    ];
-
-    return {
-      totalIncome,
-      totalExpense,
-      balance,
-      monthIncome,
-      monthExpense,
-      incomeEvents,
-      expenseEvents,
-      budgetTotalAmount,
-      budgetReleasedAmount,
-      budgetRemainingAmount,
-      budgetPendingAdmin,
-      budgetPendingFinance,
-      budgetReadyForPayment,
-      budgetPartial,
-      budgetReleased,
-      budgetRejected,
-      estimateTotalAmount,
-      estimateApproved,
-      estimateInvoiced,
-      invoiceTotalAmount,
-      paidInvoices: paidInvoices.length,
-      partialInvoices: partialInvoices.length,
-      unpaidInvoices: unpaidInvoices.length,
-      paidInvoiceAmount,
-      receivedInvoiceAmount,
-      invoiceOutstanding,
-      poTotalAmount,
-      poPaid,
-      poOpen,
-      poOverdue,
-      expenseSheetAmount,
-      reimbursementAmount,
-      reimbursementPending,
-      reimbursementApproved,
-      reimbursementPaid,
-      reimbursementPaidAmount,
-      recordChequeAmount,
-      recordItemAmount,
-      recordRemaining,
-      vendorCount: vendorNames.size,
-      vendorOverdue,
-      cashFlowData: lastSixMonths,
-      workflowData,
-      activities,
-    };
-  }, [data]);
-
-  const roleAlerts = useMemo(() => {
-    if (["finance", "financial_admin", "finance_admin"].includes(roleKey)) {
-      return [
-        {
-          title: "Finance Approval",
-          value: String(summary.budgetPendingFinance),
-          description: "Requests currently waiting for finance approval.",
-          icon: <Landmark className="h-5 w-5" />,
-          tone: "amber" as const,
-        },
-        {
-          title: "Release Payment",
-          value: String(summary.budgetReadyForPayment),
-          description: "Approved requests that still require payment release.",
-          icon: <Banknote className="h-5 w-5" />,
-          tone: "blue" as const,
-        },
-        {
-          title: "Partial Releases",
-          value: String(summary.budgetPartial),
-          description: "Requests with a remaining payment balance.",
-          icon: <CircleDollarSign className="h-5 w-5" />,
-          tone: "blue" as const,
-        },
-        {
-          title: "Reimbursement Payment",
-          value: String(
-            Math.max(
-              summary.reimbursementApproved - summary.reimbursementPaid,
-              0,
-            ),
-          ),
-          description: "Approved reimbursement claims awaiting payment.",
-          icon: <Users className="h-5 w-5" />,
-          tone: "emerald" as const,
-        },
-      ];
-    }
-
-    if (["admin", "main_admin", "super_admin"].includes(roleKey)) {
-      return [
-        {
-          title: "Admin Approval",
-          value: String(summary.budgetPendingAdmin),
-          description: "Budget requests requiring an admin decision.",
-          icon: <BadgeCheck className="h-5 w-5" />,
-          tone: "amber" as const,
-        },
-        {
-          title: "Returned Requests",
-          value: String(summary.budgetRejected),
-          description: "Requests returned to their creators for correction.",
-          icon: <XCircle className="h-5 w-5" />,
-          tone: "rose" as const,
-        },
-        {
-          title: "Pending Reimbursements",
-          value: String(summary.reimbursementPending),
-          description: "Reimbursement claims waiting for review.",
-          icon: <Clock3 className="h-5 w-5" />,
-          tone: "blue" as const,
-        },
-        {
-          title: "Overdue Purchase Orders",
-          value: String(summary.poOverdue),
-          description: "Open purchase orders whose due date has passed.",
-          icon: <AlertTriangle className="h-5 w-5" />,
-          tone: "rose" as const,
-        },
-      ];
-    }
-
-    return [
-      {
-        title: "Admin Queue",
-        value: String(summary.budgetPendingAdmin),
-        description: "Requests currently moving through admin approval.",
-        icon: <Clock3 className="h-5 w-5" />,
-        tone: "amber" as const,
-      },
-      {
-        title: "Finance Queue",
-        value: String(summary.budgetPendingFinance),
-        description: "Requests currently waiting for finance review.",
-        icon: <Landmark className="h-5 w-5" />,
-        tone: "blue" as const,
-      },
-      {
-        title: "Returned To Team",
-        value: String(summary.budgetRejected),
-        description: "Requests that require correction and resubmission.",
-        icon: <XCircle className="h-5 w-5" />,
-        tone: "rose" as const,
-      },
-      {
-        title: "Expense Submitted",
-        value: String(data.expenseSheets.length),
-        description: "Budget expense sheets recorded in the system.",
-        icon: <ReceiptText className="h-5 w-5" />,
-        tone: "emerald" as const,
-      },
-    ];
-  }, [data.expenseSheets.length, roleKey, summary]);
-
-  if (loading) {
-    return (
-      <div className="flex min-h-[70vh] items-center justify-center bg-slate-50">
-        <div className="rounded-3xl border border-slate-200 bg-white px-10 py-8 text-center shadow-sm">
-          <div className="mx-auto h-11 w-11 animate-spin rounded-full border-2 border-slate-200 border-t-slate-950" />
-          <p className="mt-4 text-sm font-bold text-slate-700">
-            Building your system dashboard...
-          </p>
-          <p className="mt-1 text-xs text-slate-400">
-            Loading finance, requests, invoices, POs, records and expenses.
-          </p>
-        </div>
-      </div>
-    );
-  }
-
-
-  if (!hasFullDashboardAccess) {
-    return (
-      <>
-        <RestrictedDashboard
-          userProfile={userProfile}
-          roleKey={roleKey}
-          data={data}
-          refreshing={refreshing}
-          lastUpdated={lastUpdated}
-          unavailableModules={unavailableModules}
-          canCreateInvoices={canCreateInvoices}
-          onRefresh={() => loadDashboardData(true)}
-          onCreateBudgetRequest={() => setIsInvoiceModalOpen(true)}
-        />
-
-        {canCreateInvoices && (
-          <InvoiceRequestModal
-            isOpen={isInvoiceModalOpen}
-            onClose={() => setIsInvoiceModalOpen(false)}
-            onSuccess={() => {
-              setIsInvoiceModalOpen(false);
-              loadDashboardData(true);
-            }}
-          />
-        )}
-      </>
-    );
-  }
-
-  return (
-    <div className="min-h-screen bg-slate-50/80 p-4 text-slate-900 sm:p-6">
-      <div className="mx-auto space-y-6">
-        <section className="overflow-hidden rounded-[32px] bg-slate-950 p-6 text-white shadow-xl shadow-slate-200/70 sm:p-8">
-          <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
+        <div className="rounded-[1.75rem] border border-white bg-white p-4 shadow-[0_18px_60px_rgba(15,23,42,0.06)] md:p-5">
+          <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
             <div>
-              <div className="inline-flex items-center gap-2 rounded-full border border-white/10 bg-white/10 px-3 py-1 text-xs font-bold text-slate-200">
-                <Activity className="h-3.5 w-3.5" />
-                Live System Overview
-              </div>
-
-              <h1 className="mt-5 max-w-3xl text-3xl font-black tracking-[-0.04em] sm:text-4xl">
-                Welcome back, {userProfile?.displayName || "Team Member"}
-              </h1>
-
-              <p className="mt-3 max-w-3xl text-sm leading-6 text-slate-300">
-                A complete operational and financial view of budget requests,
-                estimates, invoices, purchase orders, payments, expenses,
-                reimbursements, records and vendors.
+              <h2 className="text-base font-bold text-slate-950">Filters</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                Filter transactions by payment date and export the current
+                result.
               </p>
-
-              <div className="mt-5 flex flex-wrap items-center gap-3 text-xs text-slate-300">
-                <span className="rounded-full bg-white/10 px-3 py-1.5 font-semibold">
-                  Role: {humanize(userProfile?.role || "User")}
-                </span>
-                <span className="rounded-full bg-white/10 px-3 py-1.5 font-semibold">
-                  Updated: {lastUpdated ? formatRelativeTime(lastUpdated) : "Now"}
-                </span>
-                {unavailableModules.length > 0 && (
-                  <span className="rounded-full bg-amber-400/15 px-3 py-1.5 font-semibold text-amber-200">
-                    {unavailableModules.length} source(s) unavailable
-                  </span>
-                )}
-              </div>
             </div>
 
-            <div className="flex flex-wrap gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => loadDashboardData(true)}
-                disabled={refreshing}
-                className="h-11 rounded-2xl border-white/15 bg-white/10 px-4 text-white hover:bg-white/15 hover:text-white"
-              >
-                <RefreshCcw
-                  className={`mr-2 h-4 w-4 ${refreshing ? "animate-spin" : ""}`}
+            <div className="flex flex-wrap items-center gap-3">
+              <div className="grid gap-1">
+                <Label className="text-xs font-medium text-slate-500">
+                  Start Date
+                </Label>
+                <Input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="h-11 w-full rounded-2xl border-slate-200 bg-slate-50/80 shadow-none md:w-[180px]"
                 />
-                {refreshing ? "Refreshing" : "Refresh"}
-              </Button>
+              </div>
 
-              {canCreateInvoices && (
+              <div className="grid gap-1">
+                <Label className="text-xs font-medium text-slate-500">
+                  End Date
+                </Label>
+                <Input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  className="h-11 w-full rounded-2xl border-slate-200 bg-slate-50/80 shadow-none md:w-[180px]"
+                />
+              </div>
+
+              <div className="flex items-end gap-3 pt-5">
                 <Button
                   type="button"
-                  onClick={() => setIsInvoiceModalOpen(true)}
-                  className="h-11 rounded-2xl bg-white px-4 font-bold text-slate-950 hover:bg-slate-100"
+                  onClick={() => {
+                    setStartDate("");
+                    setEndDate("");
+                  }}
+                  variant="outline"
+                  className="h-11 rounded-2xl border-slate-200 bg-white px-4"
                 >
-                  <Plus className="mr-2 h-4 w-4" />
-                  New Budget Request
+                  Clear
                 </Button>
-              )}
+
+                <Button
+                  onClick={exportExcel}
+                  variant="outline"
+                  className="h-11 rounded-2xl border-slate-200 bg-white px-4"
+                >
+                  Export Excel
+                </Button>
+
+                <Button
+                  onClick={exportPDF}
+                  variant="outline"
+                  className="h-11 rounded-2xl border-slate-200 bg-white px-4"
+                >
+                  Export PDF
+                </Button>
+              </div>
             </div>
           </div>
+        </div>
 
-          <div className="mt-8 grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-              <p className="text-xs font-semibold text-slate-300">Opening Balance</p>
-              <p className="mt-2 text-xl font-black">
-                {formatCompactPKR(data.openingBalance)}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-              <p className="text-xs font-semibold text-slate-300">System Records</p>
-              <p className="mt-2 text-xl font-black">
-                {(
-                  data.invoiceRequests.length +
-                  data.estimates.length +
-                  data.estimateInvoices.length +
-                  data.purchaseOrders.length +
-                  data.expenseSheets.length +
-                  data.records.length
-                ).toLocaleString()}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-              <p className="text-xs font-semibold text-slate-300">Budget Pipeline</p>
-              <p className="mt-2 text-xl font-black">
-                {formatCompactPKR(summary.budgetTotalAmount)}
-              </p>
-            </div>
-            <div className="rounded-2xl border border-white/10 bg-white/10 p-4 backdrop-blur">
-              <p className="text-xs font-semibold text-slate-300">Outstanding Invoices</p>
-              <p className="mt-2 text-xl font-black">
-                {formatCompactPKR(summary.invoiceOutstanding)}
-              </p>
-            </div>
-          </div>
-        </section>
-
-        {unavailableModules.length > 0 && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-800">
-            <div className="flex items-start gap-3">
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" />
+        <div className="grid grid-cols-1 gap-6 xl:grid-cols-2">
+          <div className="rounded-[1.75rem] border border-white bg-white p-5 shadow-[0_18px_60px_rgba(15,23,42,0.06)] md:p-6">
+            <div className="mb-5 flex items-center justify-between gap-3">
               <div>
-                <p className="font-bold">Some dashboard sources could not be read.</p>
-                <p className="mt-1 text-xs leading-5">
-                  Check Firestore permissions for: {unavailableModules.join(", ")}.
-                  All available modules are still displayed.
+                <h2 className="text-base font-bold text-slate-950">
+                  Account-wise Collections
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Top accounts by received amount.
                 </p>
               </div>
             </div>
+
+            {dynamicBarData.length > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={dynamicBarData}>
+                  <XAxis
+                    dataKey="name"
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 12, fill: "#64748b" }}
+                  />
+                  <YAxis
+                    tickLine={false}
+                    axisLine={false}
+                    tick={{ fontSize: 12, fill: "#64748b" }}
+                  />
+                  <Tooltip
+                    formatter={(value: any) => formatCurrency(value)}
+                    contentStyle={{
+                      borderRadius: "16px",
+                      border: "1px solid #e2e8f0",
+                      boxShadow: "0 12px 30px rgba(15, 23, 42, 0.08)",
+                    }}
+                  />
+                  <Bar
+                    dataKey="received"
+                    radius={[10, 10, 0, 0]}
+                    fill="#2563eb"
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-[300px] items-center justify-center rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500">
+                No collection data available.
+              </div>
+            )}
           </div>
-        )}
 
-        <section className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-          <MetricCard
-            title="Current Balance"
-            value={formatCompactPKR(summary.balance)}
-            subtitle={`Opening + ${formatCompactPKR(summary.totalIncome)} income - ${formatCompactPKR(summary.totalExpense)} expense`}
-            icon={Wallet}
-            tone={summary.balance >= 0 ? "emerald" : "rose"}
-            trend={summary.balance >= 0 ? "up" : "down"}
-          />
-          <MetricCard
-            title="Total Income"
-            value={formatCompactPKR(summary.totalIncome)}
-            subtitle={`${formatCompactPKR(summary.monthIncome)} received this month`}
-            icon={TrendingUp}
-            tone="emerald"
-            trend="up"
-          />
-          <MetricCard
-            title="Total Expense"
-            value={formatCompactPKR(summary.totalExpense)}
-            subtitle={`${formatCompactPKR(summary.monthExpense)} released this month`}
-            icon={ArrowDownRight}
-            tone="rose"
-            trend="down"
-          />
-          <MetricCard
-            title="Remaining Releases"
-            value={formatCompactPKR(summary.budgetRemainingAmount)}
-            subtitle={`${summary.budgetReadyForPayment} request(s) ready for payment`}
-            icon={CircleDollarSign}
-            tone="blue"
-          />
-        </section>
-
-        <section className="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-          <div className="mb-4 flex items-center justify-between gap-4">
-            <div>
-              <h2 className="text-lg font-black text-slate-950">Priority Actions</h2>
-              <p className="mt-1 text-xs text-slate-500">
-                The most important tasks for your current role.
-              </p>
+          <div className="rounded-[1.75rem] border border-white bg-white p-5 shadow-[0_18px_60px_rgba(15,23,42,0.06)] md:p-6">
+            <div className="mb-5 flex items-center justify-between gap-3">
+              <div>
+                <h2 className="text-base font-bold text-slate-950">
+                  Received vs Pending
+                </h2>
+                <p className="mt-1 text-sm text-slate-500">
+                  Current collection and outstanding balance split.
+                </p>
+              </div>
             </div>
-            <ListChecks className="h-5 w-5 text-slate-400" />
+
+            {totalReceived > 0 || totalPending > 0 ? (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={pieData}
+                    dataKey="value"
+                    outerRadius={108}
+                    innerRadius={62}
+                    paddingAngle={4}
+                    label={({ name }) => name}
+                  >
+                    {pieData.map((entry, index) => (
+                      <Cell key={entry.name} fill={COLORS[index]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value: any) => formatCurrency(value)}
+                    contentStyle={{
+                      borderRadius: "16px",
+                      border: "1px solid #e2e8f0",
+                      boxShadow: "0 12px 30px rgba(15, 23, 42, 0.08)",
+                    }}
+                  />
+                </PieChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-[300px] items-center justify-center rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 text-sm text-slate-500">
+                No payment summary available.
+              </div>
+            )}
           </div>
+        </div>
 
-          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-            {roleAlerts.map((alert) => (
-              <AlertCard key={alert.title} {...alert} />
-            ))}
-          </div>
-        </section>
-
-        <section className="grid gap-6 xl:grid-cols-[1.55fr_1fr]">
-          <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
-            <CardContent className="p-5 sm:p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-black text-slate-950">
-                    Income vs Expense
-                  </h2>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Account Statement cash movement for the last six months.
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
-                  <BarChart3 className="h-5 w-5" />
-                </div>
-              </div>
-
-              <div className="mt-6 h-[310px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <AreaChart data={summary.cashFlowData}>
-                    <defs>
-                      <linearGradient id="incomeGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#10b981" stopOpacity={0.28} />
-                        <stop offset="95%" stopColor="#10b981" stopOpacity={0} />
-                      </linearGradient>
-                      <linearGradient id="expenseGradient" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="5%" stopColor="#f43f5e" stopOpacity={0.22} />
-                        <stop offset="95%" stopColor="#f43f5e" stopOpacity={0} />
-                      </linearGradient>
-                    </defs>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis dataKey="label" tickLine={false} axisLine={false} />
-                    <YAxis
-                      tickLine={false}
-                      axisLine={false}
-                      tickFormatter={(value) => formatCompactPKR(value).replace("Rs ", "")}
-                    />
-                    <Tooltip formatter={(value: any) => formatPKR(value)} />
-                    <Area
-                      type="monotone"
-                      dataKey="income"
-                      name="Income"
-                      stroke="#10b981"
-                      strokeWidth={3}
-                      fill="url(#incomeGradient)"
-                    />
-                    <Area
-                      type="monotone"
-                      dataKey="expense"
-                      name="Expense"
-                      stroke="#f43f5e"
-                      strokeWidth={3}
-                      fill="url(#expenseGradient)"
-                    />
-                  </AreaChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
-            <CardContent className="p-5 sm:p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-black text-slate-950">
-                    Budget Workflow
-                  </h2>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Current distribution of budget request stages.
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
-                  <FileCheck2 className="h-5 w-5" />
-                </div>
-              </div>
-
-              <div className="mt-6 h-[220px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={summary.workflowData}>
-                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                    <XAxis dataKey="name" tickLine={false} axisLine={false} fontSize={11} />
-                    <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
-                    <Tooltip />
-                    <Bar dataKey="value" radius={[8, 8, 0, 0]}>
-                      {summary.workflowData.map((item) => (
-                        <Cell key={item.name} fill={item.color} />
-                      ))}
-                    </Bar>
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-
-              <div className="mt-4 grid grid-cols-2 gap-3">
-                <div className="rounded-2xl bg-slate-50 p-3">
-                  <p className="text-xs font-semibold text-slate-500">Released</p>
-                  <p className="mt-1 text-lg font-black text-emerald-600">
-                    {formatCompactPKR(summary.budgetReleasedAmount)}
-                  </p>
-                </div>
-                <div className="rounded-2xl bg-slate-50 p-3">
-                  <p className="text-xs font-semibold text-slate-500">Remaining</p>
-                  <p className="mt-1 text-lg font-black text-blue-600">
-                    {formatCompactPKR(summary.budgetRemainingAmount)}
-                  </p>
-                </div>
-              </div>
-            </CardContent>
-          </Card>
-        </section>
-
-        <section>
-          <div className="mb-4 flex items-end justify-between gap-4">
+        <div className="overflow-hidden rounded-[1.75rem] border border-white bg-white shadow-[0_18px_60px_rgba(15,23,42,0.06)]">
+          <div className="flex flex-col gap-4 border-b border-slate-100 bg-white px-5 py-5 md:flex-row md:items-center md:justify-between md:px-6">
             <div>
-              <h2 className="text-xl font-black text-slate-950">Module Overview</h2>
+              <h2 className="text-base font-bold text-slate-950">
+                Latest Transactions
+              </h2>
               <p className="mt-1 text-sm text-slate-500">
-                Live totals from every major front-end module.
+                Showing {firstRecord} to {lastRecord} of{" "}
+                {filteredPayments.length} records
               </p>
+            </div>
+
+            <div className="flex items-center gap-2">
+              <Label className="text-sm text-slate-500">Rows</Label>
+              <select
+                value={rowsPerPage}
+                onChange={(e) => setRowsPerPage(Number(e.target.value))}
+                className="h-10 rounded-2xl border border-slate-200 bg-slate-50 px-3 text-sm font-medium text-slate-700 outline-none focus:border-blue-200 focus:ring-4 focus:ring-blue-50"
+              >
+                {PAGE_SIZE_OPTIONS.map((size) => (
+                  <option key={size} value={size}>
+                    {size}
+                  </option>
+                ))}
+              </select>
             </div>
           </div>
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-            <ModuleCard
-              title="Budget Requests"
-              subtitle="Approval, payment-release and remaining-balance status."
-              icon={FileText}
-              items={[
-                { label: "Total Requests", value: String(data.invoiceRequests.length) },
-                { label: "Approved Value", value: formatCompactPKR(summary.budgetTotalAmount) },
-                { label: "Partial Releases", value: String(summary.budgetPartial), className: "text-blue-600" },
-                { label: "Fully Released", value: String(summary.budgetReleased), className: "text-emerald-600" },
-              ]}
-            />
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[860px] text-sm">
+              <thead>
+                <tr className="bg-slate-50/80 text-left text-xs uppercase tracking-[0.16em] text-slate-400">
+                  <th className="px-6 py-4 font-semibold">Date</th>
+                  <th className="px-6 py-4 font-semibold">Client</th>
+                  <th className="px-6 py-4 font-semibold">Method</th>
+                  <th className="px-6 py-4 font-semibold">Account</th>
+                  <th className="px-6 py-4 font-semibold">Reference</th>
+                  <th className="px-6 py-4 text-right font-semibold">Amount</th>
+                </tr>
+              </thead>
 
-            <ModuleCard
-              title="Estimates"
-              subtitle="Estimate pipeline and converted estimate records."
-              icon={FileSpreadsheet}
-              items={[
-                { label: "Total Estimates", value: String(data.estimates.length) },
-                { label: "Estimate Value", value: formatCompactPKR(summary.estimateTotalAmount) },
-                { label: "Approved", value: String(summary.estimateApproved), className: "text-emerald-600" },
-                { label: "Invoiced", value: String(summary.estimateInvoiced), className: "text-blue-600" },
-              ]}
-            />
-
-            <ModuleCard
-              title="Estimate Invoices"
-              subtitle="Paid, unpaid and partially-paid client invoices."
-              icon={ReceiptText}
-              items={[
-                { label: "Total Invoices", value: String(data.estimateInvoices.length) },
-                { label: "Invoice Value", value: formatCompactPKR(summary.invoiceTotalAmount) },
-                { label: "Paid / Partial", value: `${summary.paidInvoices} / ${summary.partialInvoices}`, className: "text-emerald-600" },
-                { label: "Outstanding", value: formatCompactPKR(summary.invoiceOutstanding), className: "text-amber-600" },
-              ]}
-            />
-
-            <ModuleCard
-              title="Purchase Orders"
-              subtitle="Purchase-order totals, open orders and overdue items."
-              icon={PackageCheck}
-              items={[
-                { label: "Total POs", value: String(data.purchaseOrders.length) },
-                { label: "PO Value", value: formatCompactPKR(summary.poTotalAmount) },
-                { label: "Open / Paid", value: `${summary.poOpen} / ${summary.poPaid}` },
-                { label: "Overdue", value: String(summary.poOverdue), className: "text-rose-600" },
-              ]}
-            />
-
-            <ModuleCard
-              title="Budget Expenses"
-              subtitle="Submitted expense sheets and recorded expense value."
-              icon={CreditCard}
-              items={[
-                { label: "Expense Sheets", value: String(data.expenseSheets.length) },
-                { label: "Submitted Value", value: formatCompactPKR(summary.expenseSheetAmount) },
-                { label: "This Month Cash Out", value: formatCompactPKR(summary.monthExpense) },
-                { label: "Total Cash Out", value: formatCompactPKR(summary.totalExpense), className: "text-rose-600" },
-              ]}
-            />
-
-            <ModuleCard
-              title="Reimbursements"
-              subtitle="Direct and sales-meeting reimbursement claims."
-              icon={Users}
-              items={[
-                { label: "Total Claims", value: String(data.directClaims.length + data.meetingClaims.length) },
-                { label: "Claim Value", value: formatCompactPKR(summary.reimbursementAmount) },
-                { label: "Pending / Approved", value: `${summary.reimbursementPending} / ${summary.reimbursementApproved}` },
-                { label: "Paid Amount", value: formatCompactPKR(summary.reimbursementPaidAmount), className: "text-emerald-600" },
-              ]}
-            />
-
-            <ModuleCard
-              title="Records & Cheques"
-              subtitle="Cheque records, item amounts and remaining balances."
-              icon={Landmark}
-              items={[
-                { label: "Total Records", value: String(data.records.length) },
-                { label: "Cheque Amount", value: formatCompactPKR(summary.recordChequeAmount) },
-                { label: "Item Amount", value: formatCompactPKR(summary.recordItemAmount) },
-                { label: "Remaining", value: formatCompactPKR(summary.recordRemaining), className: summary.recordRemaining < 0 ? "text-rose-600" : "text-emerald-600" },
-              ]}
-            />
-
-            <ModuleCard
-              title="Vendors"
-              subtitle="Vendor exposure derived from budget requests and releases."
-              icon={Building2}
-              items={[
-                { label: "Unique Vendors", value: String(summary.vendorCount) },
-                { label: "Paid to Vendors", value: formatCompactPKR(summary.budgetReleasedAmount) },
-                { label: "Remaining Payable", value: formatCompactPKR(summary.budgetRemainingAmount), className: "text-blue-600" },
-                { label: "Overdue Payable", value: formatCompactPKR(summary.vendorOverdue), className: "text-rose-600" },
-              ]}
-            />
-          </div>
-        </section>
-
-        <section className="grid gap-6 xl:grid-cols-[1.5fr_1fr]">
-          <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
-            <CardContent className="p-5 sm:p-6">
-              <div className="flex items-start justify-between gap-4">
-                <div>
-                  <h2 className="text-lg font-black text-slate-950">
-                    Recent System Activity
-                  </h2>
-                  <p className="mt-1 text-xs text-slate-500">
-                    Latest updates across requests, invoices, POs, expenses,
-                    reimbursements and records.
-                  </p>
-                </div>
-                <Activity className="h-5 w-5 text-slate-400" />
-              </div>
-
-              <div className="mt-5 divide-y divide-slate-100">
-                {summary.activities.length === 0 ? (
-                  <div className="py-12 text-center">
-                    <CalendarClock className="mx-auto h-7 w-7 text-slate-300" />
-                    <p className="mt-3 text-sm font-semibold text-slate-500">
-                      No recent activity found.
-                    </p>
-                  </div>
-                ) : (
-                  summary.activities.map((activity) => (
-                    <div
-                      key={activity.id}
-                      className="flex flex-col gap-3 py-4 sm:flex-row sm:items-center"
-                    >
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
-                        <Activity className="h-4 w-4" />
-                      </div>
-
-                      <div className="min-w-0 flex-1">
-                        <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate text-sm font-black text-slate-900">
-                            {activity.title}
-                          </p>
-                          <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
-                            {activity.module}
-                          </span>
+              <tbody className="divide-y divide-slate-100">
+                {paginatedPayments.length > 0 ? (
+                  paginatedPayments.map((p) => (
+                    <tr key={p.id} className="transition hover:bg-slate-50/70">
+                      <td className="whitespace-nowrap px-6 py-4 font-medium text-slate-700">
+                        {p.paymentDate || "-"}
+                      </td>
+                      <td className="px-6 py-4 text-slate-600">
+                        <div className="font-semibold text-slate-800">
+                          {p.client || "-"}
                         </div>
-                        <p className="mt-1 truncate text-xs text-slate-500">
-                          {activity.description}
+                      </td>
+                      <td className="px-6 py-4 text-slate-600">
+                        <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">
+                          {p.method || "-"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-slate-600">
+                        {getAccountLabel(p.depositTo)}
+                      </td>
+                      <td className="px-6 py-4 text-slate-500">
+                        {p.reference || "-"}
+                      </td>
+                      <td className="whitespace-nowrap px-6 py-4 text-right font-black text-slate-950">
+                        {formatCurrency(p.amount)}
+                      </td>
+                    </tr>
+                  ))
+                ) : (
+                  <tr>
+                    <td colSpan={6} className="px-6 py-14 text-center">
+                      <div className="mx-auto max-w-sm rounded-[1.5rem] border border-dashed border-slate-200 bg-slate-50 p-8">
+                        <div className="text-sm font-semibold text-slate-700">
+                          No transactions found
+                        </div>
+                        <p className="mt-1 text-sm text-slate-500">
+                          Try changing or clearing the selected date filters.
                         </p>
                       </div>
-
-                      <div className="flex items-center justify-between gap-3 sm:flex-col sm:items-end">
-                        <StatusBadge status={activity.status} />
-                        <span className="text-[11px] font-semibold text-slate-400">
-                          {formatRelativeTime(activity.date)}
-                        </span>
-                      </div>
-                    </div>
-                  ))
+                    </td>
+                  </tr>
                 )}
-              </div>
-            </CardContent>
-          </Card>
-
-          <div className="space-y-6">
-            <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="font-black text-slate-950">Financial Health</h2>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Key collection and payment indicators.
-                    </p>
-                  </div>
-                  <Wallet className="h-5 w-5 text-slate-400" />
-                </div>
-
-                <div className="mt-5 space-y-4">
-                  <div>
-                    <div className="flex justify-between text-xs font-semibold text-slate-500">
-                      <span>Invoice Collection</span>
-                      <span>
-                        {summary.invoiceTotalAmount > 0
-                          ? Math.min(
-                              (summary.receivedInvoiceAmount /
-                                summary.invoiceTotalAmount) *
-                                100,
-                              100,
-                            ).toFixed(0)
-                          : 0}
-                        %
-                      </span>
-                    </div>
-                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className="h-full rounded-full bg-emerald-500"
-                        style={{
-                          width: `${
-                            summary.invoiceTotalAmount > 0
-                              ? Math.min(
-                                  (summary.receivedInvoiceAmount /
-                                    summary.invoiceTotalAmount) *
-                                    100,
-                                  100,
-                                )
-                              : 0
-                          }%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between text-xs font-semibold text-slate-500">
-                      <span>Budget Released</span>
-                      <span>
-                        {summary.budgetTotalAmount > 0
-                          ? Math.min(
-                              (summary.budgetReleasedAmount /
-                                summary.budgetTotalAmount) *
-                                100,
-                              100,
-                            ).toFixed(0)
-                          : 0}
-                        %
-                      </span>
-                    </div>
-                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className="h-full rounded-full bg-blue-500"
-                        style={{
-                          width: `${
-                            summary.budgetTotalAmount > 0
-                              ? Math.min(
-                                  (summary.budgetReleasedAmount /
-                                    summary.budgetTotalAmount) *
-                                    100,
-                                  100,
-                                )
-                              : 0
-                          }%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-
-                  <div>
-                    <div className="flex justify-between text-xs font-semibold text-slate-500">
-                      <span>Reimbursements Paid</span>
-                      <span>
-                        {summary.reimbursementApproved > 0
-                          ? Math.min(
-                              (summary.reimbursementPaid /
-                                summary.reimbursementApproved) *
-                                100,
-                              100,
-                            ).toFixed(0)
-                          : 0}
-                        %
-                      </span>
-                    </div>
-                    <div className="mt-2 h-2 overflow-hidden rounded-full bg-slate-100">
-                      <div
-                        className="h-full rounded-full bg-violet-500"
-                        style={{
-                          width: `${
-                            summary.reimbursementApproved > 0
-                              ? Math.min(
-                                  (summary.reimbursementPaid /
-                                    summary.reimbursementApproved) *
-                                    100,
-                                  100,
-                                )
-                              : 0
-                          }%`,
-                        }}
-                      />
-                    </div>
-                  </div>
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <h2 className="font-black text-slate-950">System Snapshot</h2>
-                    <p className="mt-1 text-xs text-slate-500">
-                      Record counts across connected modules.
-                    </p>
-                  </div>
-                  <CheckCircle2 className="h-5 w-5 text-slate-400" />
-                </div>
-
-                <div className="mt-5 grid grid-cols-2 gap-3">
-                  {[
-                    ["Requests", data.invoiceRequests.length],
-                    ["Estimates", data.estimates.length],
-                    ["Invoices", data.estimateInvoices.length],
-                    ["Payments", data.payments.length],
-                    ["POs", data.purchaseOrders.length],
-                    ["Expenses", data.expenseSheets.length],
-                    ["Claims", data.directClaims.length + data.meetingClaims.length],
-                    ["Records", data.records.length],
-                  ].map(([label, value]) => (
-                    <div key={String(label)} className="rounded-2xl bg-slate-50 p-3">
-                      <p className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
-                        {label}
-                      </p>
-                      <p className="mt-1 text-xl font-black text-slate-950">
-                        {Number(value).toLocaleString()}
-                      </p>
-                    </div>
-                  ))}
-                </div>
-              </CardContent>
-            </Card>
+              </tbody>
+            </table>
           </div>
-        </section>
-      </div>
 
-      {canCreateInvoices && (
-        <InvoiceRequestModal
-          isOpen={isInvoiceModalOpen}
-          onClose={() => setIsInvoiceModalOpen(false)}
-          onSuccess={() => {
-            setIsInvoiceModalOpen(false);
-            loadDashboardData(true);
-          }}
-        />
-      )}
+          <div className="flex flex-col gap-4 border-t border-slate-100 px-5 py-5 md:flex-row md:items-center md:justify-between md:px-6">
+            <p className="text-sm text-slate-500">
+              Page {currentPage} of {totalPages}
+            </p>
+
+            <div className="flex flex-wrap items-center gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                disabled={currentPage === 1}
+                onClick={() => setCurrentPage((page) => Math.max(1, page - 1))}
+                className="h-10 rounded-2xl border-slate-200 bg-white px-4 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Previous
+              </Button>
+
+              {pageNumbers.map((page) => (
+                <Button
+                  key={page}
+                  type="button"
+                  variant={page === currentPage ? "default" : "outline"}
+                  onClick={() => setCurrentPage(page)}
+                  className={`h-10 min-w-10 rounded-2xl px-3 ${
+                    page === currentPage
+                      ? "bg-slate-950 text-white hover:bg-slate-800"
+                      : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
+                  }`}
+                >
+                  {page}
+                </Button>
+              ))}
+
+              <Button
+                type="button"
+                variant="outline"
+                disabled={currentPage === totalPages}
+                onClick={() =>
+                  setCurrentPage((page) => Math.min(totalPages, page + 1))
+                }
+                className="h-10 rounded-2xl border-slate-200 bg-white px-4 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Next
+              </Button>
+            </div>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }
