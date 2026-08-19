@@ -13388,9 +13388,9 @@ export default function Dashboard() {
 
                       <div className="min-w-0 flex-1">
                         <div className="flex flex-wrap items-center gap-2">
-                          <p className="truncate text-sm font-black text-slate-900">
+                          <p className="line-clamp-3 text-sm font-black leading-5 text-slate-900">
                             {activity.title}
-                          </p>
+                          </p>  
                           <span className="text-[11px] font-bold uppercase tracking-wide text-slate-400">
                             {activity.module}
                           </span>
