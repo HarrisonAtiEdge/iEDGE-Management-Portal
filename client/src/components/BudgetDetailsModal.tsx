@@ -455,6 +455,8 @@
 //                     {getReadableStatus(liveInvoice.status)}
 //                   </Badge>
 
+
+
 //                   {canSubmitExpense && (
 //                     <Button
 //                       size="sm"
@@ -1052,6 +1054,8 @@
 //   );
 // }
 
+
+
 // import { InvoiceRequest } from "@shared/schema";
 // import {
 //   Dialog,
@@ -1495,6 +1499,7 @@
 //     !!onSubmitExpense &&
 //     ["approved", "payment_released"].includes(String(activeInvoice.status || ""));
 
+
 //   function getExportFileName(extension: "pdf" | "xlsx") {
 //     const requestId = String(activeInvoice.requestId || "budget-detail")
 //       .trim()
@@ -1596,6 +1601,7 @@
 //     return rows;
 //   }
 
+
 //   function handleExportPDF() {
 //     try {
 //       const pdf = new jsPDF({ orientation: "landscape", unit: "pt", format: "a4" });
@@ -1666,6 +1672,7 @@
 //         });
 //       }
 
+
 //       pdf.save(getExportFileName("pdf"));
 
 //       toast({
@@ -1697,6 +1704,7 @@
 //         const paymentSheet = XLSX.utils.json_to_sheet(paymentRows);
 //         XLSX.utils.book_append_sheet(workbook, paymentSheet, "Payment Details");
 //       }
+
 
 //       XLSX.writeFile(workbook, getExportFileName("xlsx"));
 
@@ -2420,6 +2428,10 @@
 //     </>
 //   );
 // }
+
+
+
+
 
 // import { InvoiceRequest } from "@shared/schema";
 // import {
@@ -3900,6 +3912,8 @@
 //     </>
 //   );
 // }
+
+
 
 // import { InvoiceRequest } from "@shared/schema";
 // import {
@@ -5487,6 +5501,8 @@
 //   );
 // }
 
+
+
 // import { InvoiceRequest } from "@shared/schema";
 // import {
 //   Dialog,
@@ -5548,6 +5564,7 @@
 
 //   return Number.isFinite(total) ? total : 0;
 // }
+
 
 // function getInvoiceItems(invoice: any): any[] {
 //   const items = Array.isArray(invoice?.items) ? invoice.items : [];
@@ -7122,6 +7139,9 @@
 //   );
 // }
 
+
+
+
 import { InvoiceRequest } from "@shared/schema";
 import {
   Dialog,
@@ -7133,7 +7153,13 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Textarea } from "@/components/ui/textarea";
-import { Check, FileSpreadsheet, FileText, ReceiptText, X } from "lucide-react";
+import {
+  Check,
+  FileSpreadsheet,
+  FileText,
+  ReceiptText,
+  X,
+} from "lucide-react";
 import {
   doc,
   updateDoc,
@@ -7180,57 +7206,44 @@ function formatPKR(value: number | string | undefined) {
   });
 }
 
-function safeNumber(value: any): number {
-  const parsed = Number(String(value ?? 0).replace(/,/g, ""));
-  return Number.isFinite(parsed) ? parsed : 0;
-}
-
 function getItemAmount(item: any) {
-  const qty = safeNumber(
-    item?.approvedUnits ?? item?.units ?? item?.quantity ?? item?.qty ?? 0,
-  );
-  const rate = safeNumber(
-    item?.approvedUnitRate ?? item?.unitRate ?? item?.rate ?? item?.price ?? 0,
-  );
-  const tax = safeNumber(item?.tax ?? item?.taxAmount ?? 0);
+  const qty = Number(item?.units ?? 0);
+  const rate = Number(item?.unitRate ?? 0);
+  const tax = Number(item?.tax ?? 0);
+  const total = Number(item?.total ?? qty * rate + tax);
 
-  return safeNumber(
-    item?.approvedTotal ??
-      item?.approvedAmount ??
-      item?.totalAmount ??
-      item?.total ??
-      item?.amount ??
-      qty * rate + tax,
-  );
+  return Number.isFinite(total) ? total : 0;
 }
 
 function getInvoiceItems(invoice: any): any[] {
   const items = Array.isArray(invoice?.items) ? invoice.items : [];
-  const lineItems = Array.isArray(invoice?.lineItems) ? invoice.lineItems : [];
+  const lineItems = Array.isArray(invoice?.lineItems)
+    ? invoice.lineItems
+    : [];
   const approvalItems = Array.isArray(invoice?.approvalItems)
     ? invoice.approvalItems
     : [];
 
   const availableArrays = [items, lineItems, approvalItems].filter(
-    (array) => array.length > 0,
+    (array) => array.length > 0
   );
 
   if (availableArrays.length === 0) return [];
 
   const baseItems = availableArrays.reduce((longest, current) =>
-    current.length > longest.length ? current : longest,
+    current.length > longest.length ? current : longest
   );
 
   const findMatchingItem = (
     source: any[],
     baseItem: any,
-    index: number,
+    index: number
   ): any | undefined => {
     if (!source.length) return undefined;
 
     if (baseItem?.id !== null && baseItem?.id !== undefined) {
       const matchById = source.find(
-        (item) => String(item?.id) === String(baseItem.id),
+        (item) => String(item?.id) === String(baseItem.id)
       );
 
       if (matchById) return matchById;
@@ -7240,8 +7253,18 @@ function getInvoiceItems(invoice: any): any[] {
   };
 
   return baseItems.map((baseItem: any, index: number) => {
-    const approvalItem = findMatchingItem(approvalItems, baseItem, index);
-    const legacyLineItem = findMatchingItem(lineItems, baseItem, index);
+    const approvalItem = findMatchingItem(
+      approvalItems,
+      baseItem,
+      index
+    );
+
+    const legacyLineItem = findMatchingItem(
+      lineItems,
+      baseItem,
+      index
+    );
+
     const currentItem = findMatchingItem(items, baseItem, index);
 
     return {
@@ -7261,7 +7284,9 @@ function getReadableStatus(status?: string) {
 }
 
 function getChequeNumbers(paymentDetails: any): string[] {
-  const chequeNumbersFromArray = Array.isArray(paymentDetails?.chequeNumbers)
+  const chequeNumbersFromArray = Array.isArray(
+    paymentDetails?.chequeNumbers
+  )
     ? paymentDetails.chequeNumbers
     : [];
 
@@ -7273,107 +7298,9 @@ function getChequeNumbers(paymentDetails: any): string[] {
     new Set(
       [...chequeNumbersFromArray, ...oldSingleChequeNumber]
         .map((num) => String(num || "").trim())
-        .filter(Boolean),
-    ),
+        .filter(Boolean)
+    )
   );
-}
-
-function getPaymentReleaseAmount(payment: any): number {
-  return safeNumber(
-    payment?.amount ??
-      payment?.releaseAmount ??
-      payment?.releasedAmount ??
-      payment?.paymentAmount ??
-      0,
-  );
-}
-
-function getPaymentReleaseHistory(invoice: any): any[] {
-  const history = Array.isArray(invoice?.paymentReleaseHistory)
-    ? invoice.paymentReleaseHistory
-    : [];
-
-  if (history.length > 0) {
-    return history.filter(
-      (payment: any) => getPaymentReleaseAmount(payment) > 0,
-    );
-  }
-
-  const legacyPayment =
-    invoice?.paymentDetails || invoice?.latestPaymentRelease;
-
-  if (!legacyPayment || getPaymentReleaseAmount(legacyPayment) <= 0) {
-    return [];
-  }
-
-  return [
-    {
-      ...legacyPayment,
-      releasedAt:
-        legacyPayment?.releasedAt ||
-        invoice?.paymentReleasedAt ||
-        invoice?.releasePaymentAt ||
-        invoice?.updatedAt ||
-        null,
-    },
-  ];
-}
-
-function getPaymentVendorNames(payment: any): string[] {
-  const values = [
-    ...(Array.isArray(payment?.paymentVendorNames)
-      ? payment.paymentVendorNames
-      : []),
-    ...(Array.isArray(payment?.localVendorNames)
-      ? payment.localVendorNames
-      : []),
-    ...(Array.isArray(payment?.vendors) ? payment.vendors : []),
-    payment?.paymentVendorName,
-    payment?.vendorName,
-    payment?.supplierName,
-    payment?.vendor,
-    payment?.supplier,
-  ];
-
-  return Array.from(
-    new Set(values.map((value) => String(value || "").trim()).filter(Boolean)),
-  );
-}
-
-function getPaymentItems(payment: any): any[] {
-  const paymentItems = Array.isArray(payment?.paymentItems)
-    ? payment.paymentItems
-    : [];
-  const items = Array.isArray(payment?.items) ? payment.items : [];
-
-  return paymentItems.length > 0 ? paymentItems : items;
-}
-
-function isCombinedLocalVendorPayment(payment: any): boolean {
-  return Boolean(
-    payment?.combinedLocalVendorPayment === true ||
-      String(payment?.paymentScopeType || "")
-        .toLowerCase()
-        .trim() === "local_vendors_combined" ||
-      String(payment?.paymentVendorKey || "").trim() ===
-        "local-vendors:combined",
-  );
-}
-
-function getPaymentScopeLabel(payment: any): string {
-  if (isCombinedLocalVendorPayment(payment)) {
-    return "Combined Local Vendors";
-  }
-
-  if (payment?.directPaymentRelease === true) {
-    return "Direct Vendor Payment";
-  }
-
-  if (String(payment?.paymentScope || "").toLowerCase() === "vendor") {
-    return "Vendor Payment";
-  }
-
-  return "Payment Release";
 }
 
 type ReceiptFileItem = {
@@ -7381,14 +7308,20 @@ type ReceiptFileItem = {
   name: string;
 };
 
-function getFileNameFromUrl(url: string, fallback = "Receipt File") {
+function getFileNameFromUrl(
+  url: string,
+  fallback = "Receipt File"
+) {
   try {
     const cleanUrl = String(url || "").split("?")[0];
 
-    // Firebase Storage URLs usually contain "/o/<encoded-file-path>".
-    const firebaseStorageMatch = cleanUrl.match(/\/o\/([^/]+)$/);
+    const firebaseStorageMatch =
+      cleanUrl.match(/\/o\/([^/]+)$/);
+
     const rawPath =
-      firebaseStorageMatch?.[1] || cleanUrl.split("/").pop() || "";
+      firebaseStorageMatch?.[1] ||
+      cleanUrl.split("/").pop() ||
+      "";
 
     const decodedPath = decodeURIComponent(rawPath);
     const fileName = decodedPath.split("/").pop();
@@ -7399,21 +7332,30 @@ function getFileNameFromUrl(url: string, fallback = "Receipt File") {
   }
 }
 
-function getReceiptFiles(paymentDetails: any): ReceiptFileItem[] {
+function getReceiptFiles(
+  paymentDetails: any
+): ReceiptFileItem[] {
   const files: ReceiptFileItem[] = [];
 
-  const pushFile = (value: any, fallbackName?: string) => {
+  const pushFile = (
+    value: any,
+    fallbackName?: string
+  ) => {
     if (!value) return;
 
     if (typeof value === "string") {
       const url = value.trim();
+
       if (!url) return;
 
       files.push({
         url,
         name:
           fallbackName ||
-          getFileNameFromUrl(url, `Receipt ${files.length + 1}`),
+          getFileNameFromUrl(
+            url,
+            `Receipt ${files.length + 1}`
+          ),
       });
 
       return;
@@ -7428,7 +7370,7 @@ function getReceiptFiles(paymentDetails: any): ReceiptFileItem[] {
           value.fileURL ||
           value.receiptUrl ||
           value.bankReceiptUrl ||
-          "",
+          ""
       ).trim();
 
       if (!url) return;
@@ -7441,7 +7383,10 @@ function getReceiptFiles(paymentDetails: any): ReceiptFileItem[] {
           value.filename ||
           value.originalName ||
           fallbackName ||
-          getFileNameFromUrl(url, `Receipt ${files.length + 1}`),
+          getFileNameFromUrl(
+            url,
+            `Receipt ${files.length + 1}`
+          ),
       });
     }
   };
@@ -7461,17 +7406,29 @@ function getReceiptFiles(paymentDetails: any): ReceiptFileItem[] {
     }
   });
 
-  pushFile(paymentDetails?.bankReceiptUrl, "Receipt 1");
-  pushFile(paymentDetails?.receiptUrl, "Receipt 1");
+  pushFile(
+    paymentDetails?.bankReceiptUrl,
+    "Receipt 1"
+  );
 
-  const uniqueFiles = new Map<string, ReceiptFileItem>();
+  pushFile(
+    paymentDetails?.receiptUrl,
+    "Receipt 1"
+  );
+
+  const uniqueFiles = new Map<
+    string,
+    ReceiptFileItem
+  >();
 
   files.forEach((file, index) => {
     if (!file.url || uniqueFiles.has(file.url)) return;
 
     uniqueFiles.set(file.url, {
       url: file.url,
-      name: file.name || `Receipt ${index + 1}`,
+      name:
+        file.name ||
+        `Receipt ${index + 1}`,
     });
   });
 
@@ -7482,7 +7439,9 @@ interface BudgetDetailsModalProps {
   isOpen: boolean;
   onClose: () => void;
   invoice: InvoiceRequest | null;
-  onSubmitExpense?: (request: InvoiceRequest) => void;
+  onSubmitExpense?: (
+    request: InvoiceRequest
+  ) => void;
 }
 
 export default function BudgetDetailsModal({
@@ -7494,23 +7453,49 @@ export default function BudgetDetailsModal({
   const { userProfile } = useAuth();
   const { toast } = useToast();
 
-  const isMainAdmin = userProfile?.role === "main_admin";
+  const isMainAdmin =
+    userProfile?.role === "main_admin";
 
-  const [liveInvoice, setLiveInvoice] = useState<InvoiceRequest | null>(
-    invoice,
-  );
-  const [lineItems, setLineItems] = useState<any[]>(getInvoiceItems(invoice));
+  const [liveInvoice, setLiveInvoice] =
+    useState<InvoiceRequest | null>(invoice);
 
-  const [itemRejectDialogOpen, setItemRejectDialogOpen] = useState(false);
-  const [pendingRejectIndex, setPendingRejectIndex] = useState<number | null>(
-    null,
-  );
-  const [itemRejectionComment, setItemRejectionComment] = useState("");
-  const [itemActionLoading, setItemActionLoading] = useState(false);
+  const [lineItems, setLineItems] =
+    useState<any[]>(getInvoiceItems(invoice));
 
-  const [requestRejectDialogOpen, setRequestRejectDialogOpen] = useState(false);
-  const [requestRejectionComment, setRequestRejectionComment] = useState("");
-  const [requestActionLoading, setRequestActionLoading] = useState(false);
+  const [
+    itemRejectDialogOpen,
+    setItemRejectDialogOpen,
+  ] = useState(false);
+
+  const [
+    pendingRejectIndex,
+    setPendingRejectIndex,
+  ] = useState<number | null>(null);
+
+  const [
+    itemRejectionComment,
+    setItemRejectionComment,
+  ] = useState("");
+
+  const [
+    itemActionLoading,
+    setItemActionLoading,
+  ] = useState(false);
+
+  const [
+    requestRejectDialogOpen,
+    setRequestRejectDialogOpen,
+  ] = useState(false);
+
+  const [
+    requestRejectionComment,
+    setRequestRejectionComment,
+  ] = useState("");
+
+  const [
+    requestActionLoading,
+    setRequestActionLoading,
+  ] = useState(false);
 
   useEffect(() => {
     setLiveInvoice(invoice);
@@ -7525,7 +7510,7 @@ export default function BudgetDetailsModal({
       "Panels",
       "IEDGE-SYSTEM",
       "invoiceRequests",
-      invoice.id,
+      invoice.id
     );
 
     const unsub = onSnapshot(ref, (snap) => {
@@ -7536,7 +7521,9 @@ export default function BudgetDetailsModal({
         } as InvoiceRequest;
 
         setLiveInvoice(freshInvoice);
-        setLineItems(getInvoiceItems(freshInvoice));
+        setLineItems(
+          getInvoiceItems(freshInvoice)
+        );
       }
     });
 
@@ -7547,70 +7534,80 @@ export default function BudgetDetailsModal({
 
   const activeInvoice = liveInvoice;
 
-  const rawInvoiceType = String(
-    (activeInvoice as any).invoiceType || (activeInvoice as any).type || "",
-  )
-    .toLowerCase()
-    .trim();
-
   const invoiceType =
-    rawInvoiceType === "asset" || rawInvoiceType === "assets"
-      ? "asset"
-      : rawInvoiceType === "project"
-        ? "project"
-        : rawInvoiceType === "general"
-          ? "general"
-          : activeInvoice.clientName
-            ? "project"
-            : "general";
+    (activeInvoice as any).invoiceType ||
+    (activeInvoice.clientName
+      ? "project"
+      : "general");
 
-  function getStatusBadgeColor(status: string): string {
+  function getStatusBadgeColor(
+    status: string
+  ): string {
     switch (status) {
       case "approved":
       case "payment_released":
         return "border-green-200 bg-green-50 text-green-700";
-      case "payment_partially_released":
-        return "border-blue-200 bg-blue-50 text-blue-700";
+
       case "rejected":
         return "border-red-200 bg-red-50 text-red-700";
+
       case "pending_operational_admin":
       case "pending_main_admin":
       case "pending_finance":
         return "border-amber-200 bg-amber-50 text-amber-700";
+
       default:
         return "border-blue-200 bg-blue-50 text-blue-700";
     }
   }
 
-  function getItemStatusBadgeColor(status: string): string {
+  function getItemStatusBadgeColor(
+    status: string
+  ): string {
     switch (status) {
       case "approved":
         return "border-green-200 bg-green-50 text-green-700";
+
       case "rejected":
         return "border-red-200 bg-red-50 text-red-700";
+
       default:
         return "border-amber-200 bg-amber-50 text-amber-700";
     }
   }
 
-  function canApproveRequest(request: InvoiceRequest): boolean {
+  function canApproveRequest(
+    request: InvoiceRequest
+  ): boolean {
     if (!userProfile) return false;
 
     switch (userProfile.role) {
       case "operational_admin":
-        return request.status === "pending_operational_admin";
+        return (
+          request.status ===
+          "pending_operational_admin"
+        );
+
       case "main_admin":
-        return request.status === "pending_main_admin";
+        return (
+          request.status ===
+          "pending_main_admin"
+        );
+
       case "finance":
       case "financial_admin":
-        return request.status === "pending_finance";
+        return (
+          request.status === "pending_finance"
+        );
+
       default:
         return false;
     }
   }
 
   async function handleApproveRequest() {
-    if (!activeInvoice?.id || !userProfile) return;
+    if (!activeInvoice?.id || !userProfile)
+      return;
 
     try {
       setRequestActionLoading(true);
@@ -7620,20 +7617,31 @@ export default function BudgetDetailsModal({
 
       switch (userProfile.role) {
         case "operational_admin":
-          if (activeInvoice.status === "pending_operational_admin") {
-            newStatus = "pending_main_admin" as any;
+          if (
+            activeInvoice.status ===
+            "pending_operational_admin"
+          ) {
+            newStatus =
+              "pending_main_admin" as any;
           }
           break;
 
         case "main_admin":
-          if (activeInvoice.status === "pending_main_admin") {
-            newStatus = "pending_finance" as any;
+          if (
+            activeInvoice.status ===
+            "pending_main_admin"
+          ) {
+            newStatus =
+              "pending_finance" as any;
           }
           break;
 
         case "finance":
         case "financial_admin":
-          if (activeInvoice.status === "pending_finance") {
+          if (
+            activeInvoice.status ===
+            "pending_finance"
+          ) {
             newStatus = "approved" as any;
           }
           break;
@@ -7642,41 +7650,61 @@ export default function BudgetDetailsModal({
       if (newStatus === activeInvoice.status) {
         toast({
           title: "Action not available",
-          description: "This request is not pending your approval step.",
+          description:
+            "This request is not pending your approval step.",
           variant: "destructive",
         });
+
         return;
       }
 
       await updateDoc(
-        doc(db, "Panels", "IEDGE-SYSTEM", "invoiceRequests", activeInvoice.id),
+        doc(
+          db,
+          "Panels",
+          "IEDGE-SYSTEM",
+          "invoiceRequests",
+          activeInvoice.id
+        ),
         {
           status: newStatus,
           currentApprover,
           approvalHistory: [
-            ...((activeInvoice as any).approvalHistory || []),
+            ...((activeInvoice as any)
+              .approvalHistory || []),
             {
-              approver: userProfile.displayName,
+              approver:
+                userProfile.displayName,
               action: "approved",
               timestamp: new Date(),
               notes: "",
             },
           ],
           updatedAt: serverTimestamp(),
-        },
+        }
       );
 
-      setLiveInvoice({ ...activeInvoice, status: newStatus } as InvoiceRequest);
+      setLiveInvoice({
+        ...activeInvoice,
+        status: newStatus,
+      } as InvoiceRequest);
 
       toast({
         title: "Request approved",
-        description: "The request status has been updated successfully.",
+        description:
+          "The request status has been updated successfully.",
       });
     } catch (error: any) {
-      console.error("Failed to approve request:", error);
+      console.error(
+        "Failed to approve request:",
+        error
+      );
+
       toast({
         title: "Error",
-        description: error.message || "Failed to approve request",
+        description:
+          error.message ||
+          "Failed to approve request",
         variant: "destructive",
       });
     } finally {
@@ -7685,16 +7713,21 @@ export default function BudgetDetailsModal({
   }
 
   async function handleRejectRequest() {
-    if (!activeInvoice?.id || !userProfile) return;
+    if (!activeInvoice?.id || !userProfile)
+      return;
 
-    const reason = requestRejectionComment.trim();
+    const reason =
+      requestRejectionComment.trim();
 
     if (!reason) {
       toast({
-        title: "Rejection comment required",
-        description: "Please enter the reason for rejecting this request.",
+        title:
+          "Rejection comment required",
+        description:
+          "Please enter the reason for rejecting this request.",
         variant: "destructive",
       });
+
       return;
     }
 
@@ -7702,39 +7735,56 @@ export default function BudgetDetailsModal({
       setRequestActionLoading(true);
 
       await updateDoc(
-        doc(db, "Panels", "IEDGE-SYSTEM", "invoiceRequests", activeInvoice.id),
+        doc(
+          db,
+          "Panels",
+          "IEDGE-SYSTEM",
+          "invoiceRequests",
+          activeInvoice.id
+        ),
         {
-          status: "pending_operational_admin",
+          status:
+            "pending_operational_admin",
           approvalHistory: [
-            ...((activeInvoice as any).approvalHistory || []),
+            ...((activeInvoice as any)
+              .approvalHistory || []),
             {
-              approver: userProfile.displayName,
+              approver:
+                userProfile.displayName,
               action: "rejected",
               timestamp: new Date(),
               notes: reason,
             },
           ],
           updatedAt: serverTimestamp(),
-        },
+        }
       );
 
       setLiveInvoice({
         ...activeInvoice,
-        status: "pending_operational_admin" as any,
+        status:
+          "pending_operational_admin" as any,
       } as InvoiceRequest);
 
       toast({
         title: "Request rejected",
-        description: "The request has been sent back with your comment.",
+        description:
+          "The request has been sent back with your comment.",
       });
 
       setRequestRejectDialogOpen(false);
       setRequestRejectionComment("");
     } catch (error: any) {
-      console.error("Failed to reject request:", error);
+      console.error(
+        "Failed to reject request:",
+        error
+      );
+
       toast({
         title: "Error",
-        description: error.message || "Failed to reject request",
+        description:
+          error.message ||
+          "Failed to reject request",
         variant: "destructive",
       });
     } finally {
@@ -7745,23 +7795,33 @@ export default function BudgetDetailsModal({
   async function updateLineItemStatus(
     index: number,
     status: "approved" | "rejected",
-    rejectReason = "",
+    rejectReason = ""
   ) {
-    if (!activeInvoice?.id || !userProfile) return;
+    if (!activeInvoice?.id || !userProfile)
+      return;
 
     try {
       setItemActionLoading(true);
 
-      const updatedItems = lineItems.map((item: any) => ({ ...item }));
+      const updatedItems = lineItems.map(
+        (item: any) => ({ ...item })
+      );
+
       const now = new Date();
-      const actorName = userProfile.displayName || "Main Admin";
-      const currentItem = updatedItems[index] || {};
+
+      const actorName =
+        userProfile.displayName ||
+        "Main Admin";
+
+      const currentItem =
+        updatedItems[index] || {};
 
       updatedItems[index] = {
         ...currentItem,
         status,
         reviewedBy: actorName,
         reviewedAt: now,
+
         ...(status === "approved"
           ? {
               approvedBy: actorName,
@@ -7771,29 +7831,44 @@ export default function BudgetDetailsModal({
           : {
               rejectedBy: actorName,
               rejectedAt: now,
-              rejectionComment: rejectReason.trim(),
+              rejectionComment:
+                rejectReason.trim(),
             }),
       };
 
       await updateDoc(
-        doc(db, "Panels", "IEDGE-SYSTEM", "invoiceRequests", activeInvoice.id),
+        doc(
+          db,
+          "Panels",
+          "IEDGE-SYSTEM",
+          "invoiceRequests",
+          activeInvoice.id
+        ),
         {
           items: updatedItems,
           lineItems: updatedItems,
           updatedAt: serverTimestamp(),
-        },
+        }
       );
 
       setLineItems(updatedItems);
 
       toast({
-        title: status === "approved" ? "Item approved" : "Item rejected",
+        title:
+          status === "approved"
+            ? "Item approved"
+            : "Item rejected",
       });
     } catch (error) {
-      console.error("Failed to update line item status:", error);
+      console.error(
+        "Failed to update line item status:",
+        error
+      );
+
       toast({
         title: "Error",
-        description: "Failed to update item status",
+        description:
+          "Failed to update item status",
         variant: "destructive",
       });
     } finally {
@@ -7801,306 +7876,410 @@ export default function BudgetDetailsModal({
     }
   }
 
-  function openItemRejectDialog(index: number) {
+  function openItemRejectDialog(
+    index: number
+  ) {
     setPendingRejectIndex(index);
     setItemRejectionComment("");
     setItemRejectDialogOpen(true);
   }
 
   async function handleItemRejectConfirm() {
-    if (pendingRejectIndex === null) return;
+    if (pendingRejectIndex === null)
+      return;
 
-    const reason = itemRejectionComment.trim();
+    const reason =
+      itemRejectionComment.trim();
 
     if (!reason) {
       toast({
-        title: "Rejection comment required",
-        description: "Please enter the reason for rejecting this item.",
+        title:
+          "Rejection comment required",
+        description:
+          "Please enter the reason for rejecting this item.",
         variant: "destructive",
       });
+
       return;
     }
 
-    await updateLineItemStatus(pendingRejectIndex, "rejected", reason);
+    await updateLineItemStatus(
+      pendingRejectIndex,
+      "rejected",
+      reason
+    );
+
     setItemRejectDialogOpen(false);
     setPendingRejectIndex(null);
     setItemRejectionComment("");
   }
 
   const approvedTotal = lineItems
-    .filter((item: any) => item.status === "approved")
-    .reduce((sum: number, item: any) => sum + getItemAmount(item), 0);
+    .filter(
+      (item: any) =>
+        item.status === "approved"
+    )
+    .reduce(
+      (sum: number, item: any) =>
+        sum + getItemAmount(item),
+      0
+    );
 
   const rejectedTotal = lineItems
-    .filter((item: any) => item.status === "rejected")
-    .reduce((sum: number, item: any) => sum + getItemAmount(item), 0);
+    .filter(
+      (item: any) =>
+        item.status === "rejected"
+    )
+    .reduce(
+      (sum: number, item: any) =>
+        sum + getItemAmount(item),
+      0
+    );
 
   const pendingTotal = lineItems
-    .filter((item: any) => !item.status || item.status === "pending")
-    .reduce((sum: number, item: any) => sum + getItemAmount(item), 0);
+    .filter(
+      (item: any) =>
+        !item.status ||
+        item.status === "pending"
+    )
+    .reduce(
+      (sum: number, item: any) =>
+        sum + getItemAmount(item),
+      0
+    );
 
-  const totalBudget = safeNumber(
-    (activeInvoice as any).totalAmount ?? (activeInvoice as any).amount ?? 0,
-  );
-  const canShowRequestActions = canApproveRequest(activeInvoice);
+  const totalBudget =
+    activeInvoice.totalAmount || 0;
 
-  const paymentHistory = getPaymentReleaseHistory(activeInvoice);
-  const totalReleasedAmount = paymentHistory.reduce(
-    (sum: number, payment: any) => sum + getPaymentReleaseAmount(payment),
-    0,
-  );
-  const approvedPaymentAmount = safeNumber(
-    (activeInvoice as any).approvedAmount ??
-      (activeInvoice as any).totalApprovedAmount ??
-      approvedTotal ??
-      totalBudget,
-  );
-  const remainingPaymentAmount = Math.max(
-    safeNumber(
-      (activeInvoice as any).remainingReleaseAmount ??
-        approvedPaymentAmount - totalReleasedAmount,
-    ),
-    0,
+  const canShowRequestActions =
+    canApproveRequest(activeInvoice);
+
+  const paymentDetails =
+    activeInvoice.paymentDetails as
+      | {
+          paymentMethod?: string;
+          amount?: number;
+          vendor?: string;
+          vendors?: string[];
+          transactionReference?: string;
+
+          chequeNumber?: string;
+          chequeNumbers?: string[];
+
+          bankReceiptUrl?: string;
+          bankReceiptUrls?: string[];
+          receiptUrl?: string;
+          receiptUrls?: string[];
+          receipts?: any[];
+          receiptFiles?: any[];
+          uploadedFiles?: any[];
+          files?: any[];
+
+          paymentNotes?: string;
+          releasedAt?: any;
+          releasedByName?: string;
+
+          selectedAccount?: {
+            accountName?: string;
+            accountNumber?: string;
+            bankName?: string;
+          };
+        }
+      | undefined;
+
+  const vendorText = Array.isArray(
+    paymentDetails?.vendors
+  )
+    ? paymentDetails?.vendors.join(", ")
+    : paymentDetails?.vendor || "-";
+
+  const chequeNumbers =
+    getChequeNumbers(paymentDetails);
+
+  const chequeNumbersText =
+    chequeNumbers.length
+      ? chequeNumbers.join(", ")
+      : "-";
+
+  const receiptFiles =
+    getReceiptFiles(paymentDetails);
+
+  const receiptUrls = receiptFiles.map(
+    (file) => file.url
   );
 
   const displaySubject =
     (activeInvoice as any).subject ||
-    (activeInvoice as any).title ||
     (invoiceType === "project"
-      ? (activeInvoice as any).projectName || activeInvoice.project || "-"
+      ? (activeInvoice as any).title || "-"
       : "-");
+
+  /*
+   * ESTIMATE NUMBER
+   *
+   * This supports multiple possible Firebase
+   * field names so that older/newer records
+   * can still display the estimate number.
+   */
+  const estimateNumber =
+    (activeInvoice as any).estimateNumber ||
+    (activeInvoice as any).estimateNo ||
+    (activeInvoice as any).estimateId ||
+    "-";
 
   const canSubmitExpense =
     invoiceType === "project" &&
     !!onSubmitExpense &&
     ["approved", "payment_released"].includes(
-      String(activeInvoice.status || ""),
+      String(activeInvoice.status || "")
     );
 
-  function getExportFileName(extension: "pdf" | "xlsx") {
-    const requestId = String(activeInvoice.requestId || "budget-detail")
+  function getExportFileName(
+    extension: "pdf" | "xlsx"
+  ) {
+    const requestId = String(
+      activeInvoice.requestId ||
+        "budget-detail"
+    )
       .trim()
-      .replace(/[^a-zA-Z0-9-_]+/g, "-")
+      .replace(
+        /[^a-zA-Z0-9-_]+/g,
+        "-"
+      )
       .replace(/-+/g, "-");
 
-    return `Budget-Detail-${requestId || "request"}.${extension}`;
+    return `Budget-Detail-${
+      requestId || "request"
+    }.${extension}`;
   }
 
   function getLineItemExportRows() {
-    return lineItems.map((item: any, index: number) => {
-      const status = item.status || "pending";
+    return lineItems.map(
+      (item: any, index: number) => {
+        const status =
+          item.status || "pending";
 
-      return {
-        "#": index + 1,
-        Vendor: item.vendor || "-",
-        Service: item.service || "-",
-        Description: item.description || "-",
-        "Requester Comment": item.comment || "-",
-        Qty: item.units ?? 0,
-        Rate: Number(item.unitRate ?? 0),
-        Amount: getItemAmount(item),
-        Status: getReadableStatus(status),
-        "Reviewed By":
-          item.reviewedBy || item.approvedBy || item.rejectedBy || "-",
-        "Reviewed At": toDateString(
-          item.reviewedAt || item.approvedAt || item.rejectedAt,
-        ),
-        "Rejection Reason": item.rejectionComment || "-",
-      };
-    });
+        return {
+          "#": index + 1,
+          Vendor: item.vendor || "-",
+          Service: item.service || "-",
+          Description:
+            item.description || "-",
+          "Requester Comment":
+            item.comment || "-",
+          Qty: item.units ?? 0,
+          Rate: Number(
+            item.unitRate ?? 0
+          ),
+          Amount: getItemAmount(item),
+          Status:
+            getReadableStatus(status),
+          "Reviewed By":
+            item.reviewedBy ||
+            item.approvedBy ||
+            item.rejectedBy ||
+            "-",
+          "Reviewed At": toDateString(
+            item.reviewedAt ||
+              item.approvedAt ||
+              item.rejectedAt
+          ),
+          "Rejection Reason":
+            item.rejectionComment || "-",
+        };
+      }
+    );
   }
 
   function getSummaryExportRows() {
     const rows = [
-      { Field: "Request ID", Value: activeInvoice.requestId || "-" },
-      { Field: "Request Type", Value: getReadableStatus(invoiceType) },
-      { Field: "Status", Value: getReadableStatus(activeInvoice.status) },
-      { Field: "Subject", Value: displaySubject || "-" },
+      {
+        Field: "Request ID",
+        Value:
+          activeInvoice.requestId || "-",
+      },
+
+      // Estimate Number added here
+      {
+        Field: "Estimate Number",
+        Value: estimateNumber,
+      },
+
+      {
+        Field: "Request Type",
+        Value:
+          getReadableStatus(invoiceType),
+      },
+      {
+        Field: "Status",
+        Value: getReadableStatus(
+          activeInvoice.status
+        ),
+      },
+      {
+        Field: "Subject",
+        Value: displaySubject || "-",
+      },
       {
         Field: "Submitted Date",
-        Value: toDateString(activeInvoice.submittedAt),
+        Value: toDateString(
+          activeInvoice.submittedAt
+        ),
       },
-      { Field: "Total Budget", Value: `Rs ${formatPKR(totalBudget)}` },
-      { Field: "Approved Amount", Value: `Rs ${formatPKR(approvedTotal)}` },
-      { Field: "Rejected Amount", Value: `Rs ${formatPKR(rejectedTotal)}` },
-      { Field: "Pending Amount", Value: `Rs ${formatPKR(pendingTotal)}` },
+      {
+        Field: "Total Budget",
+        Value: `Rs ${formatPKR(
+          totalBudget
+        )}`,
+      },
+      {
+        Field: "Approved Amount",
+        Value: `Rs ${formatPKR(
+          approvedTotal
+        )}`,
+      },
+      {
+        Field: "Rejected Amount",
+        Value: `Rs ${formatPKR(
+          rejectedTotal
+        )}`,
+      },
+      {
+        Field: "Pending Amount",
+        Value: `Rs ${formatPKR(
+          pendingTotal
+        )}`,
+      },
     ];
 
     if (invoiceType === "general") {
-      rows.splice(3, 0, {
+      rows.splice(4, 0, {
         Field: "Title",
-        Value: (activeInvoice as any).title || "-",
+        Value:
+          (activeInvoice as any)
+            .title || "-",
       });
-    } else if (invoiceType === "asset") {
-      rows.splice(
-        3,
-        0,
-        {
-          Field: "Title",
-          Value:
-            (activeInvoice as any).title ||
-            (activeInvoice as any).subject ||
-            "-",
-        },
-        {
-          Field: "Asset Category",
-          Value:
-            (activeInvoice as any).assetCategory ||
-            (activeInvoice as any).category ||
-            "-",
-        },
-      );
     } else {
       rows.splice(
-        3,
+        4,
         0,
-        { Field: "Client", Value: activeInvoice.clientName || "-" },
-        { Field: "Project", Value: activeInvoice.project || "-" },
+        {
+          Field: "Client",
+          Value:
+            activeInvoice.clientName ||
+            "-",
+        },
+        {
+          Field: "Project",
+          Value:
+            activeInvoice.project || "-",
+        },
         {
           Field: "Project Code",
-          Value: (activeInvoice as any).projectCode || "-",
-        },
+          Value:
+            (activeInvoice as any)
+              .projectCode || "-",
+        }
       );
     }
 
     const message =
-      (activeInvoice as any).message || (activeInvoice as any).comment;
+      (activeInvoice as any).message ||
+      (activeInvoice as any).comment;
 
     if (message) {
-      rows.push({ Field: "Message", Value: message });
+      rows.push({
+        Field: "Message",
+        Value: message,
+      });
     }
 
     return rows;
   }
 
   function getPaymentExportRows() {
-    return paymentHistory.flatMap((payment: any, index: number) => {
-      const releaseNumber = index + 1;
-      const vendors = getPaymentVendorNames(payment);
-      const chequeNumbers = getChequeNumbers(payment);
-      const receiptFiles = getReceiptFiles(payment);
-      const paymentItems = getPaymentItems(payment);
+    if (!paymentDetails) return [];
 
-      const rows: Array<{
-        Release: string;
-        Field: string;
-        Value: any;
-      }> = [
-        {
-          Release: `Release ${releaseNumber}`,
-          Field: "Payment Scope",
-          Value: getPaymentScopeLabel(payment),
-        },
-        {
-          Release: `Release ${releaseNumber}`,
-          Field: "Payment Method",
-          Value: getReadableStatus(payment?.paymentMethod || "-"),
-        },
-        {
-          Release: `Release ${releaseNumber}`,
-          Field: "Amount Paid",
-          Value: `Rs ${formatPKR(getPaymentReleaseAmount(payment))}`,
-        },
-        {
-          Release: `Release ${releaseNumber}`,
-          Field: "Vendor(s)",
-          Value: vendors.length ? vendors.join(", ") : "-",
-        },
-        {
-          Release: `Release ${releaseNumber}`,
-          Field: "Included Items",
-          Value: paymentItems.length || payment?.itemCount || 0,
-        },
-        {
-          Release: `Release ${releaseNumber}`,
-          Field: "Transaction Name",
-          Value: payment?.transactionName || "-",
-        },
-        {
-          Release: `Release ${releaseNumber}`,
-          Field: "Transaction Ref",
-          Value: payment?.transactionReference || "-",
-        },
-        {
-          Release: `Release ${releaseNumber}`,
-          Field: "Cheque Numbers",
-          Value: chequeNumbers.length ? chequeNumbers.join(", ") : "-",
-        },
-        {
-          Release: `Release ${releaseNumber}`,
-          Field: "Released By",
-          Value: payment?.releasedByName || "-",
-        },
-        {
-          Release: `Release ${releaseNumber}`,
-          Field: "Released At",
-          Value: toDateString(payment?.releasedAt),
-        },
-        {
-          Release: `Release ${releaseNumber}`,
-          Field: "Bank Receipt",
-          Value: receiptFiles.length
-            ? receiptFiles.map((file) => file.url).join(", ")
-            : "-",
-        },
-        {
-          Release: `Release ${releaseNumber}`,
-          Field: "Notes",
-          Value: payment?.paymentNotes || "-",
-        },
-      ];
-
-      if (payment?.selectedAccount) {
-        rows.push(
-          {
-            Release: `Release ${releaseNumber}`,
-            Field: "Account Name",
-            Value: payment.selectedAccount.accountName || "-",
-          },
-          {
-            Release: `Release ${releaseNumber}`,
-            Field: "Account Number",
-            Value: payment.selectedAccount.accountNumber || "-",
-          },
-          {
-            Release: `Release ${releaseNumber}`,
-            Field: "Bank Name",
-            Value: payment.selectedAccount.bankName || "-",
-          },
-        );
-      }
-
-      return rows;
-    });
-  }
-
-  function getPaymentItemExportRows() {
-    return paymentHistory.flatMap((payment: any, paymentIndex: number) => {
-      const paymentItems = getPaymentItems(payment);
-
-      return paymentItems.map((item: any, itemIndex: number) => ({
-        Release: paymentIndex + 1,
-        Scope: getPaymentScopeLabel(payment),
-        "Item #": itemIndex + 1,
-        Vendor:
-          item?.vendor ||
-          item?.vendorName ||
-          item?.supplier ||
-          item?.supplierName ||
+    const rows = [
+      {
+        Field: "Payment Method",
+        Value:
+          paymentDetails.paymentMethod ||
           "-",
-        Service: item?.service || item?.serviceName || item?.name || "-",
-        Description:
-          item?.description || item?.itemDescription || item?.details || "-",
-        Qty: item?.approvedUnits ?? item?.units ?? item?.quantity ?? 0,
-        Rate:
-          item?.approvedUnitRate ??
-          item?.unitRate ??
-          item?.rate ??
-          item?.price ??
-          0,
-        Amount: getItemAmount(item),
-      }));
-    });
+      },
+      {
+        Field: "Amount Paid",
+        Value: `Rs ${formatPKR(
+          paymentDetails.amount
+        )}`,
+      },
+      {
+        Field: "Vendor(s)",
+        Value: vendorText,
+      },
+      {
+        Field: "Transaction Ref",
+        Value:
+          paymentDetails.transactionReference ||
+          "-",
+      },
+      {
+        Field: "Cheque Numbers",
+        Value: chequeNumbersText,
+      },
+      {
+        Field: "Released By",
+        Value:
+          paymentDetails.releasedByName ||
+          "-",
+      },
+      {
+        Field: "Released At",
+        Value: toDateString(
+          paymentDetails.releasedAt
+        ),
+      },
+      {
+        Field: "Bank Receipt",
+        Value: receiptUrls.length
+          ? receiptUrls.join(", ")
+          : "-",
+      },
+      {
+        Field: "Notes",
+        Value:
+          paymentDetails.paymentNotes ||
+          "-",
+      },
+    ];
+
+    if (paymentDetails.selectedAccount) {
+      rows.push(
+        {
+          Field: "Account Name",
+          Value:
+            paymentDetails
+              .selectedAccount
+              .accountName || "-",
+        },
+        {
+          Field: "Account Number",
+          Value:
+            paymentDetails
+              .selectedAccount
+              .accountNumber || "-",
+        },
+        {
+          Field: "Bank Name",
+          Value:
+            paymentDetails
+              .selectedAccount
+              .bankName || "-",
+        }
+      );
+    }
+
+    return rows;
   }
 
   function handleExportPDF() {
@@ -8111,22 +8290,47 @@ export default function BudgetDetailsModal({
         format: "a4",
       });
 
-      const pageWidth = pdf.internal.pageSize.getWidth();
-      const generatedAt = new Date().toLocaleString();
+      const pageWidth =
+        pdf.internal.pageSize.getWidth();
+
+      const generatedAt =
+        new Date().toLocaleString();
 
       pdf.setFontSize(18);
-      pdf.text("Budget Detail", 40, 40);
+      pdf.text(
+        "Budget Detail",
+        40,
+        40
+      );
 
       pdf.setFontSize(10);
-      pdf.text(`Request ID: ${activeInvoice.requestId || "-"}`, 40, 58);
-      pdf.text(`Generated: ${generatedAt}`, pageWidth - 40, 58, {
-        align: "right",
-      });
+
+      pdf.text(
+        `Request ID: ${
+          activeInvoice.requestId || "-"
+        }`,
+        40,
+        58
+      );
+
+      pdf.text(
+        `Generated: ${generatedAt}`,
+        pageWidth - 40,
+        58,
+        {
+          align: "right",
+        }
+      );
 
       autoTable(pdf, {
         startY: 82,
         head: [["Field", "Value"]],
-        body: getSummaryExportRows().map((row) => [row.Field, row.Value]),
+        body: getSummaryExportRows().map(
+          (row) => [
+            row.Field,
+            row.Value,
+          ]
+        ),
         theme: "grid",
         styles: {
           fontSize: 9,
@@ -8148,7 +8352,9 @@ export default function BudgetDetailsModal({
       });
 
       autoTable(pdf, {
-        startY: (pdf as any).lastAutoTable.finalY + 24,
+        startY:
+          (pdf as any).lastAutoTable
+            .finalY + 24,
         head: [
           [
             "#",
@@ -8163,18 +8369,24 @@ export default function BudgetDetailsModal({
             "Rejection Reason",
           ],
         ],
-        body: getLineItemExportRows().map((row) => [
-          row["#"],
-          row.Vendor,
-          row.Service,
-          row.Description,
-          row["Requester Comment"],
-          row.Qty,
-          `Rs ${formatPKR(row.Rate)}`,
-          `Rs ${formatPKR(row.Amount)}`,
-          row.Status,
-          row["Rejection Reason"],
-        ]),
+        body: getLineItemExportRows().map(
+          (row) => [
+            row["#"],
+            row.Vendor,
+            row.Service,
+            row.Description,
+            row["Requester Comment"],
+            row.Qty,
+            `Rs ${formatPKR(
+              row.Rate
+            )}`,
+            `Rs ${formatPKR(
+              row.Amount
+            )}`,
+            row.Status,
+            row["Rejection Reason"],
+          ]
+        ),
         theme: "striped",
         styles: {
           fontSize: 8,
@@ -8190,21 +8402,38 @@ export default function BudgetDetailsModal({
           2: { cellWidth: 82 },
           3: { cellWidth: 145 },
           4: { cellWidth: 120 },
-          5: { cellWidth: 40, halign: "right" },
-          6: { cellWidth: 72, halign: "right" },
-          7: { cellWidth: 78, halign: "right" },
+          5: {
+            cellWidth: 40,
+            halign: "right",
+          },
+          6: {
+            cellWidth: 72,
+            halign: "right",
+          },
+          7: {
+            cellWidth: 78,
+            halign: "right",
+          },
           8: { cellWidth: 72 },
           9: { cellWidth: 120 },
         },
       });
 
-      const paymentRows = getPaymentExportRows();
+      const paymentRows =
+        getPaymentExportRows();
 
       if (paymentRows.length) {
         autoTable(pdf, {
-          startY: (pdf as any).lastAutoTable.finalY + 24,
-          head: [["Release", "Payment Field", "Value"]],
-          body: paymentRows.map((row) => [row.Release, row.Field, row.Value]),
+          startY:
+            (pdf as any).lastAutoTable
+              .finalY + 24,
+          head: [
+            ["Payment Field", "Value"],
+          ],
+          body: paymentRows.map((row) => [
+            row.Field,
+            row.Value,
+          ]),
           theme: "grid",
           styles: {
             fontSize: 9,
@@ -8216,10 +8445,6 @@ export default function BudgetDetailsModal({
           },
           columnStyles: {
             0: {
-              cellWidth: 80,
-              fontStyle: "bold",
-            },
-            1: {
               cellWidth: 150,
               fontStyle: "bold",
             },
@@ -8227,58 +8452,25 @@ export default function BudgetDetailsModal({
         });
       }
 
-      const paymentItemRows = getPaymentItemExportRows();
-
-      if (paymentItemRows.length) {
-        autoTable(pdf, {
-          startY: (pdf as any).lastAutoTable.finalY + 24,
-          head: [
-            [
-              "Release",
-              "Scope",
-              "Item #",
-              "Vendor",
-              "Service",
-              "Description",
-              "Qty",
-              "Rate",
-              "Amount",
-            ],
-          ],
-          body: paymentItemRows.map((row) => [
-            row.Release,
-            row.Scope,
-            row["Item #"],
-            row.Vendor,
-            row.Service,
-            row.Description,
-            row.Qty,
-            `Rs ${formatPKR(row.Rate)}`,
-            `Rs ${formatPKR(row.Amount)}`,
-          ]),
-          theme: "striped",
-          styles: {
-            fontSize: 8,
-            cellPadding: 4,
-            overflow: "linebreak",
-          },
-          headStyles: {
-            fillColor: [15, 23, 42],
-          },
-        });
-      }
-
-      pdf.save(getExportFileName("pdf"));
+      pdf.save(
+        getExportFileName("pdf")
+      );
 
       toast({
         title: "PDF exported",
-        description: "Budget detail PDF has been downloaded.",
+        description:
+          "Budget detail PDF has been downloaded.",
       });
     } catch (error) {
-      console.error("Failed to export PDF:", error);
+      console.error(
+        "Failed to export PDF:",
+        error
+      );
+
       toast({
         title: "Export failed",
-        description: "Failed to export Budget Detail PDF.",
+        description:
+          "Failed to export Budget Detail PDF.",
         variant: "destructive",
       });
     }
@@ -8286,43 +8478,67 @@ export default function BudgetDetailsModal({
 
   function handleExportExcel() {
     try {
-      const workbook = XLSX.utils.book_new();
+      const workbook =
+        XLSX.utils.book_new();
 
-      const summarySheet = XLSX.utils.json_to_sheet(getSummaryExportRows());
-      XLSX.utils.book_append_sheet(workbook, summarySheet, "Summary");
+      const summarySheet =
+        XLSX.utils.json_to_sheet(
+          getSummaryExportRows()
+        );
 
-      const lineItemsSheet = XLSX.utils.json_to_sheet(getLineItemExportRows());
-      XLSX.utils.book_append_sheet(workbook, lineItemsSheet, "Line Items");
+      XLSX.utils.book_append_sheet(
+        workbook,
+        summarySheet,
+        "Summary"
+      );
 
-      const paymentRows = getPaymentExportRows();
+      const lineItemsSheet =
+        XLSX.utils.json_to_sheet(
+          getLineItemExportRows()
+        );
+
+      XLSX.utils.book_append_sheet(
+        workbook,
+        lineItemsSheet,
+        "Line Items"
+      );
+
+      const paymentRows =
+        getPaymentExportRows();
 
       if (paymentRows.length) {
-        const paymentSheet = XLSX.utils.json_to_sheet(paymentRows);
-        XLSX.utils.book_append_sheet(workbook, paymentSheet, "Payment History");
-      }
+        const paymentSheet =
+          XLSX.utils.json_to_sheet(
+            paymentRows
+          );
 
-      const paymentItemRows = getPaymentItemExportRows();
-
-      if (paymentItemRows.length) {
-        const paymentItemsSheet = XLSX.utils.json_to_sheet(paymentItemRows);
         XLSX.utils.book_append_sheet(
           workbook,
-          paymentItemsSheet,
-          "Payment Items",
+          paymentSheet,
+          "Payment Details"
         );
       }
 
-      XLSX.writeFile(workbook, getExportFileName("xlsx"));
+      XLSX.writeFile(
+        workbook,
+        getExportFileName("xlsx")
+      );
 
       toast({
         title: "Excel exported",
-        description: "Budget detail Excel file has been downloaded.",
+        description:
+          "Budget detail Excel file has been downloaded.",
       });
     } catch (error) {
-      console.error("Failed to export Excel:", error);
+      console.error(
+        "Failed to export Excel:",
+        error
+      );
+
       toast({
         title: "Export failed",
-        description: "Failed to export Budget Detail Excel file.",
+        description:
+          "Failed to export Budget Detail Excel file.",
         variant: "destructive",
       });
     }
@@ -8337,9 +8553,15 @@ export default function BudgetDetailsModal({
         }}
       >
         <DialogContent
-          onPointerDownOutside={(event) => event.preventDefault()}
-          onInteractOutside={(event) => event.preventDefault()}
-          onEscapeKeyDown={(event) => event.preventDefault()}
+          onPointerDownOutside={(event) =>
+            event.preventDefault()
+          }
+          onInteractOutside={(event) =>
+            event.preventDefault()
+          }
+          onEscapeKeyDown={(event) =>
+            event.preventDefault()
+          }
           className="!left-0 !top-0 flex !h-screen !max-h-screen !w-screen !max-w-none !translate-x-0 !translate-y-0 flex-col overflow-hidden rounded-none border-0 bg-slate-50 p-0 shadow-2xl [&>button:last-child]:hidden"
         >
           <div className="shrink-0 border-b bg-white/95 px-6 py-5 backdrop-blur">
@@ -8351,24 +8573,31 @@ export default function BudgetDetailsModal({
                   </DialogTitle>
 
                   <DialogDescription className="mt-1 text-sm text-slate-500">
-                    Request Form Details – {activeInvoice.requestId}
+                    Request Form Details –{" "}
+                    {activeInvoice.requestId}
                   </DialogDescription>
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
                   <Badge
                     className={`rounded-full border px-3 py-1 text-xs font-semibold ${getStatusBadgeColor(
-                      activeInvoice.status,
+                      activeInvoice.status
                     )}`}
                   >
-                    {getReadableStatus(activeInvoice.status)}
+                    {getReadableStatus(
+                      activeInvoice.status
+                    )}
                   </Badge>
 
                   {canSubmitExpense && (
                     <Button
                       size="sm"
                       className="rounded-full bg-slate-950 px-4 text-white shadow-sm hover:bg-slate-800"
-                      onClick={() => onSubmitExpense?.(activeInvoice)}
+                      onClick={() =>
+                        onSubmitExpense?.(
+                          activeInvoice
+                        )
+                      }
                     >
                       <ReceiptText className="mr-1 h-4 w-4" />
                       Submit Expense
@@ -8380,10 +8609,15 @@ export default function BudgetDetailsModal({
                       <Button
                         size="sm"
                         className="rounded-full bg-green-600 px-4 text-white shadow-sm hover:bg-green-700"
-                        disabled={requestActionLoading}
-                        onClick={handleApproveRequest}
+                        disabled={
+                          requestActionLoading
+                        }
+                        onClick={
+                          handleApproveRequest
+                        }
                       >
                         <Check className="mr-1 h-4 w-4" />
+
                         {requestActionLoading
                           ? "Approving..."
                           : "Approve Request"}
@@ -8393,10 +8627,17 @@ export default function BudgetDetailsModal({
                         size="sm"
                         variant="destructive"
                         className="rounded-full px-4 shadow-sm"
-                        disabled={requestActionLoading}
+                        disabled={
+                          requestActionLoading
+                        }
                         onClick={() => {
-                          setRequestRejectionComment("");
-                          setRequestRejectDialogOpen(true);
+                          setRequestRejectionComment(
+                            ""
+                          );
+
+                          setRequestRejectDialogOpen(
+                            true
+                          );
                         }}
                       >
                         <X className="mr-1 h-4 w-4" />
@@ -8422,13 +8663,17 @@ export default function BudgetDetailsModal({
           </div>
 
           <div className="flex-1 space-y-6 overflow-y-auto px-6 py-6">
+            {/* SUMMARY CARDS */}
+
             <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
                   Total Budget
                 </p>
+
                 <p className="mt-2 text-2xl font-bold text-slate-950">
-                  Rs {formatPKR(totalBudget)}
+                  Rs{" "}
+                  {formatPKR(totalBudget)}
                 </p>
               </div>
 
@@ -8436,8 +8681,12 @@ export default function BudgetDetailsModal({
                 <p className="text-xs font-medium uppercase tracking-wide text-green-600">
                   Approved Amount
                 </p>
+
                 <p className="mt-2 text-2xl font-bold text-green-700">
-                  Rs {formatPKR(approvedTotal)}
+                  Rs{" "}
+                  {formatPKR(
+                    approvedTotal
+                  )}
                 </p>
               </div>
 
@@ -8445,11 +8694,17 @@ export default function BudgetDetailsModal({
                 <p className="text-xs font-medium uppercase tracking-wide text-red-600">
                   Rejected Amount
                 </p>
+
                 <p className="mt-2 text-2xl font-bold text-red-700">
-                  Rs {formatPKR(rejectedTotal)}
+                  Rs{" "}
+                  {formatPKR(
+                    rejectedTotal
+                  )}
                 </p>
               </div>
             </div>
+
+            {/* REQUEST INFORMATION */}
 
             <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
               <div className="mb-4 flex items-center justify-between">
@@ -8459,71 +8714,72 @@ export default function BudgetDetailsModal({
               </div>
 
               <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3">
+                {/* REQUEST ID */}
+
                 <div className="rounded-xl bg-slate-50 p-4">
                   <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
                     Request ID
                   </span>
+
                   <p className="mt-1 font-semibold text-slate-950">
                     {activeInvoice.requestId}
                   </p>
                 </div>
 
+                {/* ESTIMATE NUMBER */}
+
+                <div className="rounded-xl bg-slate-50 p-4">
+                  <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                    Estimate Number
+                  </span>
+
+                  <p className="mt-1 font-semibold text-slate-950">
+                    {estimateNumber}
+                  </p>
+                </div>
+
+                {/* STATUS */}
+
                 <div className="rounded-xl bg-slate-50 p-4">
                   <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
                     Status
                   </span>
+
                   <div className="mt-2">
                     <Badge
                       className={`rounded-full border px-3 py-1 ${getStatusBadgeColor(
-                        activeInvoice.status,
+                        activeInvoice.status
                       )}`}
                     >
-                      {getReadableStatus(activeInvoice.status)}
+                      {getReadableStatus(
+                        activeInvoice.status
+                      )}
                     </Badge>
                   </div>
                 </div>
 
-                {invoiceType === "general" ? (
+                {invoiceType ===
+                "general" ? (
                   <div className="rounded-xl bg-slate-50 p-4">
                     <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
                       Title
                     </span>
+
                     <p className="mt-1 font-semibold text-slate-950">
-                      {(activeInvoice as any).title || "-"}
+                      {(activeInvoice as any)
+                        .title || "-"}
                     </p>
                   </div>
-                ) : invoiceType === "asset" ? (
-                  <>
-                    <div className="rounded-xl bg-slate-50 p-4">
-                      <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                        Title
-                      </span>
-                      <p className="mt-1 font-semibold text-slate-950">
-                        {(activeInvoice as any).title ||
-                          (activeInvoice as any).subject ||
-                          "-"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl bg-slate-50 p-4">
-                      <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                        Asset Category
-                      </span>
-                      <p className="mt-1 font-semibold text-slate-950">
-                        {(activeInvoice as any).assetCategory ||
-                          (activeInvoice as any).category ||
-                          "-"}
-                      </p>
-                    </div>
-                  </>
                 ) : (
                   <>
                     <div className="rounded-xl bg-slate-50 p-4">
                       <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
                         Client
                       </span>
+
                       <p className="mt-1 font-semibold text-slate-950">
-                        {activeInvoice.clientName || "-"}
+                        {activeInvoice.clientName ||
+                          "-"}
                       </p>
                     </div>
 
@@ -8531,8 +8787,10 @@ export default function BudgetDetailsModal({
                       <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
                         Project
                       </span>
+
                       <p className="mt-1 font-semibold text-slate-950">
-                        {activeInvoice.project || "-"}
+                        {activeInvoice.project ||
+                          "-"}
                       </p>
                     </div>
 
@@ -8540,8 +8798,10 @@ export default function BudgetDetailsModal({
                       <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
                         Project Code
                       </span>
+
                       <p className="mt-1 font-semibold text-slate-950">
-                        {(activeInvoice as any).projectCode || "-"}
+                        {(activeInvoice as any)
+                          .projectCode || "-"}
                       </p>
                     </div>
                   </>
@@ -8551,6 +8811,7 @@ export default function BudgetDetailsModal({
                   <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
                     Subject
                   </span>
+
                   <p className="mt-1 whitespace-pre-wrap break-words font-semibold text-slate-950">
                     {displaySubject}
                   </p>
@@ -8560,27 +8821,38 @@ export default function BudgetDetailsModal({
                   <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
                     Submitted Date
                   </span>
+
                   <p className="mt-1 text-slate-800">
-                    {toDateString(activeInvoice.submittedAt)}
+                    {toDateString(
+                      activeInvoice.submittedAt
+                    )}
                   </p>
                 </div>
               </div>
             </div>
 
-            {((activeInvoice as any).message ||
-              (activeInvoice as any).comment) && (
+            {/* MESSAGE */}
+
+            {((activeInvoice as any)
+              .message ||
+              (activeInvoice as any)
+                .comment) && (
               <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                 <h3 className="mb-3 text-base font-semibold text-slate-950">
                   Message
                 </h3>
 
-                <div className="min-h-[100px] rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-700 whitespace-pre-wrap break-words">
-                  {(activeInvoice as any).message ||
-                    (activeInvoice as any).comment ||
+                <div className="min-h-[100px] whitespace-pre-wrap break-words rounded-xl bg-slate-50 p-4 text-sm leading-6 text-slate-700">
+                  {(activeInvoice as any)
+                    .message ||
+                    (activeInvoice as any)
+                      .comment ||
                     "-"}
                 </div>
               </div>
             )}
+
+            {/* ITEM APPROVAL */}
 
             <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div className="flex flex-col gap-3 border-b border-slate-200 p-5 lg:flex-row lg:items-center lg:justify-between">
@@ -8588,9 +8860,12 @@ export default function BudgetDetailsModal({
                   <h3 className="text-lg font-semibold text-slate-950">
                     Item Approval
                   </h3>
+
                   <p className="mt-1 text-sm text-slate-500">
-                    Approve or reject individual budget items. Request-level
-                    approve/reject is also available here.
+                    Approve or reject
+                    individual budget items.
+                    Request-level approve/reject
+                    is also available here.
                   </p>
                 </div>
 
@@ -8599,7 +8874,11 @@ export default function BudgetDetailsModal({
                     <Button
                       size="sm"
                       className="rounded-full bg-slate-950 px-4 text-white hover:bg-slate-800"
-                      onClick={() => onSubmitExpense?.(activeInvoice)}
+                      onClick={() =>
+                        onSubmitExpense?.(
+                          activeInvoice
+                        )
+                      }
                     >
                       <ReceiptText className="mr-1 h-4 w-4" />
                       Submit Expense
@@ -8615,132 +8894,191 @@ export default function BudgetDetailsModal({
                       <th className="px-4 py-3 text-left font-semibold">
                         Vendor
                       </th>
+
                       <th className="px-4 py-3 text-left font-semibold">
                         Service
                       </th>
+
                       <th className="px-4 py-3 text-left font-semibold">
                         Description
                       </th>
-                      <th className="px-4 py-3 text-left font-semibold min-w-[220px]">
+
+                      <th className="min-w-[220px] px-4 py-3 text-left font-semibold">
                         Requester Comment
                       </th>
+
                       <th className="px-4 py-3 text-right font-semibold">
                         Qty
                       </th>
+
                       <th className="px-4 py-3 text-right font-semibold">
                         Rate
                       </th>
+
                       <th className="px-4 py-3 text-right font-semibold">
                         Amount
                       </th>
-                      <th className="px-4 py-3 text-center font-semibold min-w-[180px]">
+
+                      <th className="min-w-[180px] px-4 py-3 text-center font-semibold">
                         Item Action
                       </th>
-                      <th className="px-4 py-3 text-left font-semibold min-w-[240px]">
+
+                      <th className="min-w-[240px] px-4 py-3 text-left font-semibold">
                         Rejection Reason
                       </th>
                     </tr>
                   </thead>
 
                   <tbody className="divide-y divide-slate-100">
-                    {lineItems.length === 0 ? (
+                    {lineItems.length ===
+                    0 ? (
                       <tr>
                         <td
                           colSpan={9}
                           className="px-4 py-10 text-center text-slate-500"
                         >
-                          No line items found.
+                          No line items
+                          found.
                         </td>
                       </tr>
                     ) : (
-                      lineItems.map((item, index) => {
-                        const qty = item.units ?? 0;
-                        const rate = item.unitRate ?? 0;
-                        const amount = getItemAmount(item);
-                        const status = item.status || "pending";
+                      lineItems.map(
+                        (
+                          item,
+                          index
+                        ) => {
+                          const qty =
+                            item.units ??
+                            0;
 
-                        return (
-                          <tr
-                            key={item.id || index}
-                            className="align-top transition hover:bg-slate-50/80"
-                          >
-                            <td className="px-4 py-4 font-medium text-slate-950">
-                              {item.vendor || "-"}
-                            </td>
+                          const rate =
+                            item.unitRate ??
+                            0;
 
-                            <td className="px-4 py-4 text-slate-700">
-                              {item.service || "-"}
-                            </td>
+                          const amount =
+                            getItemAmount(
+                              item
+                            );
 
-                            <td className="px-4 py-4 whitespace-pre-wrap break-words text-slate-700">
-                              {item.description || "-"}
-                            </td>
+                          const status =
+                            item.status ||
+                            "pending";
 
-                            <td className="px-4 py-4 whitespace-pre-wrap break-words text-slate-700">
-                              {item.comment || "-"}
-                            </td>
+                          return (
+                            <tr
+                              key={
+                                item.id ||
+                                index
+                              }
+                              className="align-top transition hover:bg-slate-50/80"
+                            >
+                              <td className="px-4 py-4 font-medium text-slate-950">
+                                {item.vendor ||
+                                  "-"}
+                              </td>
 
-                            <td className="px-4 py-4 text-right text-slate-700">
-                              {qty}
-                            </td>
+                              <td className="px-4 py-4 text-slate-700">
+                                {item.service ||
+                                  "-"}
+                              </td>
 
-                            <td className="px-4 py-4 text-right text-slate-700">
-                              Rs {formatPKR(rate)}
-                            </td>
+                              <td className="whitespace-pre-wrap break-words px-4 py-4 text-slate-700">
+                                {item.description ||
+                                  "-"}
+                              </td>
 
-                            <td className="px-4 py-4 text-right font-semibold text-slate-950">
-                              Rs {formatPKR(amount)}
-                            </td>
+                              <td className="whitespace-pre-wrap break-words px-4 py-4 text-slate-700">
+                                {item.comment ||
+                                  "-"}
+                              </td>
 
-                            <td className="px-4 py-4 text-center">
-                              {isMainAdmin && status === "pending" ? (
-                                <div className="flex flex-wrap justify-center gap-2">
-                                  <Button
-                                    size="sm"
-                                    className="rounded-full bg-green-600 px-3 text-white hover:bg-green-700"
-                                    disabled={itemActionLoading}
-                                    onClick={() =>
-                                      updateLineItemStatus(index, "approved")
+                              <td className="px-4 py-4 text-right text-slate-700">
+                                {qty}
+                              </td>
+
+                              <td className="px-4 py-4 text-right text-slate-700">
+                                Rs{" "}
+                                {formatPKR(
+                                  rate
+                                )}
+                              </td>
+
+                              <td className="px-4 py-4 text-right font-semibold text-slate-950">
+                                Rs{" "}
+                                {formatPKR(
+                                  amount
+                                )}
+                              </td>
+
+                              <td className="px-4 py-4 text-center">
+                                {isMainAdmin &&
+                                status ===
+                                  "pending" ? (
+                                  <div className="flex flex-wrap justify-center gap-2">
+                                    <Button
+                                      size="sm"
+                                      className="rounded-full bg-green-600 px-3 text-white hover:bg-green-700"
+                                      disabled={
+                                        itemActionLoading
+                                      }
+                                      onClick={() =>
+                                        updateLineItemStatus(
+                                          index,
+                                          "approved"
+                                        )
+                                      }
+                                    >
+                                      <Check className="mr-1 h-4 w-4" />
+                                      Approve
+                                    </Button>
+
+                                    <Button
+                                      size="sm"
+                                      variant="destructive"
+                                      className="rounded-full px-3"
+                                      disabled={
+                                        itemActionLoading
+                                      }
+                                      onClick={() =>
+                                        openItemRejectDialog(
+                                          index
+                                        )
+                                      }
+                                    >
+                                      <X className="mr-1 h-4 w-4" />
+                                      Reject
+                                    </Button>
+                                  </div>
+                                ) : (
+                                  <Badge
+                                    className={`rounded-full border px-3 py-1 ${getItemStatusBadgeColor(
+                                      status
+                                    )}`}
+                                  >
+                                    {getReadableStatus(
+                                      status
+                                    )}
+                                  </Badge>
+                                )}
+                              </td>
+
+                              <td className="whitespace-pre-wrap break-words px-4 py-4 text-sm">
+                                {item.rejectionComment ? (
+                                  <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-red-700">
+                                    {
+                                      item.rejectionComment
                                     }
-                                  >
-                                    <Check className="mr-1 h-4 w-4" />
-                                    Approve
-                                  </Button>
-
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    className="rounded-full px-3"
-                                    disabled={itemActionLoading}
-                                    onClick={() => openItemRejectDialog(index)}
-                                  >
-                                    <X className="mr-1 h-4 w-4" />
-                                    Reject
-                                  </Button>
-                                </div>
-                              ) : (
-                                <Badge
-                                  className={`rounded-full border px-3 py-1 ${getItemStatusBadgeColor(
-                                    status,
-                                  )}`}
-                                >
-                                  {getReadableStatus(status)}
-                                </Badge>
-                              )}
-                            </td>
-
-                            <td className="px-4 py-4 whitespace-pre-wrap break-words text-sm">
-                              {item.rejectionComment ? (
-                                <div className="rounded-xl border border-red-100 bg-red-50 px-3 py-2 text-red-700">
-                                  {item.rejectionComment}
-                                </div>
-                              ) : (
-                                <span className="text-slate-400">-</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400">
+                                    -
+                                  </span>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        }
+                      )
                     )}
                   </tbody>
                 </table>
@@ -8751,8 +9089,12 @@ export default function BudgetDetailsModal({
                   <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
                     Total Budget
                   </span>
+
                   <p className="mt-1 font-bold text-slate-950">
-                    Rs {formatPKR(totalBudget)}
+                    Rs{" "}
+                    {formatPKR(
+                      totalBudget
+                    )}
                   </p>
                 </div>
 
@@ -8760,8 +9102,12 @@ export default function BudgetDetailsModal({
                   <span className="text-xs font-medium uppercase tracking-wide text-green-600">
                     Approved
                   </span>
+
                   <p className="mt-1 font-bold text-green-700">
-                    Rs {formatPKR(approvedTotal)}
+                    Rs{" "}
+                    {formatPKR(
+                      approvedTotal
+                    )}
                   </p>
                 </div>
 
@@ -8769,8 +9115,12 @@ export default function BudgetDetailsModal({
                   <span className="text-xs font-medium uppercase tracking-wide text-red-600">
                     Rejected
                   </span>
+
                   <p className="mt-1 font-bold text-red-700">
-                    Rs {formatPKR(rejectedTotal)}
+                    Rs{" "}
+                    {formatPKR(
+                      rejectedTotal
+                    )}
                   </p>
                 </div>
 
@@ -8778,327 +9128,225 @@ export default function BudgetDetailsModal({
                   <span className="text-xs font-medium uppercase tracking-wide text-amber-600">
                     Pending
                   </span>
+
                   <p className="mt-1 font-bold text-amber-700">
-                    Rs {formatPKR(pendingTotal)}
+                    Rs{" "}
+                    {formatPKR(
+                      pendingTotal
+                    )}
                   </p>
                 </div>
               </div>
             </div>
 
-            {paymentHistory.length > 0 && (
-              <div className="space-y-5 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
-                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
-                  <div>
-                    <h3 className="text-lg font-semibold text-slate-950">
-                      Payment Release History
-                    </h3>
-                    <p className="mt-1 text-sm text-slate-500">
-                      Every saved vendor payment is shown below. Local Vendor
-                      items are kept together inside one combined transaction.
+            {/* PAYMENT DETAILS */}
+
+            {paymentDetails && (
+              <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+                <h3 className="mb-4 text-lg font-semibold text-slate-950">
+                  Payment Details
+                </h3>
+
+                <div className="grid grid-cols-1 gap-4 text-sm md:grid-cols-2 lg:grid-cols-3">
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Payment Method
+                    </span>
+
+                    <p className="mt-1 font-medium text-slate-950">
+                      {paymentDetails.paymentMethod ||
+                        "-"}
                     </p>
                   </div>
 
-                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                    <div className="rounded-xl bg-slate-50 px-4 py-3">
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                        Releases
-                      </p>
-                      <p className="mt-1 font-bold text-slate-950">
-                        {paymentHistory.length}
-                      </p>
-                    </div>
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Amount Paid
+                    </span>
 
-                    <div className="rounded-xl bg-slate-50 px-4 py-3">
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                        Total Released
-                      </p>
-                      <p className="mt-1 font-bold text-slate-950">
-                        Rs {formatPKR(totalReleasedAmount)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-xl bg-slate-50 px-4 py-3">
-                      <p className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                        Remaining
-                      </p>
-                      <p className="mt-1 font-bold text-slate-950">
-                        Rs {formatPKR(remainingPaymentAmount)}
-                      </p>
-                    </div>
+                    <p className="mt-1 font-semibold text-slate-950">
+                      Rs{" "}
+                      {formatPKR(
+                        paymentDetails.amount
+                      )}
+                    </p>
                   </div>
-                </div>
 
-                <div className="space-y-4">
-                  {paymentHistory.map((payment: any, paymentIndex: number) => {
-                    const paymentVendorNames = getPaymentVendorNames(payment);
-                    const paymentChequeNumbers = getChequeNumbers(payment);
-                    const paymentReceiptFiles = getReceiptFiles(payment);
-                    const paymentItems = getPaymentItems(payment);
-                    const combinedLocalPayment =
-                      isCombinedLocalVendorPayment(payment);
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Vendor(s)
+                    </span>
 
-                    return (
-                      <section
-                        key={payment?.id || paymentIndex}
-                        className="overflow-hidden rounded-2xl border border-slate-200"
-                      >
-                        <div className="flex flex-col gap-3 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
-                          <div>
-                            <div className="flex flex-wrap items-center gap-2">
-                              <h4 className="font-semibold text-slate-950">
-                                Payment Release {paymentIndex + 1}
-                              </h4>
+                    <p className="mt-1 text-slate-800">
+                      {vendorText}
+                    </p>
+                  </div>
 
-                              <Badge
-                                className={`rounded-full border px-3 py-1 text-xs font-semibold ${
-                                  combinedLocalPayment
-                                    ? "border-violet-200 bg-violet-50 text-violet-700"
-                                    : "border-blue-200 bg-blue-50 text-blue-700"
-                                }`}
-                              >
-                                {getPaymentScopeLabel(payment)}
-                              </Badge>
-                            </div>
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Transaction Ref
+                    </span>
 
-                            <p className="mt-1 text-xs text-slate-500">
-                              {toDateString(payment?.releasedAt)}
-                            </p>
-                          </div>
+                    <p className="mt-1 text-slate-800">
+                      {paymentDetails.transactionReference ||
+                        "-"}
+                    </p>
+                  </div>
 
-                          <p className="text-xl font-bold text-slate-950">
-                            Rs {formatPKR(getPaymentReleaseAmount(payment))}
-                          </p>
-                        </div>
+                  {chequeNumbers.length >
+                    0 && (
+                    <div className="rounded-xl bg-slate-50 p-4 md:col-span-2">
+                      <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Cheque Number
+                        {chequeNumbers.length >
+                        1
+                          ? "s"
+                          : ""}
+                      </span>
 
-                        <div className="grid grid-cols-1 gap-4 p-5 text-sm md:grid-cols-2 lg:grid-cols-3">
-                          <div className="rounded-xl bg-slate-50 p-4">
-                            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                              Payment Method
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {chequeNumbers.map(
+                          (
+                            chequeNumber,
+                            index
+                          ) => (
+                            <span
+                              key={`${chequeNumber}-${index}`}
+                              className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
+                            >
+                              {
+                                chequeNumber
+                              }
                             </span>
-                            <p className="mt-1 font-medium text-slate-950">
-                              {getReadableStatus(payment?.paymentMethod || "-")}
-                            </p>
-                          </div>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
 
-                          <div className="rounded-xl bg-slate-50 p-4">
-                            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                              Transaction Name
-                            </span>
-                            <p className="mt-1 text-slate-800">
-                              {payment?.transactionName || "-"}
-                            </p>
-                          </div>
+                  {paymentDetails.releasedByName && (
+                    <div className="rounded-xl bg-slate-50 p-4">
+                      <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Released By
+                      </span>
 
-                          <div className="rounded-xl bg-slate-50 p-4">
-                            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                              Transaction Ref
-                            </span>
-                            <p className="mt-1 text-slate-800">
-                              {payment?.transactionReference || "-"}
-                            </p>
-                          </div>
+                      <p className="mt-1 text-slate-800">
+                        {
+                          paymentDetails.releasedByName
+                        }
+                      </p>
+                    </div>
+                  )}
 
-                          <div className="rounded-xl bg-slate-50 p-4 md:col-span-2 lg:col-span-3">
-                            <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                              Vendor{paymentVendorNames.length === 1 ? "" : "s"}
-                            </span>
+                  <div className="rounded-xl bg-slate-50 p-4">
+                    <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                      Released At
+                    </span>
 
-                            {paymentVendorNames.length > 0 ? (
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {paymentVendorNames.map((vendorName, index) => (
-                                  <span
-                                    key={`${vendorName}-${index}`}
-                                    className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
-                                  >
-                                    {vendorName}
-                                  </span>
-                                ))}
-                              </div>
-                            ) : (
-                              <p className="mt-1 text-slate-800">-</p>
-                            )}
-                          </div>
+                    <p className="mt-1 text-slate-800">
+                      {toDateString(
+                        paymentDetails.releasedAt
+                      )}
+                    </p>
+                  </div>
 
-                          {paymentChequeNumbers.length > 0 && (
-                            <div className="rounded-xl bg-slate-50 p-4 md:col-span-2">
-                              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                                Cheque Number
-                                {paymentChequeNumbers.length > 1 ? "s" : ""}
+                  {paymentDetails.selectedAccount && (
+                    <div className="rounded-xl bg-slate-50 p-4">
+                      <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Selected Account
+                      </span>
+
+                      <p className="mt-1 text-slate-800">
+                        {paymentDetails
+                          .selectedAccount
+                          .accountName ||
+                          "-"}
+
+                        {paymentDetails
+                          .selectedAccount
+                          .accountNumber
+                          ? ` (${paymentDetails.selectedAccount.accountNumber})`
+                          : ""}
+                      </p>
+                    </div>
+                  )}
+
+                  {paymentDetails.paymentNotes && (
+                    <div className="rounded-xl bg-slate-50 p-4 md:col-span-2 lg:col-span-3">
+                      <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Notes
+                      </span>
+
+                      <p className="mt-1 whitespace-pre-wrap break-words text-slate-800">
+                        {
+                          paymentDetails.paymentNotes
+                        }
+                      </p>
+                    </div>
+                  )}
+
+                  {receiptFiles.length >
+                    0 && (
+                    <div className="md:col-span-2 lg:col-span-3">
+                      <span className="mb-3 block text-xs font-medium uppercase tracking-wide text-slate-500">
+                        Bank Receipt
+                        {receiptFiles.length >
+                        1
+                          ? "s"
+                          : ""}
+                      </span>
+
+                      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        {receiptFiles.map(
+                          (
+                            file,
+                            index
+                          ) => (
+                            <a
+                              key={`${file.url}-${index}`}
+                              href={
+                                file.url
+                              }
+                              target="_blank"
+                              rel="noreferrer"
+                              className="group flex items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm transition hover:border-blue-200 hover:bg-blue-100"
+                            >
+                              <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-blue-700 shadow-sm">
+                                <FileText className="h-5 w-5" />
                               </span>
 
-                              <div className="mt-2 flex flex-wrap gap-2">
-                                {paymentChequeNumbers.map(
-                                  (chequeNumber, index) => (
-                                    <span
-                                      key={`${chequeNumber}-${index}`}
-                                      className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-700"
-                                    >
-                                      {chequeNumber}
-                                    </span>
-                                  ),
-                                )}
-                              </div>
-                            </div>
-                          )}
+                              <span className="min-w-0">
+                                <span className="block truncate font-semibold text-blue-900">
+                                  {file.name ||
+                                    `Receipt ${
+                                      index +
+                                      1
+                                    }`}
+                                </span>
 
-                          {payment?.releasedByName && (
-                            <div className="rounded-xl bg-slate-50 p-4">
-                              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                                Released By
+                                <span className="mt-0.5 block text-xs font-medium text-blue-700">
+                                  Open
+                                  uploaded
+                                  file{" "}
+                                  {receiptFiles.length >
+                                  1
+                                    ? index +
+                                      1
+                                    : ""}
+                                </span>
                               </span>
-                              <p className="mt-1 text-slate-800">
-                                {payment.releasedByName}
-                              </p>
-                            </div>
-                          )}
-
-                          {payment?.selectedAccount && (
-                            <div className="rounded-xl bg-slate-50 p-4">
-                              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                                Selected Account
-                              </span>
-                              <p className="mt-1 text-slate-800">
-                                {payment.selectedAccount.accountName || "-"}
-                                {payment.selectedAccount.accountNumber
-                                  ? ` (${payment.selectedAccount.accountNumber})`
-                                  : ""}
-                              </p>
-                            </div>
-                          )}
-
-                          {payment?.paymentNotes && (
-                            <div className="rounded-xl bg-slate-50 p-4 md:col-span-2 lg:col-span-3">
-                              <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                                Notes
-                              </span>
-                              <p className="mt-1 whitespace-pre-wrap break-words text-slate-800">
-                                {payment.paymentNotes}
-                              </p>
-                            </div>
-                          )}
-
-                          {combinedLocalPayment && paymentItems.length > 0 && (
-                            <div className="md:col-span-2 lg:col-span-3">
-                              <div className="mb-3 flex items-center justify-between gap-3">
-                                <div>
-                                  <span className="text-xs font-medium uppercase tracking-wide text-slate-500">
-                                    Included Local Vendor Items
-                                  </span>
-                                  <p className="mt-1 text-xs text-slate-500">
-                                    {paymentItems.length} item
-                                    {paymentItems.length === 1 ? "" : "s"} saved
-                                    under this single payment transaction.
-                                  </p>
-                                </div>
-
-                                <Badge className="rounded-full border border-violet-200 bg-violet-50 px-3 py-1 text-violet-700">
-                                  Combined
-                                </Badge>
-                              </div>
-
-                              <div className="overflow-x-auto rounded-xl border border-slate-200">
-                                <table className="w-full min-w-[760px] text-sm">
-                                  <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                                    <tr>
-                                      <th className="px-4 py-3 text-left font-semibold">
-                                        Vendor
-                                      </th>
-                                      <th className="px-4 py-3 text-left font-semibold">
-                                        Service
-                                      </th>
-                                      <th className="px-4 py-3 text-left font-semibold">
-                                        Description
-                                      </th>
-                                      <th className="px-4 py-3 text-right font-semibold">
-                                        Qty
-                                      </th>
-                                      <th className="px-4 py-3 text-right font-semibold">
-                                        Amount
-                                      </th>
-                                    </tr>
-                                  </thead>
-                                  <tbody className="divide-y divide-slate-100">
-                                    {paymentItems.map(
-                                      (item: any, itemIndex: number) => (
-                                        <tr key={item?.id || itemIndex}>
-                                          <td className="px-4 py-3 font-medium text-slate-950">
-                                            {item?.vendor ||
-                                              item?.vendorName ||
-                                              item?.supplier ||
-                                              item?.supplierName ||
-                                              "-"}
-                                          </td>
-                                          <td className="px-4 py-3 text-slate-700">
-                                            {item?.service ||
-                                              item?.serviceName ||
-                                              item?.name ||
-                                              "-"}
-                                          </td>
-                                          <td className="px-4 py-3 whitespace-pre-wrap break-words text-slate-700">
-                                            {item?.description ||
-                                              item?.itemDescription ||
-                                              item?.details ||
-                                              "-"}
-                                          </td>
-                                          <td className="px-4 py-3 text-right text-slate-700">
-                                            {item?.approvedUnits ??
-                                              item?.units ??
-                                              item?.quantity ??
-                                              0}
-                                          </td>
-                                          <td className="px-4 py-3 text-right font-semibold text-slate-950">
-                                            Rs {formatPKR(getItemAmount(item))}
-                                          </td>
-                                        </tr>
-                                      ),
-                                    )}
-                                  </tbody>
-                                </table>
-                              </div>
-                            </div>
-                          )}
-
-                          {paymentReceiptFiles.length > 0 && (
-                            <div className="md:col-span-2 lg:col-span-3">
-                              <span className="mb-3 block text-xs font-medium uppercase tracking-wide text-slate-500">
-                                Bank Receipt
-                                {paymentReceiptFiles.length > 1 ? "s" : ""}
-                              </span>
-
-                              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                {paymentReceiptFiles.map((file, index) => (
-                                  <a
-                                    key={`${file.url}-${index}`}
-                                    href={file.url}
-                                    target="_blank"
-                                    rel="noreferrer"
-                                    className="group flex items-center gap-3 rounded-2xl border border-blue-100 bg-blue-50 px-4 py-3 text-sm transition hover:border-blue-200 hover:bg-blue-100"
-                                  >
-                                    <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-white text-blue-700 shadow-sm">
-                                      <FileText className="h-5 w-5" />
-                                    </span>
-
-                                    <span className="min-w-0">
-                                      <span className="block truncate font-semibold text-blue-900">
-                                        {file.name || `Receipt ${index + 1}`}
-                                      </span>
-                                      <span className="mt-0.5 block text-xs font-medium text-blue-700">
-                                        Open uploaded file
-                                      </span>
-                                    </span>
-                                  </a>
-                                ))}
-                              </div>
-                            </div>
-                          )}
-                        </div>
-                      </section>
-                    );
-                  })}
+                            </a>
+                          )
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             )}
           </div>
+
+          {/* FOOTER */}
 
           <div className="shrink-0 flex flex-wrap justify-end gap-2 border-t bg-white/95 px-6 py-4 backdrop-blur">
             <Button
@@ -9132,6 +9380,8 @@ export default function BudgetDetailsModal({
         </DialogContent>
       </Dialog>
 
+      {/* ITEM REJECTION DIALOG */}
+
       <Dialog
         open={itemRejectDialogOpen}
         onOpenChange={(open) => {
@@ -9145,17 +9395,28 @@ export default function BudgetDetailsModal({
       >
         <DialogContent className="max-w-lg rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Reject Line Item</DialogTitle>
+            <DialogTitle>
+              Reject Line Item
+            </DialogTitle>
+
             <DialogDescription>
-              Please enter the reason for rejecting this item. This comment will
-              be visible to the requester.
+              Please enter the reason for
+              rejecting this item. This
+              comment will be visible to the
+              requester.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
             <Textarea
-              value={itemRejectionComment}
-              onChange={(e) => setItemRejectionComment(e.target.value)}
+              value={
+                itemRejectionComment
+              }
+              onChange={(e) =>
+                setItemRejectionComment(
+                  e.target.value
+                )
+              }
               placeholder="Enter rejection reason"
               rows={5}
               className="rounded-xl"
@@ -9167,9 +9428,17 @@ export default function BudgetDetailsModal({
               variant="outline"
               className="rounded-full"
               onClick={() => {
-                setItemRejectDialogOpen(false);
-                setPendingRejectIndex(null);
-                setItemRejectionComment("");
+                setItemRejectDialogOpen(
+                  false
+                );
+
+                setPendingRejectIndex(
+                  null
+                );
+
+                setItemRejectionComment(
+                  ""
+                );
               }}
             >
               Cancel
@@ -9178,14 +9447,23 @@ export default function BudgetDetailsModal({
             <Button
               variant="destructive"
               className="rounded-full"
-              disabled={!itemRejectionComment.trim() || itemActionLoading}
-              onClick={handleItemRejectConfirm}
+              disabled={
+                !itemRejectionComment.trim() ||
+                itemActionLoading
+              }
+              onClick={
+                handleItemRejectConfirm
+              }
             >
-              {itemActionLoading ? "Rejecting..." : "Confirm Reject"}
+              {itemActionLoading
+                ? "Rejecting..."
+                : "Confirm Reject"}
             </Button>
           </div>
         </DialogContent>
       </Dialog>
+
+      {/* REQUEST REJECTION DIALOG */}
 
       <Dialog
         open={requestRejectDialogOpen}
@@ -9193,23 +9471,37 @@ export default function BudgetDetailsModal({
           setRequestRejectDialogOpen(open);
 
           if (!open) {
-            setRequestRejectionComment("");
+            setRequestRejectionComment(
+              ""
+            );
           }
         }}
       >
         <DialogContent className="max-w-lg rounded-2xl">
           <DialogHeader>
-            <DialogTitle>Reject Request</DialogTitle>
+            <DialogTitle>
+              Reject Request
+            </DialogTitle>
+
             <DialogDescription>
-              Please enter the reason for rejecting this request. It will be
-              saved in the approval history and sent back to Operational Admin.
+              Please enter the reason for
+              rejecting this request. It will
+              be saved in the approval history
+              and sent back to Operational
+              Admin.
             </DialogDescription>
           </DialogHeader>
 
           <div className="space-y-3">
             <Textarea
-              value={requestRejectionComment}
-              onChange={(e) => setRequestRejectionComment(e.target.value)}
+              value={
+                requestRejectionComment
+              }
+              onChange={(e) =>
+                setRequestRejectionComment(
+                  e.target.value
+                )
+              }
               placeholder="Enter request rejection reason"
               rows={5}
               className="rounded-xl"
@@ -9221,8 +9513,13 @@ export default function BudgetDetailsModal({
               variant="outline"
               className="rounded-full"
               onClick={() => {
-                setRequestRejectDialogOpen(false);
-                setRequestRejectionComment("");
+                setRequestRejectDialogOpen(
+                  false
+                );
+
+                setRequestRejectionComment(
+                  ""
+                );
               }}
             >
               Cancel
@@ -9231,10 +9528,17 @@ export default function BudgetDetailsModal({
             <Button
               variant="destructive"
               className="rounded-full"
-              disabled={!requestRejectionComment.trim() || requestActionLoading}
-              onClick={handleRejectRequest}
+              disabled={
+                !requestRejectionComment.trim() ||
+                requestActionLoading
+              }
+              onClick={
+                handleRejectRequest
+              }
             >
-              {requestActionLoading ? "Rejecting..." : "Confirm Reject"}
+              {requestActionLoading
+                ? "Rejecting..."
+                : "Confirm Reject"}
             </Button>
           </div>
         </DialogContent>
