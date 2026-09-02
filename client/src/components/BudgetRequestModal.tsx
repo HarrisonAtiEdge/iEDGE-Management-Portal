@@ -11135,10 +11135,3218 @@
 //   );
 // }
 
+// import {
+//   useEffect,
+//   useRef,
+//   useState,
+//   type DragEvent,
+//   type FormEvent,
+//   type ReactNode,
+//   type TextareaHTMLAttributes,
+// } from "react";
+// import { useAuth } from "@/contexts/AuthContext";
+// import {
+//   Trash2,
+//   CalendarIcon,
+//   X,
+//   FileText,
+//   FileSpreadsheet,
+//   GripVertical,
+//   Plus,
+// } from "lucide-react";
+// import {
+//   collection,
+//   addDoc,
+//   serverTimestamp,
+//   doc,
+//   updateDoc,
+//   runTransaction,
+//   getDocs,
+// } from "firebase/firestore";
+// import { db } from "@/lib/firebase";
+// import {
+//   Dialog,
+//   DialogContent,
+//   DialogHeader,
+//   DialogTitle,
+// } from "@/components/ui/dialog";
+// import { Button } from "@/components/ui/button";
+// import { Input } from "@/components/ui/input";
+// import { Label } from "@/components/ui/label";
+// import { Textarea } from "@/components/ui/textarea";
+// import { useToast } from "@/hooks/use-toast";
+// import { Calendar } from "@/components/ui/calendar";
+// import {
+//   Popover,
+//   PopoverContent,
+//   PopoverTrigger,
+// } from "@/components/ui/popover";
+// import { format } from "date-fns";
+// import jsPDF from "jspdf";
+// import autoTable from "jspdf-autotable";
+// import * as XLSX from "xlsx";
 
+// const PANEL_ID = "IEDGE-SYSTEM";
 
+// type InvoiceType = "general" | "project" | "asset";
 
+// type LineItem = {
+//   id: number;
+//   date: string;
+//   service: string;
+//   description: string;
+//   vendor: string;
+//   supplierId: string;
+//   supplierName: string;
+//   units: string;
+//   unitRate: string;
+//   total: number;
+//   comment: string;
+// };
 
+// type TableColumnKey =
+//   | "date"
+//   | "service"
+//   | "description"
+//   | "vendor"
+//   | "units"
+//   | "unitRate"
+//   | "total"
+//   | "comment"
+//   | "actions";
+
+// type TableColumnConfig = {
+//   label: string;
+//   headerClassName: string;
+//   headerContentClassName: string;
+//   cellClassName: string;
+//   render: (item: LineItem) => ReactNode;
+// };
+
+// const DEFAULT_TABLE_COLUMN_ORDER: TableColumnKey[] = [
+//   "date",
+//   "service",
+//   "description",
+//   "vendor",
+//   "units",
+//   "unitRate",
+//   "total",
+//   "comment",
+//   "actions",
+// ];
+
+// type BudgetRequestModalProps = {
+//   isOpen: boolean;
+//   onClose: () => void;
+//   onSuccess?: () => void;
+//   editingInvoice?: any | null;
+// };
+
+// type AutoResizeTextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
+//   minHeight?: number;
+//   maxHeight?: number;
+//   minWidthCh?: number;
+//   maxWidthCh?: number;
+// };
+
+// function parseAmount(value: any): number {
+//   if (value === null || value === undefined || value === "") return 0;
+
+//   const parsed = Number(String(value).replace(/,/g, ""));
+
+//   return Number.isFinite(parsed) ? parsed : 0;
+// }
+
+// function formatNumberWithCommas(
+//   value: any,
+//   removeTrailingZeroes = false,
+// ): string {
+//   if (value === null || value === undefined || value === "") return "";
+
+//   const rawValue = String(value).replace(/,/g, "").trim();
+
+//   if (!rawValue || rawValue === ".") return rawValue;
+
+//   const [integerPart, decimalPart] = rawValue.split(".");
+
+//   const safeIntegerPart = integerPart || "0";
+
+//   const formattedInteger = safeIntegerPart.replace(
+//     /\B(?=(\d{3})+(?!\d))/g,
+//     ",",
+//   );
+
+//   if (decimalPart !== undefined) {
+//     const trimmedDecimal = removeTrailingZeroes
+//       ? decimalPart.replace(/0+$/, "")
+//       : decimalPart;
+
+//     if (trimmedDecimal) {
+//       return `${formattedInteger}.${trimmedDecimal}`;
+//     }
+
+//     return removeTrailingZeroes
+//       ? formattedInteger
+//       : `${formattedInteger}.`;
+//   }
+
+//   return formattedInteger;
+// }
+
+// function formatAmount(value: any): string {
+//   const amount = parseAmount(value);
+
+//   return amount.toLocaleString("en-PK", {
+//     minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+//     maximumFractionDigits: 2,
+//   });
+// }
+
+// function sanitizeDecimalInput(value: string) {
+//   let cleanValue = value
+//     .replace(/,/g, "")
+//     .replace(/[^\d.]/g, "");
+
+//   const parts = cleanValue.split(".");
+
+//   if (parts.length > 2) {
+//     cleanValue = `${parts[0]}.${parts.slice(1).join("")}`;
+//   }
+
+//   return cleanValue;
+// }
+
+// function formatDateForDisplay(value: any) {
+//   if (!value) return "";
+
+//   const date = value instanceof Date ? value : new Date(value);
+
+//   if (Number.isNaN(date.getTime())) {
+//     return String(value);
+//   }
+
+//   return format(date, "dd MMM yyyy");
+// }
+
+// function normalizeInvoiceType(value: any): InvoiceType {
+//   if (
+//     value === "general" ||
+//     value === "project" ||
+//     value === "asset"
+//   ) {
+//     return value;
+//   }
+
+//   return "project";
+// }
+
+// function getInvoiceTypeLabel(type: InvoiceType) {
+//   if (type === "project") return "Project";
+
+//   if (type === "asset") return "Asset";
+
+//   return "General";
+// }
+
+// function getLineItemLabel(type: InvoiceType) {
+//   return type === "asset" ? "Asset" : "Service";
+// }
+
+// function safeExportFileName(value: string) {
+//   return value
+//     .trim()
+//     .replace(/[^a-z0-9-_]+/gi, "-")
+//     .replace(/-+/g, "-")
+//     .replace(/^-|-$/g, "")
+//     .slice(0, 80);
+// }
+
+// function getAutoWidth(
+//   value: any,
+//   minWidthCh = 10,
+//   maxWidthCh = 45,
+// ) {
+//   const text = String(value || "");
+
+//   const longestLine = text
+//     .split("\n")
+//     .reduce(
+//       (longest, line) =>
+//         Math.max(longest, line.length),
+//       0,
+//     );
+
+//   return `${Math.min(
+//     Math.max(longestLine + 2, minWidthCh),
+//     maxWidthCh,
+//   )}ch`;
+// }
+
+// function AutoResizeTextarea({
+//   value,
+//   onChange,
+//   className = "",
+//   minHeight = 36,
+//   maxHeight = 140,
+//   minWidthCh = 10,
+//   maxWidthCh = 45,
+//   style,
+//   ...props
+// }: AutoResizeTextareaProps) {
+//   const textareaRef =
+//     useRef<HTMLTextAreaElement | null>(null);
+
+//   function resizeTextarea() {
+//     const el = textareaRef.current;
+
+//     if (!el) return;
+
+//     el.style.height = "auto";
+
+//     const nextHeight = Math.min(
+//       Math.max(el.scrollHeight, minHeight),
+//       maxHeight,
+//     );
+
+//     el.style.height = `${nextHeight}px`;
+
+//     el.style.overflowY =
+//       el.scrollHeight > maxHeight
+//         ? "auto"
+//         : "hidden";
+//   }
+
+//   useEffect(() => {
+//     resizeTextarea();
+//   }, [value]);
+
+//   return (
+//     <Textarea
+//       ref={textareaRef}
+//       value={value}
+//       rows={1}
+//       onChange={(e) => {
+//         onChange?.(e);
+
+//         requestAnimationFrame(resizeTextarea);
+//       }}
+//       className={`resize-none overflow-hidden text-sm leading-5 ${className}`}
+//       style={{
+//         minHeight,
+//         width: getAutoWidth(
+//           value,
+//           minWidthCh,
+//           maxWidthCh,
+//         ),
+//         ...style,
+//       }}
+//       {...props}
+//     />
+//   );
+// }
+
+// function getRoleKey(role: any): string {
+//   return String(role || "")
+//     .toLowerCase()
+//     .trim()
+//     .replace(/[\s-]+/g, "_");
+// }
+
+// function getRoleLabel(role: string) {
+//   const normalizedRole = getRoleKey(role);
+
+//   const roleLabels: Record<string, string> = {
+//     admin: "Admin",
+//     main_admin: "Admin",
+//     super_admin: "Super Admin",
+//     finance_admin: "Finance Admin",
+//     financial_admin: "Finance Admin",
+//     finance: "Finance",
+//     operation: "Operation",
+//     operations: "Operation",
+//     operational_admin: "Operation Admin",
+//     operation_admin: "Operation Admin",
+//     creative: "Creative",
+//     sales: "Sales",
+//   };
+
+//   return (
+//     roleLabels[normalizedRole] ||
+//     normalizedRole
+//       .replace(/_/g, " ")
+//       .replace(/\b\w/g, (letter) =>
+//         letter.toUpperCase(),
+//       )
+//   );
+// }
+
+// function canRoleCreateBudgetRequest(role: string) {
+//   const roleKey = getRoleKey(role);
+
+//   const blockedRoles = [
+//     "admin",
+//     "main_admin",
+//     "super_admin",
+//   ];
+
+//   return (
+//     !!roleKey &&
+//     !blockedRoles.includes(roleKey)
+//   );
+// }
+
+// export default function InvoiceRequestModal({
+//   isOpen,
+//   onClose,
+//   onSuccess,
+//   editingInvoice = null,
+// }: BudgetRequestModalProps) {
+//   const { userProfile } = useAuth();
+//   const { toast } = useToast();
+
+//   const currentUserRole = getRoleKey(
+//     userProfile?.role || "",
+//   );
+
+//   const canSubmitBudgetRequest =
+//     canRoleCreateBudgetRequest(currentUserRole);
+
+//   const [loading, setLoading] = useState(false);
+
+//   const [invoiceType, setInvoiceType] =
+//     useState<InvoiceType>("general");
+
+//   const [estimates, setEstimates] =
+//     useState<any[]>([]);
+
+//   const [suppliers, setSuppliers] =
+//     useState<any[]>([]);
+
+//   const [
+//     selectedEstimateId,
+//     setSelectedEstimateId,
+//   ] = useState("");
+
+//   const [
+//     selectedEstimateInput,
+//     setSelectedEstimateInput,
+//   ] = useState("");
+
+//   const [subject, setSubject] = useState("");
+//   const [message, setMessage] = useState("");
+
+//   const [formData, setFormData] = useState({
+//     requestId: "",
+//     clientName: "",
+//     project: "",
+//     projectCode: "",
+//     title: "",
+//     comment: "",
+//   });
+
+//   const [lineItems, setLineItems] =
+//     useState<LineItem[]>([
+//       {
+//         id: 1,
+//         date: "",
+//         service: "",
+//         description: "",
+//         vendor: "",
+//         supplierId: "",
+//         supplierName: "",
+//         units: "",
+//         unitRate: "",
+//         total: 0,
+//         comment: "",
+//       },
+//     ]);
+
+//   const [draggedRowId, setDraggedRowId] =
+//     useState<number | null>(null);
+
+//   const [dragOverRowId, setDragOverRowId] =
+//     useState<number | null>(null);
+
+//   /*
+//    * Prevent duplicate Request IDs from being generated
+//    * if React Strict Mode runs the effect twice.
+//    */
+//   const requestIdPreparedRef =
+//     useRef(false);
+
+//   /*
+//    * Used to prevent an older async Request ID
+//    * operation from overwriting a newer one.
+//    */
+//   const requestIdGenerationTokenRef =
+//     useRef(0);
+
+//   function getEmptyLineItem(
+//     id = 1,
+//   ): LineItem {
+//     return {
+//       id,
+//       date: "",
+//       service: "",
+//       description: "",
+//       vendor: "",
+//       supplierId: "",
+//       supplierName: "",
+//       units: "",
+//       unitRate: "",
+//       total: 0,
+//       comment: "",
+//     };
+//   }
+
+//   function resetForm() {
+//     setInvoiceType("general");
+
+//     setSelectedEstimateId("");
+//     setSelectedEstimateInput("");
+
+//     setSubject("");
+//     setMessage("");
+
+//     setFormData({
+//       requestId: "",
+//       clientName: "",
+//       project: "",
+//       projectCode: "",
+//       title: "",
+//       comment: "",
+//     });
+
+//     setLineItems([
+//       getEmptyLineItem(1),
+//     ]);
+//   }
+
+//   function getSupplierDisplayName(
+//     supplier: any,
+//   ) {
+//     return (
+//       supplier?.supplierName ||
+//       supplier?.vendorName ||
+//       supplier?.name ||
+//       supplier?.companyName ||
+//       supplier?.businessName ||
+//       supplier?.title ||
+//       ""
+//     );
+//   }
+
+//   function normalizeVendorLookup(
+//     value: any,
+//   ) {
+//     return String(value || "")
+//       .trim()
+//       .toLowerCase()
+//       .replace(/&/g, " and ")
+//       .replace(/[^a-z0-9]+/g, " ")
+//       .replace(/\s+/g, " ")
+//       .trim();
+//   }
+
+//   function findSupplierByVendorValue(
+//     value: any,
+//   ) {
+//     const lookup =
+//       normalizeVendorLookup(value);
+
+//     if (!lookup) return null;
+
+//     return (
+//       suppliers.find((supplier) => {
+//         const supplierNames = [
+//           supplier?.supplierName,
+//           supplier?.vendorName,
+//           supplier?.name,
+//           supplier?.companyName,
+//           supplier?.businessName,
+//           supplier?.title,
+//         ];
+
+//         return supplierNames.some(
+//           (name) =>
+//             normalizeVendorLookup(name) ===
+//             lookup,
+//         );
+//       }) || null
+//     );
+//   }
+
+//   function getEstimateProjectCode(
+//     estimate: any,
+//   ) {
+//     return (
+//       estimate?.projectCode ||
+//       estimate?.projectcode ||
+//       estimate?.project_code ||
+//       estimate?.code ||
+//       ""
+//     );
+//   }
+
+//   function getEstimateTitle(
+//     estimate: any,
+//   ) {
+//     return (
+//       estimate?.subject ||
+//       estimate?.title ||
+//       ""
+//     );
+//   }
+
+//   function getEstimateClientName(
+//     estimate: any,
+//   ) {
+//     return (
+//       estimate?.client ||
+//       estimate?.clientName ||
+//       ""
+//     );
+//   }
+
+//   function getEstimateProjectName(
+//     estimate: any,
+//   ) {
+//     return (
+//       estimate?.projectOwner ||
+//       estimate?.project ||
+//       estimate?.projectName ||
+//       ""
+//     );
+//   }
+
+//   function getEstimateDisplayNo(
+//     estimate: any,
+//   ) {
+//     return (
+//       estimate?.estimateNo ||
+//       estimate?.estimateNumber ||
+//       estimate?.id ||
+//       ""
+//     );
+//   }
+
+//   /*
+//    * Generate unique Request ID.
+//    */
+//   async function generateRequestId() {
+//     const counterRef = doc(
+//       db,
+//       "Panels",
+//       PANEL_ID,
+//       "counters",
+//       "invoiceRequests",
+//     );
+
+//     return await runTransaction(
+//       db,
+//       async (transaction) => {
+//         const snap =
+//           await transaction.get(counterRef);
+
+//         let count = 1;
+
+//         if (!snap.exists()) {
+//           transaction.set(counterRef, {
+//             count: 1,
+//           });
+//         } else {
+//           count =
+//             (snap.data().count || 0) + 1;
+
+//           transaction.update(counterRef, {
+//             count,
+//           });
+//         }
+
+//         const year =
+//           new Date().getFullYear();
+
+//         return `PR-${year}-${String(
+//           count,
+//         ).padStart(4, "0")}`;
+//       },
+//     );
+//   }
+
+//   /*
+//    * Reset form whenever a NEW Budget Request
+//    * modal is opened.
+//    */
+//   useEffect(() => {
+//     if (!isOpen || editingInvoice) return;
+
+//     resetForm();
+//   }, [isOpen, editingInvoice]);
+
+//   /*
+//    * NEW:
+//    * Generate Request ID as soon as the
+//    * Create Budget Request screen opens.
+//    */
+//   useEffect(() => {
+//     if (!isOpen) {
+//       requestIdPreparedRef.current =
+//         false;
+
+//       requestIdGenerationTokenRef.current +=
+//         1;
+
+//       return;
+//     }
+
+//     /*
+//      * Editing requests already have
+//      * their existing Request ID.
+//      */
+//     if (editingInvoice) {
+//       return;
+//     }
+
+//     /*
+//      * Prevent React StrictMode from
+//      * generating two IDs.
+//      */
+//     if (
+//       requestIdPreparedRef.current
+//     ) {
+//       return;
+//     }
+
+//     requestIdPreparedRef.current = true;
+
+//     const generationToken =
+//       ++requestIdGenerationTokenRef.current;
+
+//     const prepareRequestId =
+//       async () => {
+//         try {
+//           const requestId =
+//             await generateRequestId();
+
+//           /*
+//            * Ignore result if this is an
+//            * old generation request.
+//            */
+//           if (
+//             requestIdGenerationTokenRef.current !==
+//             generationToken
+//           ) {
+//             return;
+//           }
+
+//           setFormData((prev) => ({
+//             ...prev,
+//             requestId,
+//           }));
+//         } catch (error) {
+//           console.error(
+//             "Failed to generate Request ID:",
+//             error,
+//           );
+
+//           if (
+//             requestIdGenerationTokenRef.current ===
+//             generationToken
+//           ) {
+//             requestIdPreparedRef.current =
+//               false;
+//           }
+
+//           toast({
+//             title:
+//               "Request ID Error",
+//             description:
+//               "Could not generate the Budget Request ID.",
+//             variant: "destructive",
+//           });
+//         }
+//       };
+
+//     prepareRequestId();
+//   }, [isOpen, editingInvoice]);
+
+//   useEffect(() => {
+//     if (!isOpen) return;
+
+//     const fetchSuppliers =
+//       async () => {
+//         try {
+//           const snap =
+//             await getDocs(
+//               collection(
+//                 db,
+//                 "Panels",
+//                 PANEL_ID,
+//                 "suppliers",
+//               ),
+//             );
+
+//           const data = snap.docs
+//             .map((d) => ({
+//               id: d.id,
+//               ...d.data(),
+//             }))
+//             .sort((a, b) =>
+//               getSupplierDisplayName(
+//                 a,
+//               ).localeCompare(
+//                 getSupplierDisplayName(b),
+//               ),
+//             );
+
+//           setSuppliers(data);
+//         } catch (error) {
+//           console.error(
+//             "Failed to fetch suppliers:",
+//             error,
+//           );
+//         }
+//       };
+
+//     fetchSuppliers();
+//   }, [isOpen]);
+
+//   useEffect(() => {
+//     if (
+//       !isOpen ||
+//       invoiceType !== "project"
+//     ) {
+//       return;
+//     }
+
+//     const fetchEstimates =
+//       async () => {
+//         try {
+//           const snap =
+//             await getDocs(
+//               collection(
+//                 db,
+//                 "Panels",
+//                 PANEL_ID,
+//                 "estimates",
+//               ),
+//             );
+
+//           setEstimates(
+//             snap.docs.map((d) => ({
+//               id: d.id,
+//               ...d.data(),
+//             })),
+//           );
+//         } catch (error) {
+//           console.error(
+//             "Failed to fetch estimates:",
+//             error,
+//           );
+//         }
+//       };
+
+//     fetchEstimates();
+//   }, [isOpen, invoiceType]);
+
+//   useEffect(() => {
+//     if (invoiceType !== "project") {
+//       setSelectedEstimateId("");
+//       setSelectedEstimateInput("");
+
+//       setFormData((prev) => ({
+//         ...prev,
+//         clientName: "",
+//         project: "",
+//         projectCode: "",
+//       }));
+//     }
+//   }, [invoiceType]);
+
+//   useEffect(() => {
+//     if (
+//       !selectedEstimateId ||
+//       !estimates.length
+//     ) {
+//       return;
+//     }
+
+//     const matchedEstimate =
+//       estimates.find(
+//         (e) =>
+//           e.id ===
+//           selectedEstimateId,
+//       );
+
+//     if (matchedEstimate) {
+//       setSelectedEstimateInput(
+//         getEstimateDisplayNo(
+//           matchedEstimate,
+//         ),
+//       );
+//     }
+//   }, [
+//     selectedEstimateId,
+//     estimates,
+//   ]);
+
+//   function handleEstimateSelect(
+//     value: string,
+//   ) {
+//     setSelectedEstimateInput(value);
+
+//     const normalizedValue = value
+//       .trim()
+//       .toLowerCase();
+
+//     const est = estimates.find(
+//       (e) => {
+//         const displayNo =
+//           getEstimateDisplayNo(e)
+//             .trim()
+//             .toLowerCase();
+
+//         return (
+//           e.id === value ||
+//           displayNo === normalizedValue
+//         );
+//       },
+//     );
+
+//     if (!est) {
+//       setSelectedEstimateId(value);
+
+//       setFormData((prev) => ({
+//         ...prev,
+//         clientName: "",
+//         title: "",
+//         project: "",
+//         projectCode: "",
+//       }));
+
+//       return;
+//     }
+
+//     setSelectedEstimateId(est.id);
+
+//     setFormData((prev) => ({
+//       ...prev,
+
+//       clientName:
+//         getEstimateClientName(est),
+
+//       title:
+//         getEstimateTitle(est),
+
+//       project:
+//         getEstimateProjectName(est),
+
+//       projectCode:
+//         getEstimateProjectCode(est),
+//     }));
+//   }
+
+//   function updateLineItem(
+//     id: number,
+//     field: keyof LineItem,
+//     value: string,
+//   ) {
+//     setLineItems((prev) =>
+//       prev.map((item) => {
+//         if (item.id !== id) {
+//           return item;
+//         }
+
+//         const updated = {
+//           ...item,
+//           [field]: value,
+//         };
+
+//         if (field === "vendor") {
+//           const matchedSupplier =
+//             findSupplierByVendorValue(
+//               value,
+//             );
+
+//           updated.supplierId =
+//             matchedSupplier?.id || "";
+
+//           updated.supplierName =
+//             matchedSupplier
+//               ? getSupplierDisplayName(
+//                   matchedSupplier,
+//                 )
+//               : "";
+//         }
+
+//         const units = parseAmount(
+//           updated.units,
+//         );
+
+//         const rate = parseAmount(
+//           updated.unitRate,
+//         );
+
+//         updated.total =
+//           units * rate;
+
+//         return updated;
+//       }),
+//     );
+//   }
+
+//   function addLineItem() {
+//     setLineItems((prev) => {
+//       const nextId =
+//         prev.length > 0
+//           ? Math.max(
+//               ...prev.map(
+//                 (item) =>
+//                   item.id || 0,
+//               ),
+//             ) + 1
+//           : 1;
+
+//       return [
+//         ...prev,
+//         getEmptyLineItem(nextId),
+//       ];
+//     });
+//   }
+
+//   function removeLineItem(id: number) {
+//     if (lineItems.length > 1) {
+//       setLineItems((prev) =>
+//         prev.filter(
+//           (i) => i.id !== id,
+//         ),
+//       );
+//     }
+//   }
+
+//   function moveLineItemRow(
+//     sourceRowId: number,
+//     targetRowId: number,
+//   ) {
+//     if (
+//       sourceRowId === targetRowId
+//     ) {
+//       return;
+//     }
+
+//     setLineItems((prev) => {
+//       const sourceIndex =
+//         prev.findIndex(
+//           (item) =>
+//             item.id === sourceRowId,
+//         );
+
+//       const targetIndex =
+//         prev.findIndex(
+//           (item) =>
+//             item.id === targetRowId,
+//         );
+
+//       if (
+//         sourceIndex === -1 ||
+//         targetIndex === -1
+//       ) {
+//         return prev;
+//       }
+
+//       const nextItems = [...prev];
+
+//       const [movedItem] =
+//         nextItems.splice(
+//           sourceIndex,
+//           1,
+//         );
+
+//       nextItems.splice(
+//         targetIndex,
+//         0,
+//         movedItem,
+//       );
+
+//       return nextItems;
+//     });
+//   }
+
+//   function handleRowDragStart(
+//     event: DragEvent<HTMLSpanElement>,
+//     rowId: number,
+//   ) {
+//     setDraggedRowId(rowId);
+
+//     event.dataTransfer.effectAllowed =
+//       "move";
+
+//     event.dataTransfer.setData(
+//       "text/plain",
+//       String(rowId),
+//     );
+//   }
+
+//   function handleRowDragOver(
+//     event: DragEvent<HTMLTableRowElement>,
+//     rowId: number,
+//   ) {
+//     if (draggedRowId === rowId) {
+//       return;
+//     }
+
+//     event.preventDefault();
+
+//     event.dataTransfer.dropEffect =
+//       "move";
+
+//     setDragOverRowId(rowId);
+//   }
+
+//   function handleRowDrop(
+//     event: DragEvent<HTMLTableRowElement>,
+//     targetRowId: number,
+//   ) {
+//     event.preventDefault();
+
+//     const sourceRowId =
+//       draggedRowId ??
+//       Number(
+//         event.dataTransfer.getData(
+//           "text/plain",
+//         ),
+//       );
+
+//     if (
+//       Number.isFinite(sourceRowId)
+//     ) {
+//       moveLineItemRow(
+//         sourceRowId,
+//         targetRowId,
+//       );
+//     }
+
+//     setDraggedRowId(null);
+//     setDragOverRowId(null);
+//   }
+
+//   function handleRowDragEnd() {
+//     setDraggedRowId(null);
+//     setDragOverRowId(null);
+//   }
+
+//   function normalizeLineItemsForSave(
+//     items: any[],
+//   ): LineItem[] {
+//     return items.map(
+//       (item, index) => {
+//         const unitsValue =
+//           item.units ??
+//           item.unit ??
+//           item.quantity ??
+//           item.qty ??
+//           "";
+
+//         const unitRateValue =
+//           item.unitRate ??
+//           item.rate ??
+//           item.price ??
+//           "";
+
+//         const units =
+//           parseAmount(unitsValue);
+
+//         const unitRate =
+//           parseAmount(
+//             unitRateValue,
+//           );
+
+//         const savedTotal =
+//           parseAmount(item.total);
+
+//         const vendorName =
+//           item.vendor ||
+//           item.vendorName ||
+//           item.supplierName ||
+//           "";
+
+//         const matchedSupplier =
+//           suppliers.find(
+//             (supplier) =>
+//               String(
+//                 supplier?.id || "",
+//               ) ===
+//               String(
+//                 item.supplierId ||
+//                   item.vendorId ||
+//                   "",
+//               ),
+//           ) ||
+//           findSupplierByVendorValue(
+//             vendorName,
+//           );
+
+//         return {
+//           id:
+//             item.id ||
+//             index + 1,
+
+//           date:
+//             item.date || "",
+
+//           service:
+//             item.service || "",
+
+//           description:
+//             item.description || "",
+
+//           vendor:
+//             vendorName,
+
+//           supplierId:
+//             matchedSupplier?.id ||
+//             item.supplierId ||
+//             item.vendorId ||
+//             "",
+
+//           supplierName:
+//             matchedSupplier
+//               ? getSupplierDisplayName(
+//                   matchedSupplier,
+//                 )
+//               : item.supplierName ||
+//                 "",
+
+//           units:
+//             String(unitsValue),
+
+//           unitRate:
+//             String(unitRateValue),
+
+//           total:
+//             savedTotal ||
+//             units * unitRate,
+
+//           comment:
+//             item.comment || "",
+//         };
+//       },
+//     );
+//   }
+
+//   const totalAmount =
+//     lineItems.reduce(
+//       (sum, item) =>
+//         sum +
+//         parseAmount(item.total),
+//       0,
+//     );
+
+//   function getRequestNumber() {
+//     return (
+//       formData.requestId ||
+//       editingInvoice?.requestId ||
+//       "DRAFT"
+//     );
+//   }
+
+//   function getRequestTitle() {
+//     return (
+//       formData.title ||
+//       subject ||
+//       "Budget Request"
+//     );
+//   }
+
+//   function getExportFileName(
+//     extension: "pdf" | "xlsx",
+//   ) {
+//     const baseName =
+//       safeExportFileName(
+//         `${getRequestNumber()}-${getRequestTitle()}`,
+//       );
+
+//     return `${baseName || "budget-request"}.${extension}`;
+//   }
+
+//   function getExportMetaRows() {
+//     return [
+//       [
+//         "Request ID",
+//         getRequestNumber(),
+//       ],
+
+//       [
+//         "Request Type",
+//         getInvoiceTypeLabel(
+//           invoiceType,
+//         ),
+//       ],
+
+//       [
+//         "Title",
+//         getRequestTitle(),
+//       ],
+
+//       [
+//         "Subject",
+//         subject ||
+//           formData.title ||
+//           "-",
+//       ],
+
+//       [
+//         "Estimate No",
+//         invoiceType === "project"
+//           ? selectedEstimateInput ||
+//             "-"
+//           : "-",
+//       ],
+
+//       [
+//         "Client",
+//         invoiceType === "project"
+//           ? formData.clientName ||
+//             "-"
+//           : "-",
+//       ],
+
+//       [
+//         "Project",
+//         invoiceType === "project"
+//           ? formData.project || "-"
+//           : "-",
+//       ],
+
+//       [
+//         "Project Code",
+//         invoiceType === "project"
+//           ? formData.projectCode ||
+//             "-"
+//           : "-",
+//       ],
+
+//       [
+//         "Prepared By",
+//         userProfile?.displayName ||
+//           (userProfile as any)
+//             ?.name ||
+//           userProfile?.email ||
+//           "-",
+//       ],
+
+//       [
+//         "Prepared On",
+//         formatDateForDisplay(
+//           new Date(),
+//         ),
+//       ],
+
+//       [
+//         "Total",
+//         `Rs ${formatAmount(
+//           totalAmount,
+//         )}`,
+//       ],
+//     ];
+//   }
+
+//   function handleExportPdf() {
+//     try {
+//       const exportItems =
+//         normalizeLineItemsForSave(
+//           lineItems,
+//         );
+
+//       const pdf = new jsPDF({
+//         orientation: "landscape",
+//         unit: "pt",
+//         format: "a4",
+//       });
+
+//       const pageWidth =
+//         pdf.internal.pageSize.getWidth();
+
+//       const metaRows =
+//         getExportMetaRows();
+
+//       pdf.setProperties({
+//         title: `Budget Request - ${getRequestNumber()}`,
+//       });
+
+//       pdf.setFont(
+//         "helvetica",
+//         "bold",
+//       );
+
+//       pdf.setFontSize(22);
+
+//       pdf.text(
+//         "Budget Request",
+//         40,
+//         44,
+//       );
+
+//       pdf.setFont(
+//         "helvetica",
+//         "normal",
+//       );
+
+//       pdf.setFontSize(10);
+//       pdf.setTextColor(90);
+
+//       pdf.text(
+//         `Generated ${formatDateForDisplay(
+//           new Date(),
+//         )}`,
+//         pageWidth - 40,
+//         44,
+//         {
+//           align: "right",
+//         },
+//       );
+
+//       pdf.setTextColor(30);
+
+//       metaRows.forEach(
+//         ([label, value], index) => {
+//           const column =
+//             index % 3;
+
+//           const row =
+//             Math.floor(index / 3);
+
+//           const x =
+//             40 + column * 260;
+
+//           const y =
+//             78 + row * 34;
+
+//           pdf.setFont(
+//             "helvetica",
+//             "bold",
+//           );
+
+//           pdf.setFontSize(8);
+//           pdf.setTextColor(100);
+
+//           pdf.text(
+//             label,
+//             x,
+//             y,
+//           );
+
+//           pdf.setFont(
+//             "helvetica",
+//             "normal",
+//           );
+
+//           pdf.setFontSize(10);
+//           pdf.setTextColor(25);
+
+//           pdf.text(
+//             String(value || "-"),
+//             x,
+//             y + 14,
+//             {
+//               maxWidth: 220,
+//             },
+//           );
+//         },
+//       );
+
+//       autoTable(pdf, {
+//         startY: 220,
+
+//         head: [
+//           [
+//             "#",
+//             "Date",
+//             getLineItemLabel(
+//               invoiceType,
+//             ),
+//             "Description",
+//             "Vendor",
+//             "Units",
+//             "Rate",
+//             "Total",
+//             "Comment",
+//           ],
+//         ],
+
+//         body: exportItems.map(
+//           (item, index) => [
+//             String(index + 1),
+
+//             formatDateForDisplay(
+//               item.date,
+//             ) || "-",
+
+//             item.service || "-",
+
+//             item.description ||
+//               "-",
+
+//             item.vendor || "-",
+
+//             item.units || "0",
+
+//             formatAmount(
+//               item.unitRate,
+//             ),
+
+//             formatAmount(
+//               item.total,
+//             ),
+
+//             item.comment || "-",
+//           ],
+//         ),
+
+//         foot: [
+//           [
+//             "",
+//             "",
+//             "",
+//             "",
+//             "",
+//             "",
+//             "Total",
+//             `Rs ${formatAmount(
+//               totalAmount,
+//             )}`,
+//             "",
+//           ],
+//         ],
+
+//         styles: {
+//           font: "helvetica",
+//           fontSize: 8,
+//           cellPadding: 5,
+//           lineColor: [
+//             229,
+//             231,
+//             235,
+//           ],
+//           lineWidth: 0.5,
+//           overflow: "linebreak",
+//           valign: "top",
+//         },
+
+//         headStyles: {
+//           fillColor: [
+//             15,
+//             23,
+//             42,
+//           ],
+//           textColor: [
+//             255,
+//             255,
+//             255,
+//           ],
+//           fontStyle: "bold",
+//         },
+
+//         footStyles: {
+//           fillColor: [
+//             248,
+//             250,
+//             252,
+//           ],
+//           textColor: [
+//             15,
+//             23,
+//             42,
+//           ],
+//           fontStyle: "bold",
+//         },
+
+//         columnStyles: {
+//           0: {
+//             cellWidth: 24,
+//             halign: "center",
+//           },
+
+//           1: {
+//             cellWidth: 70,
+//           },
+
+//           2: {
+//             cellWidth: 90,
+//           },
+
+//           3: {
+//             cellWidth: 150,
+//           },
+
+//           4: {
+//             cellWidth: 100,
+//           },
+
+//           5: {
+//             cellWidth: 45,
+//             halign: "right",
+//           },
+
+//           6: {
+//             cellWidth: 65,
+//             halign: "right",
+//           },
+
+//           7: {
+//             cellWidth: 70,
+//             halign: "right",
+//           },
+
+//           8: {
+//             cellWidth: 120,
+//           },
+//         },
+
+//         margin: {
+//           left: 40,
+//           right: 40,
+//         },
+//       });
+
+//       const lastTableY =
+//         (pdf as any)
+//           .lastAutoTable?.finalY ||
+//         220;
+
+//       if (
+//         message &&
+//         lastTableY <
+//           pdf.internal.pageSize.getHeight() -
+//             70
+//       ) {
+//         pdf.setFont(
+//           "helvetica",
+//           "bold",
+//         );
+
+//         pdf.setFontSize(9);
+
+//         pdf.text(
+//           "Message",
+//           40,
+//           lastTableY + 28,
+//         );
+
+//         pdf.setFont(
+//           "helvetica",
+//           "normal",
+//         );
+
+//         pdf.setFontSize(9);
+
+//         pdf.text(
+//           message,
+//           40,
+//           lastTableY + 44,
+//           {
+//             maxWidth:
+//               pageWidth - 80,
+//           },
+//         );
+//       }
+
+//       pdf.save(
+//         getExportFileName("pdf"),
+//       );
+
+//       toast({
+//         title: "PDF exported",
+//       });
+//     } catch (error) {
+//       console.error(
+//         "Failed to export PDF:",
+//         error,
+//       );
+
+//       toast({
+//         title: "Export failed",
+//         description:
+//           "Could not export the Budget Request PDF.",
+//         variant: "destructive",
+//       });
+//     }
+//   }
+
+//   function handleExportExcel() {
+//     try {
+//       const exportItems =
+//         normalizeLineItemsForSave(
+//           lineItems,
+//         );
+
+//       const rows: Array<
+//         Array<string | number>
+//       > = [
+//         ["Budget Request"],
+//         [],
+
+//         ...getExportMetaRows(),
+
+//         [],
+
+//         ["Line Items"],
+
+//         [
+//           "#",
+//           "Date",
+//           getLineItemLabel(
+//             invoiceType,
+//           ),
+//           "Description",
+//           "Vendor",
+//           "Units",
+//           "Rate",
+//           "Total",
+//           "Comment",
+//         ],
+
+//         ...exportItems.map(
+//           (item, index) => [
+//             index + 1,
+
+//             formatDateForDisplay(
+//               item.date,
+//             ),
+
+//             item.service,
+
+//             item.description,
+
+//             item.vendor,
+
+//             parseAmount(
+//               item.units,
+//             ),
+
+//             parseAmount(
+//               item.unitRate,
+//             ),
+
+//             parseAmount(
+//               item.total,
+//             ),
+
+//             item.comment,
+//           ],
+//         ),
+
+//         [
+//           "",
+//           "",
+//           "",
+//           "",
+//           "",
+//           "",
+//           "Total",
+//           totalAmount,
+//           "",
+//         ],
+//       ];
+
+//       if (message) {
+//         rows.push(
+//           [],
+//           ["Message", message],
+//         );
+//       }
+
+//       const worksheet =
+//         XLSX.utils.aoa_to_sheet(
+//           rows,
+//         );
+
+//       worksheet["!cols"] = [
+//         { wch: 6 },
+//         { wch: 14 },
+//         { wch: 24 },
+//         { wch: 36 },
+//         { wch: 24 },
+//         { wch: 10 },
+//         { wch: 14 },
+//         { wch: 14 },
+//         { wch: 28 },
+//       ];
+
+//       const workbook =
+//         XLSX.utils.book_new();
+
+//       XLSX.utils.book_append_sheet(
+//         workbook,
+//         worksheet,
+//         "Budget Request",
+//       );
+
+//       XLSX.writeFile(
+//         workbook,
+//         getExportFileName("xlsx"),
+//       );
+
+//       toast({
+//         title: "Excel exported",
+//       });
+//     } catch (error) {
+//       console.error(
+//         "Failed to export Excel:",
+//         error,
+//       );
+
+//       toast({
+//         title: "Export failed",
+//         description:
+//           "Could not export the Budget Request Excel file.",
+//         variant: "destructive",
+//       });
+//     }
+//   }
+
+//   async function handleSubmit(
+//     e: FormEvent<HTMLFormElement>,
+//   ) {
+//     e.preventDefault();
+
+//     if (
+//       !userProfile ||
+//       !canSubmitBudgetRequest
+//     ) {
+//       toast({
+//         title:
+//           "Permission denied",
+//         description:
+//           "Only Admin users cannot create Budget Requests.",
+//         variant: "destructive",
+//       });
+
+//       return;
+//     }
+
+//     try {
+//       setLoading(true);
+
+//       const lineItemsForSave =
+//         normalizeLineItemsForSave(
+//           lineItems,
+//         );
+
+//       const submittedBy =
+//         (userProfile as any).id ||
+//         (userProfile as any).uid ||
+//         (userProfile as any)
+//           .userId ||
+//         userProfile.email ||
+//         "";
+
+//       const submittedByName =
+//         userProfile.displayName ||
+//         (userProfile as any).name ||
+//         userProfile.email ||
+//         "";
+
+//       if (!editingInvoice) {
+//         /*
+//          * IMPORTANT:
+//          * Use the Request ID that was already
+//          * generated when the modal opened.
+//          */
+//         const requestId =
+//           formData.requestId;
+
+//         if (!requestId) {
+//           toast({
+//             title:
+//               "Request ID missing",
+//             description:
+//               "Please wait for the Request ID to be generated.",
+//             variant: "destructive",
+//           });
+
+//           return;
+//         }
+
+//         await addDoc(
+//           collection(
+//             db,
+//             "Panels",
+//             PANEL_ID,
+//             "invoiceRequests",
+//           ),
+//           {
+//             requestId,
+
+//             invoiceType,
+
+//             estimateId:
+//               selectedEstimateId ||
+//               "",
+
+//             estimateNumber:
+//               invoiceType ===
+//               "project"
+//                 ? selectedEstimateInput
+//                 : "",
+
+//             clientName:
+//               invoiceType ===
+//               "project"
+//                 ? formData.clientName
+//                 : "",
+
+//             project:
+//               invoiceType ===
+//               "project"
+//                 ? formData.project
+//                 : "",
+
+//             projectName:
+//               invoiceType ===
+//               "project"
+//                 ? formData.project
+//                 : "",
+
+//             projectCode:
+//               invoiceType ===
+//               "project"
+//                 ? formData.projectCode
+//                 : "",
+
+//             title:
+//               formData.title,
+
+//             lineItems:
+//               lineItemsForSave,
+
+//             items:
+//               lineItemsForSave,
+
+//             totalAmount,
+
+//             subject,
+
+//             message,
+
+//             status:
+//               "pending_main_admin",
+
+//             currentApprover:
+//               "main_admin",
+
+//             returnedToRole: "",
+
+//             returnedToRoleLabel:
+//               "",
+
+//             returnedToCreator:
+//               false,
+
+//             needsCreatorRevision:
+//               false,
+
+//             submittedAt:
+//               serverTimestamp(),
+
+//             editDate: null,
+
+//             submittedBy,
+
+//             createdBy:
+//               submittedBy,
+
+//             submittedByRole:
+//               currentUserRole,
+
+//             submittedByRoleLabel:
+//               getRoleLabel(
+//                 currentUserRole,
+//               ),
+
+//             submittedByName,
+
+//             createdByName:
+//               submittedByName,
+
+//             updatedAt:
+//               serverTimestamp(),
+//           },
+//         );
+
+//         toast({
+//           title:
+//             "Budget request submitted",
+//         });
+//       } else {
+//         await updateDoc(
+//           doc(
+//             db,
+//             "Panels",
+//             PANEL_ID,
+//             "invoiceRequests",
+//             editingInvoice.id,
+//           ),
+//           {
+//             invoiceType,
+
+//             estimateId:
+//               selectedEstimateId ||
+//               "",
+
+//             estimateNumber:
+//               invoiceType ===
+//               "project"
+//                 ? selectedEstimateInput
+//                 : "",
+
+//             clientName:
+//               invoiceType ===
+//               "project"
+//                 ? formData.clientName
+//                 : "",
+
+//             project:
+//               invoiceType ===
+//               "project"
+//                 ? formData.project
+//                 : "",
+
+//             projectName:
+//               invoiceType ===
+//               "project"
+//                 ? formData.project
+//                 : "",
+
+//             projectCode:
+//               invoiceType ===
+//               "project"
+//                 ? formData.projectCode
+//                 : "",
+
+//             title:
+//               formData.title,
+
+//             lineItems:
+//               lineItemsForSave,
+
+//             items:
+//               lineItemsForSave,
+
+//             totalAmount,
+
+//             subject,
+
+//             message,
+
+//             status:
+//               "pending_main_admin",
+
+//             currentApprover:
+//               "main_admin",
+
+//             returnedToRole: "",
+
+//             returnedToRoleLabel:
+//               "",
+
+//             returnedToCreator:
+//               false,
+
+//             needsCreatorRevision:
+//               false,
+
+//             editDate:
+//               serverTimestamp(),
+
+//             updatedAt:
+//               serverTimestamp(),
+//           },
+//         );
+
+//         toast({
+//           title:
+//             "Budget request resubmitted",
+//         });
+//       }
+
+//       onSuccess?.();
+
+//       resetForm();
+//     } catch (err) {
+//       console.error(err);
+
+//       toast({
+//         title: "Error",
+//         description:
+//           "Failed to submit Budget Request.",
+//         variant: "destructive",
+//       });
+//     } finally {
+//       setLoading(false);
+//     }
+//   }
+
+//   useEffect(() => {
+//     if (!editingInvoice) return;
+
+//     setInvoiceType(
+//       normalizeInvoiceType(
+//         editingInvoice.invoiceType,
+//       ),
+//     );
+
+//     setSelectedEstimateId(
+//       editingInvoice.estimateId ||
+//         "",
+//     );
+
+//     setSelectedEstimateInput(
+//       editingInvoice.estimateNumber ||
+//         editingInvoice.estimateId ||
+//         "",
+//     );
+
+//     setSubject(
+//       editingInvoice.subject ||
+//         "",
+//     );
+
+//     setMessage(
+//       editingInvoice.message ||
+//         "",
+//     );
+
+//     setFormData({
+//       requestId:
+//         editingInvoice.requestId ||
+//         "",
+
+//       clientName:
+//         editingInvoice.clientName ||
+//         "",
+
+//       project:
+//         editingInvoice.project ||
+//         editingInvoice.projectName ||
+//         "",
+
+//       projectCode:
+//         editingInvoice.projectCode ||
+//         "",
+
+//       title:
+//         editingInvoice.title ||
+//         "",
+
+//       comment:
+//         editingInvoice.comment ||
+//         "",
+//     });
+
+//     const sourceItems =
+//       editingInvoice.lineItems
+//         ?.length
+//         ? editingInvoice.lineItems
+//         : editingInvoice.items
+//               ?.length
+//           ? editingInvoice.items
+//           : [];
+
+//     setLineItems(
+//       sourceItems.length
+//         ? normalizeLineItemsForSave(
+//             sourceItems,
+//           )
+//         : [
+//             getEmptyLineItem(1),
+//           ],
+//     );
+//   }, [editingInvoice]);
+
+//   const tableColumns: Record<
+//     TableColumnKey,
+//     TableColumnConfig
+//   > = {
+//     date: {
+//       label: "Date",
+
+//       headerClassName:
+//         "min-w-[150px] px-3 text-left font-semibold",
+
+//       headerContentClassName:
+//         "justify-start",
+
+//       cellClassName:
+//         "px-3 py-3 align-top",
+
+//       render: (item) => (
+//         <Popover>
+//           <PopoverTrigger
+//             asChild
+//           >
+//             <Button
+//               type="button"
+//               variant="outline"
+//               className="h-10 w-[180px] justify-start rounded-xl border-slate-200 bg-white text-left font-normal"
+//             >
+//               <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
+
+//               {item.date
+//                 ? format(
+//                     new Date(
+//                       item.date,
+//                     ),
+//                     "PPP",
+//                   )
+//                 : "Pick date"}
+//             </Button>
+//           </PopoverTrigger>
+
+//           <PopoverContent className="w-auto rounded-xl p-0">
+//             <Calendar
+//               mode="single"
+//               selected={
+//                 item.date
+//                   ? new Date(
+//                       item.date,
+//                     )
+//                   : undefined
+//               }
+//               onSelect={(date) =>
+//                 updateLineItem(
+//                   item.id,
+//                   "date",
+//                   date?.toISOString() ||
+//                     "",
+//                 )
+//               }
+//               initialFocus
+//             />
+//           </PopoverContent>
+//         </Popover>
+//       ),
+//     },
+
+//     service: {
+//       label:
+//         getLineItemLabel(
+//           invoiceType,
+//         ),
+
+//       headerClassName:
+//         "min-w-[160px] px-3 text-left font-semibold",
+
+//       headerContentClassName:
+//         "justify-start",
+
+//       cellClassName:
+//         "px-3 py-3 align-top",
+
+//       render: (item) => (
+//         <Input
+//           className="h-10 rounded-xl border-slate-200 bg-slate-50/60 text-sm"
+//           value={item.service}
+//           onChange={(e) =>
+//             updateLineItem(
+//               item.id,
+//               "service",
+//               e.target.value,
+//             )
+//           }
+//           placeholder={
+//             invoiceType === "asset"
+//               ? "Asset name"
+//               : "Service"
+//           }
+//         />
+//       ),
+//     },
+
+//     description: {
+//       label: "Description",
+
+//       headerClassName:
+//         "min-w-[240px] px-3 text-left font-semibold",
+
+//       headerContentClassName:
+//         "justify-start",
+
+//       cellClassName:
+//         "px-3 py-3 align-top",
+
+//       render: (item) => (
+//         <AutoResizeTextarea
+//           value={item.description}
+//           minWidthCh={24}
+//           maxWidthCh={78}
+//           minHeight={40}
+//           maxHeight={160}
+//           placeholder="Enter description"
+//           className="rounded-xl border-slate-200 bg-slate-50/60"
+//           onChange={(e) =>
+//             updateLineItem(
+//               item.id,
+//               "description",
+//               e.target.value,
+//             )
+//           }
+//         />
+//       ),
+//     },
+
+//     vendor: {
+//       label: "Vendor",
+
+//       headerClassName:
+//         "min-w-[190px] px-3 text-left font-semibold",
+
+//       headerContentClassName:
+//         "justify-start",
+
+//       cellClassName:
+//         "px-3 py-3 align-top",
+
+//       render: (item) => (
+//         <>
+//           <Input
+//             list={`vendor-options-${item.id}`}
+//             className="h-10 rounded-xl border-slate-200 bg-slate-50/60 text-sm"
+//             value={item.vendor}
+//             onChange={(e) =>
+//               updateLineItem(
+//                 item.id,
+//                 "vendor",
+//                 e.target.value,
+//               )
+//             }
+//             placeholder="Enter vendor name"
+//             required
+//           />
+
+//           <datalist
+//             id={`vendor-options-${item.id}`}
+//           >
+//             {suppliers.map(
+//               (supplier) => {
+//                 const supplierName =
+//                   getSupplierDisplayName(
+//                     supplier,
+//                   );
+
+//                 if (!supplierName) {
+//                   return null;
+//                 }
+
+//                 return (
+//                   <option
+//                     key={
+//                       supplier.id
+//                     }
+//                     value={
+//                       supplierName
+//                     }
+//                   >
+//                     {
+//                       supplierName
+//                     }
+//                   </option>
+//                 );
+//               },
+//             )}
+//           </datalist>
+//         </>
+//       ),
+//     },
+
+//     units: {
+//       label: "Units",
+
+//       headerClassName:
+//         "w-[100px] px-3 text-center font-semibold",
+
+//       headerContentClassName:
+//         "justify-center",
+
+//       cellClassName:
+//         "px-3 py-3 align-top",
+
+//       render: (item) => (
+//         <Input
+//           type="text"
+//           inputMode="decimal"
+//           className="h-10 rounded-xl border-slate-200 bg-slate-50/60 text-center text-sm [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+//           value={item.units}
+//           onChange={(e) =>
+//             updateLineItem(
+//               item.id,
+//               "units",
+//               sanitizeDecimalInput(
+//                 e.target.value,
+//               ),
+//             )
+//           }
+//           placeholder="0"
+//         />
+//       ),
+//     },
+
+//     unitRate: {
+//       label: "Rate",
+
+//       headerClassName:
+//         "w-[130px] px-3 text-center font-semibold",
+
+//       headerContentClassName:
+//         "justify-center",
+
+//       cellClassName:
+//         "px-3 py-3 align-top",
+
+//       render: (item) => (
+//         <AutoResizeTextarea
+//           value={formatNumberWithCommas(
+//             item.unitRate,
+//           )}
+//           inputMode="decimal"
+//           minWidthCh={8}
+//           maxWidthCh={18}
+//           minHeight={40}
+//           maxHeight={90}
+//           className="rounded-xl border-slate-200 bg-slate-50/60 text-center"
+//           placeholder="0"
+//           onKeyDown={(e) => {
+//             if (
+//               e.key === "Enter"
+//             ) {
+//               e.preventDefault();
+//             }
+//           }}
+//           onChange={(e) =>
+//             updateLineItem(
+//               item.id,
+//               "unitRate",
+//               sanitizeDecimalInput(
+//                 e.target.value,
+//               ),
+//             )
+//           }
+//         />
+//       ),
+//     },
+
+//     total: {
+//       label: "Total",
+
+//       headerClassName:
+//         "w-[130px] px-3 text-right font-semibold",
+
+//       headerContentClassName:
+//         "justify-end",
+
+//       cellClassName:
+//         "px-3 py-4 text-right align-top font-semibold text-slate-950",
+
+//       render: (item) =>
+//         formatAmount(item.total),
+//     },
+
+//     comment: {
+//       label: "Comment",
+
+//       headerClassName:
+//         "min-w-[210px] px-3 text-left font-semibold",
+
+//       headerContentClassName:
+//         "justify-start",
+
+//       cellClassName:
+//         "px-3 py-3 align-top",
+
+//       render: (item) => (
+//         <Input
+//           className="h-10 rounded-xl border-slate-200 bg-slate-50/60 text-sm"
+//           value={item.comment}
+//           onChange={(e) =>
+//             updateLineItem(
+//               item.id,
+//               "comment",
+//               e.target.value,
+//             )
+//           }
+//           placeholder="Comment"
+//         />
+//       ),
+//     },
+
+//     actions: {
+//       label: "Action",
+
+//       headerClassName:
+//         "w-[110px] px-3 text-center font-semibold",
+
+//       headerContentClassName:
+//         "justify-center",
+
+//       cellClassName:
+//         "px-3 py-4 text-center align-top",
+
+//       render: (item) => (
+//         <div className="flex items-center justify-center gap-1">
+//           <span
+//             role="button"
+//             tabIndex={0}
+//             draggable
+//             onDragStart={(
+//               event,
+//             ) =>
+//               handleRowDragStart(
+//                 event,
+//                 item.id,
+//               )
+//             }
+//             onDragEnd={
+//               handleRowDragEnd
+//             }
+//             className="inline-flex cursor-grab items-center justify-center rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 active:cursor-grabbing"
+//             title="Drag to reorder row"
+//           >
+//             <GripVertical
+//               size={18}
+//             />
+//           </span>
+
+//           <button
+//             type="button"
+//             onClick={() =>
+//               removeLineItem(
+//                 item.id,
+//               )
+//             }
+//             className="rounded-full p-2 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
+//             title="Delete row"
+//             disabled={
+//               lineItems.length === 1
+//             }
+//           >
+//             <Trash2
+//               size={18}
+//             />
+//           </button>
+//         </div>
+//       ),
+//     },
+//   };
+
+//   return (
+//     <Dialog
+//       open={isOpen}
+//       onOpenChange={() => {
+//         /*
+//          * Keep popup open for overlay click,
+//          * escape key and default Radix close.
+//          */
+//       }}
+//     >
+//       <DialogContent
+//         className="left-0 top-0 h-[100dvh] max-h-none w-screen max-w-none translate-x-0 translate-y-0 overflow-hidden rounded-none border-0 bg-slate-50 p-0 text-slate-950 shadow-none sm:rounded-none [&>button]:hidden"
+//         onEscapeKeyDown={(
+//           event,
+//         ) =>
+//           event.preventDefault()
+//         }
+//         onPointerDownOutside={(
+//           event,
+//         ) =>
+//           event.preventDefault()
+//         }
+//         onInteractOutside={(
+//           event,
+//         ) =>
+//           event.preventDefault()
+//         }
+//       >
+//         <div className="flex h-full min-h-0 flex-col">
+//           <DialogHeader className="border-b border-slate-200 bg-white/95 px-6 py-4 shadow-sm backdrop-blur">
+//             <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+//               <div>
+//                 <div className="mb-2 flex flex-wrap items-center gap-2">
+//                   <span className="rounded-full bg-slate-900 px-3 py-1 text-xs font-semibold uppercase tracking-[0.2em] text-white">
+//                     Budget Request
+//                   </span>
+
+//                   <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-500">
+//                     {editingInvoice
+//                       ? "Editing draft"
+//                       : "New submission"}
+//                   </span>
+
+//                   {formData.requestId && (
+//                     <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
+//                       {
+//                         formData.requestId
+//                       }
+//                     </span>
+//                   )}
+//                 </div>
+
+//                 <DialogTitle className="text-2xl font-semibold tracking-tight text-slate-950">
+//                   {editingInvoice
+//                     ? "Edit Budget Request"
+//                     : "Create Budget Request"}
+//                 </DialogTitle>
+
+//                 <p className="mt-1 text-sm text-slate-500">
+//                   Full-screen workspace
+//                   with controlled close,
+//                   clean line items, and
+//                   export-ready request
+//                   data.
+//                 </p>
+//               </div>
+
+//               <div className="flex flex-wrap items-center gap-2">
+//                 <Button
+//                   type="button"
+//                   variant="ghost"
+//                   size="icon"
+//                   onClick={onClose}
+//                   aria-label="Close budget request popup"
+//                   className="rounded-full text-slate-500 hover:bg-slate-100 hover:text-slate-900"
+//                 >
+//                   <X className="h-5 w-5" />
+//                 </Button>
+//               </div>
+//             </div>
+//           </DialogHeader>
+
+//           <form
+//             onSubmit={handleSubmit}
+//             className="flex min-h-0 flex-1 flex-col"
+//           >
+//             <div className="flex-1 overflow-y-auto px-6 py-6">
+//               <div className="mx-auto flex w-full flex-col gap-6">
+//                 {/* Summary Cards */}
+
+//                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+//                   {/* Request ID */}
+
+//                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+//                       Request ID
+//                     </p>
+
+//                     <p className="mt-2 text-xl font-semibold text-slate-950">
+//                       {formData.requestId ||
+//                         "Generating..."}
+//                     </p>
+//                   </div>
+
+//                   {/* Total */}
+
+//                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+//                       Total Amount
+//                     </p>
+
+//                     <p className="mt-2 text-2xl font-semibold text-slate-950">
+//                       Rs{" "}
+//                       {formatAmount(
+//                         totalAmount,
+//                       )}
+//                     </p>
+//                   </div>
+
+//                   {/* Type */}
+
+//                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+//                       Request Type
+//                     </p>
+
+//                     <p className="mt-2 text-2xl font-semibold capitalize text-slate-950">
+//                       {getInvoiceTypeLabel(
+//                         invoiceType,
+//                       )}
+//                     </p>
+//                   </div>
+
+//                   {/* Rows */}
+
+//                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+//                       {invoiceType ===
+//                       "asset"
+//                         ? "Asset Rows"
+//                         : "Service Rows"}
+//                     </p>
+
+//                     <p className="mt-2 text-2xl font-semibold text-slate-950">
+//                       {lineItems.length}
+//                     </p>
+//                   </div>
+//                 </div>
+
+//                 {/* Request Details */}
+
+//                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+//                   <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+//                     <div>
+//                       <h3 className="text-base font-semibold text-slate-950">
+//                         Request Details
+//                       </h3>
+
+//                       <p className="text-sm text-slate-500">
+//                         Select the request
+//                         mode and fill the
+//                         required details.
+//                       </p>
+//                     </div>
+
+//                     <div className="inline-flex w-fit rounded-full bg-slate-100 p-1">
+//                       <Button
+//                         type="button"
+//                         variant={
+//                           invoiceType ===
+//                           "general"
+//                             ? "default"
+//                             : "ghost"
+//                         }
+//                         onClick={() =>
+//                           setInvoiceType(
+//                             "general",
+//                           )
+//                         }
+//                         className="rounded-full px-5"
+//                       >
+//                         General
+//                       </Button>
+
+//                       <Button
+//                         type="button"
+//                         variant={
+//                           invoiceType ===
+//                           "project"
+//                             ? "default"
+//                             : "ghost"
+//                         }
+//                         onClick={() =>
+//                           setInvoiceType(
+//                             "project",
+//                           )
+//                         }
+//                         className="rounded-full px-5"
+//                       >
+//                         Project
+//                       </Button>
+
+//                       <Button
+//                         type="button"
+//                         variant={
+//                           invoiceType ===
+//                           "asset"
+//                             ? "default"
+//                             : "ghost"
+//                         }
+//                         onClick={() =>
+//                           setInvoiceType(
+//                             "asset",
+//                           )
+//                         }
+//                         className="rounded-full px-5"
+//                       >
+//                         Asset
+//                       </Button>
+//                     </div>
+//                   </div>
+
+//                   {/* Request ID Field */}
+
+//                   <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2">
+//                     <div className="space-y-2">
+//                       <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                         Request ID
+//                       </Label>
+
+//                       <Input
+//                         value={
+//                           formData.requestId
+//                         }
+//                         readOnly
+//                         placeholder="Generating Request ID..."
+//                         className="h-11 rounded-xl border-blue-200 bg-blue-50 font-semibold text-blue-800"
+//                       />
+
+//                       {!formData.requestId &&
+//                         !editingInvoice && (
+//                           <p className="text-xs text-slate-400">
+//                             Request ID is
+//                             being generated...
+//                           </p>
+//                         )}
+//                     </div>
+//                   </div>
+
+//                   {/* General / Asset */}
+
+//                   {invoiceType !==
+//                     "project" && (
+//                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+//                       <div className="space-y-2">
+//                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                           {invoiceType ===
+//                           "asset"
+//                             ? "Asset Title *"
+//                             : "Title *"}
+//                         </Label>
+
+//                         <Input
+//                           value={
+//                             formData.title
+//                           }
+//                           onChange={(e) =>
+//                             setFormData({
+//                               ...formData,
+//                               title:
+//                                 e.target
+//                                   .value,
+//                             })
+//                           }
+//                           placeholder={
+//                             invoiceType ===
+//                             "asset"
+//                               ? "Enter asset request title"
+//                               : "Enter request title"
+//                           }
+//                           required
+//                           className="h-11 rounded-xl border-slate-200 bg-slate-50/60"
+//                         />
+//                       </div>
+
+//                       <div className="space-y-2">
+//                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                           {invoiceType ===
+//                           "asset"
+//                             ? "Asset Subject"
+//                             : "Subject"}
+//                         </Label>
+
+//                         <Input
+//                           value={subject}
+//                           onChange={(e) =>
+//                             setSubject(
+//                               e.target
+//                                 .value,
+//                             )
+//                           }
+//                           placeholder={
+//                             invoiceType ===
+//                             "asset"
+//                               ? "Enter asset subject"
+//                               : "Enter request subject"
+//                           }
+//                           className="h-11 rounded-xl border-slate-200 bg-slate-50/60"
+//                         />
+//                       </div>
+
+//                       <div className="space-y-2 md:col-span-2">
+//                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                           {invoiceType ===
+//                           "asset"
+//                             ? "Asset Details"
+//                             : "Message"}
+//                         </Label>
+
+//                         <Textarea
+//                           value={message}
+//                           onChange={(e) =>
+//                             setMessage(
+//                               e.target
+//                                 .value,
+//                             )
+//                           }
+//                           placeholder={
+//                             invoiceType ===
+//                             "asset"
+//                               ? "Enter asset details or justification"
+//                               : "Enter request message"
+//                           }
+//                           rows={4}
+//                           className="rounded-xl border-slate-200 bg-slate-50/60"
+//                         />
+//                       </div>
+//                     </div>
+//                   )}
+
+//                   {/* Project */}
+
+//                   {invoiceType ===
+//                     "project" && (
+//                     <div className="space-y-4">
+//                       <div className="space-y-2">
+//                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                           Estimate No *
+//                         </Label>
+
+//                         <Input
+//                           list="estimate-options"
+//                           value={
+//                             selectedEstimateInput
+//                           }
+//                           onChange={(
+//                             e,
+//                           ) =>
+//                             handleEstimateSelect(
+//                               e.target
+//                                 .value,
+//                             )
+//                           }
+//                           placeholder="Select or type estimate number"
+//                           required
+//                           className="h-11 rounded-xl border-slate-200 bg-slate-50/60"
+//                         />
+
+//                         <datalist id="estimate-options">
+//                           {estimates.map(
+//                             (e) => (
+//                               <option
+//                                 key={
+//                                   e.id
+//                                 }
+//                                 value={getEstimateDisplayNo(
+//                                   e,
+//                                 )}
+//                               />
+//                             ),
+//                           )}
+//                         </datalist>
+//                       </div>
+
+//                       <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+//                         <div className="space-y-2">
+//                           <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                             Client Name
+//                           </Label>
+
+//                           <Input
+//                             value={
+//                               formData.clientName
+//                             }
+//                             readOnly
+//                             className="h-11 rounded-xl border-slate-200 bg-slate-100 text-slate-600"
+//                             placeholder="Auto-filled from estimate"
+//                           />
+//                         </div>
+
+//                         <div className="space-y-2">
+//                           <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                             Subject
+//                           </Label>
+
+//                           <Input
+//                             value={
+//                               formData.title
+//                             }
+//                             readOnly
+//                             className="h-11 rounded-xl border-slate-200 bg-slate-100 text-slate-600"
+//                             placeholder="Auto-filled from estimate"
+//                           />
+//                         </div>
+
+//                         <div className="space-y-2">
+//                           <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                             Project
+//                           </Label>
+
+//                           <Input
+//                             value={
+//                               formData.project
+//                             }
+//                             readOnly
+//                             className="h-11 rounded-xl border-slate-200 bg-slate-100 text-slate-600"
+//                             placeholder="Auto-filled from estimate"
+//                           />
+//                         </div>
+
+//                         <div className="space-y-2">
+//                           <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
+//                             Project Code *
+//                           </Label>
+
+//                           <Input
+//                             value={
+//                               formData.projectCode
+//                             }
+//                             onChange={(
+//                               e,
+//                             ) =>
+//                               setFormData(
+//                                 {
+//                                   ...formData,
+//                                   projectCode:
+//                                     e
+//                                       .target
+//                                       .value,
+//                                 },
+//                               )
+//                             }
+//                             placeholder="Auto-filled from estimate"
+//                             required
+//                             className="h-11 rounded-xl border-slate-200 bg-slate-50/60"
+//                           />
+//                         </div>
+//                       </div>
+//                     </div>
+//                   )}
+//                 </section>
+
+//                 {/* Items Table */}
+
+//                 <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+//                   <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
+//                     <div>
+//                       <h3 className="text-base font-semibold text-slate-950">
+//                         {invoiceType ===
+//                         "asset"
+//                           ? "Assets & Costing"
+//                           : "Services & Costing"}
+//                       </h3>
+
+//                       <p className="text-sm text-slate-500">
+//                         {invoiceType ===
+//                         "asset"
+//                           ? "Add each asset with vendor, quantity, rate, and comments."
+//                           : "Add each service row with vendor, units, rate, and comments."}
+//                       </p>
+//                     </div>
+
+//                     <Button
+//                       type="button"
+//                       onClick={
+//                         addLineItem
+//                       }
+//                       variant="outline"
+//                       className="gap-2 rounded-full border-slate-200 bg-white shadow-sm hover:bg-slate-50"
+//                     >
+//                       <Plus className="h-4 w-4" />
+
+//                       {invoiceType ===
+//                       "asset"
+//                         ? "Add Asset Row"
+//                         : "Add Service Row"}
+//                     </Button>
+//                   </div>
+
+//                   <div className="overflow-auto">
+//                     <table className="w-full min-w-[1250px] border-collapse text-sm">
+//                       <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
+//                         <tr className="h-12 border-b border-slate-200">
+//                           {DEFAULT_TABLE_COLUMN_ORDER.map(
+//                             (
+//                               columnKey,
+//                             ) => {
+//                               const column =
+//                                 tableColumns[
+//                                   columnKey
+//                                 ];
+
+//                               return (
+//                                 <th
+//                                   key={
+//                                     columnKey
+//                                   }
+//                                   scope="col"
+//                                   className={
+//                                     column.headerClassName
+//                                   }
+//                                 >
+//                                   <span
+//                                     className={`flex items-center gap-1.5 ${column.headerContentClassName}`}
+//                                   >
+//                                     <span>
+//                                       {
+//                                         column.label
+//                                       }
+//                                     </span>
+//                                   </span>
+//                                 </th>
+//                               );
+//                             },
+//                           )}
+//                         </tr>
+//                       </thead>
+
+//                       <tbody>
+//                         {lineItems.map(
+//                           (item) => {
+//                             const isDragging =
+//                               draggedRowId ===
+//                               item.id;
+
+//                             const isDropTarget =
+//                               dragOverRowId ===
+//                                 item.id &&
+//                               draggedRowId !==
+//                                 item.id;
+
+//                             return (
+//                               <tr
+//                                 key={
+//                                   item.id
+//                                 }
+//                                 onDragOver={(
+//                                   event,
+//                                 ) =>
+//                                   handleRowDragOver(
+//                                     event,
+//                                     item.id,
+//                                   )
+//                                 }
+//                                 onDragLeave={() =>
+//                                   setDragOverRowId(
+//                                     (
+//                                       current,
+//                                     ) =>
+//                                       current ===
+//                                       item.id
+//                                         ? null
+//                                         : current,
+//                                   )
+//                                 }
+//                                 onDrop={(
+//                                   event,
+//                                 ) =>
+//                                   handleRowDrop(
+//                                     event,
+//                                     item.id,
+//                                   )
+//                                 }
+//                                 className={`border-b border-slate-100 transition-colors hover:bg-slate-50/70 ${
+//                                   isDragging
+//                                     ? "opacity-60"
+//                                     : ""
+//                                 } ${
+//                                   isDropTarget
+//                                     ? "bg-blue-50 ring-1 ring-inset ring-blue-200"
+//                                     : ""
+//                                 }`}
+//                               >
+//                                 {DEFAULT_TABLE_COLUMN_ORDER.map(
+//                                   (
+//                                     columnKey,
+//                                   ) => {
+//                                     const column =
+//                                       tableColumns[
+//                                         columnKey
+//                                       ];
+
+//                                     return (
+//                                       <td
+//                                         key={`${item.id}-${columnKey}`}
+//                                         className={
+//                                           column.cellClassName
+//                                         }
+//                                       >
+//                                         {column.render(
+//                                           item,
+//                                         )}
+//                                       </td>
+//                                     );
+//                                   },
+//                                 )}
+//                               </tr>
+//                             );
+//                           },
+//                         )}
+//                       </tbody>
+//                     </table>
+//                   </div>
+//                 </section>
+//               </div>
+//             </div>
+
+//             {/* Bottom Bar */}
+
+//             <div className="border-t border-slate-200 bg-white px-6 py-4 shadow-[0_-8px_30px_rgba(15,23,42,0.04)]">
+//               <div className="mx-auto flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
+//                 <div className="flex flex-wrap items-center gap-8">
+//                   <div>
+//                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+//                       Request ID
+//                     </p>
+
+//                     <p className="text-sm font-semibold text-slate-700">
+//                       {formData.requestId ||
+//                         "Generating..."}
+//                     </p>
+//                   </div>
+
+//                   <div>
+//                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
+//                       Request Total
+//                     </p>
+
+//                     <p className="text-xl font-semibold text-slate-950">
+//                       Rs{" "}
+//                       {formatAmount(
+//                         totalAmount,
+//                       )}
+//                     </p>
+//                   </div>
+//                 </div>
+
+//                 <div className="flex flex-wrap items-center gap-2">
+//                   <Button
+//                     type="button"
+//                     variant="outline"
+//                     onClick={
+//                       handleExportPdf
+//                     }
+//                     className="gap-2 rounded-full border-slate-200 bg-white"
+//                   >
+//                     <FileText className="h-4 w-4" />
+//                     PDF
+//                   </Button>
+
+//                   <Button
+//                     type="button"
+//                     variant="outline"
+//                     onClick={
+//                       handleExportExcel
+//                     }
+//                     className="gap-2 rounded-full border-slate-200 bg-white"
+//                   >
+//                     <FileSpreadsheet className="h-4 w-4" />
+//                     Excel
+//                   </Button>
+
+//                   <Button
+//                     type="submit"
+//                     disabled={
+//                       loading ||
+//                       (!editingInvoice &&
+//                         !formData.requestId)
+//                     }
+//                     className="rounded-full px-7"
+//                   >
+//                     {loading
+//                       ? "Submitting..."
+//                       : !editingInvoice &&
+//                           !formData.requestId
+//                         ? "Preparing ID..."
+//                         : editingInvoice
+//                           ? "Update & Resubmit"
+//                           : "Submit Request"}
+//                   </Button>
+//                 </div>
+//               </div>
+//             </div>
+//           </form>
+//         </div>
+//       </DialogContent>
+//     </Dialog>
+//   );
+// }
 
 import {
   useEffect,
@@ -11161,7 +14369,6 @@ import {
 } from "lucide-react";
 import {
   collection,
-  addDoc,
   serverTimestamp,
   doc,
   updateDoc,
@@ -11255,7 +14462,9 @@ type AutoResizeTextareaProps = TextareaHTMLAttributes<HTMLTextAreaElement> & {
 };
 
 function parseAmount(value: any): number {
-  if (value === null || value === undefined || value === "") return 0;
+  if (value === null || value === undefined || value === "") {
+    return 0;
+  }
 
   const parsed = Number(String(value).replace(/,/g, ""));
 
@@ -11266,11 +14475,15 @@ function formatNumberWithCommas(
   value: any,
   removeTrailingZeroes = false,
 ): string {
-  if (value === null || value === undefined || value === "") return "";
+  if (value === null || value === undefined || value === "") {
+    return "";
+  }
 
   const rawValue = String(value).replace(/,/g, "").trim();
 
-  if (!rawValue || rawValue === ".") return rawValue;
+  if (!rawValue || rawValue === ".") {
+    return rawValue;
+  }
 
   const [integerPart, decimalPart] = rawValue.split(".");
 
@@ -11290,9 +14503,7 @@ function formatNumberWithCommas(
       return `${formattedInteger}.${trimmedDecimal}`;
     }
 
-    return removeTrailingZeroes
-      ? formattedInteger
-      : `${formattedInteger}.`;
+    return removeTrailingZeroes ? formattedInteger : `${formattedInteger}.`;
   }
 
   return formattedInteger;
@@ -11303,14 +14514,13 @@ function formatAmount(value: any): string {
 
   return amount.toLocaleString("en-PK", {
     minimumFractionDigits: amount % 1 === 0 ? 0 : 2,
+
     maximumFractionDigits: 2,
   });
 }
 
 function sanitizeDecimalInput(value: string) {
-  let cleanValue = value
-    .replace(/,/g, "")
-    .replace(/[^\d.]/g, "");
+  let cleanValue = value.replace(/,/g, "").replace(/[^\d.]/g, "");
 
   const parts = cleanValue.split(".");
 
@@ -11334,11 +14544,7 @@ function formatDateForDisplay(value: any) {
 }
 
 function normalizeInvoiceType(value: any): InvoiceType {
-  if (
-    value === "general" ||
-    value === "project" ||
-    value === "asset"
-  ) {
+  if (value === "general" || value === "project" || value === "asset") {
     return value;
   }
 
@@ -11346,9 +14552,13 @@ function normalizeInvoiceType(value: any): InvoiceType {
 }
 
 function getInvoiceTypeLabel(type: InvoiceType) {
-  if (type === "project") return "Project";
+  if (type === "project") {
+    return "Project";
+  }
 
-  if (type === "asset") return "Asset";
+  if (type === "asset") {
+    return "Asset";
+  }
 
   return "General";
 }
@@ -11366,25 +14576,14 @@ function safeExportFileName(value: string) {
     .slice(0, 80);
 }
 
-function getAutoWidth(
-  value: any,
-  minWidthCh = 10,
-  maxWidthCh = 45,
-) {
+function getAutoWidth(value: any, minWidthCh = 10, maxWidthCh = 45) {
   const text = String(value || "");
 
   const longestLine = text
     .split("\n")
-    .reduce(
-      (longest, line) =>
-        Math.max(longest, line.length),
-      0,
-    );
+    .reduce((longest, line) => Math.max(longest, line.length), 0);
 
-  return `${Math.min(
-    Math.max(longestLine + 2, minWidthCh),
-    maxWidthCh,
-  )}ch`;
+  return `${Math.min(Math.max(longestLine + 2, minWidthCh), maxWidthCh)}ch`;
 }
 
 function AutoResizeTextarea({
@@ -11398,8 +14597,7 @@ function AutoResizeTextarea({
   style,
   ...props
 }: AutoResizeTextareaProps) {
-  const textareaRef =
-    useRef<HTMLTextAreaElement | null>(null);
+  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
 
   function resizeTextarea() {
     const el = textareaRef.current;
@@ -11415,10 +14613,7 @@ function AutoResizeTextarea({
 
     el.style.height = `${nextHeight}px`;
 
-    el.style.overflowY =
-      el.scrollHeight > maxHeight
-        ? "auto"
-        : "hidden";
+    el.style.overflowY = el.scrollHeight > maxHeight ? "auto" : "hidden";
   }
 
   useEffect(() => {
@@ -11438,11 +14633,7 @@ function AutoResizeTextarea({
       className={`resize-none overflow-hidden text-sm leading-5 ${className}`}
       style={{
         minHeight,
-        width: getAutoWidth(
-          value,
-          minWidthCh,
-          maxWidthCh,
-        ),
+        width: getAutoWidth(value, minWidthCh, maxWidthCh),
         ...style,
       }}
       {...props}
@@ -11479,25 +14670,16 @@ function getRoleLabel(role: string) {
     roleLabels[normalizedRole] ||
     normalizedRole
       .replace(/_/g, " ")
-      .replace(/\b\w/g, (letter) =>
-        letter.toUpperCase(),
-      )
+      .replace(/\b\w/g, (letter) => letter.toUpperCase())
   );
 }
 
 function canRoleCreateBudgetRequest(role: string) {
   const roleKey = getRoleKey(role);
 
-  const blockedRoles = [
-    "admin",
-    "main_admin",
-    "super_admin",
-  ];
+  const blockedRoles = ["admin", "main_admin", "super_admin"];
 
-  return (
-    !!roleKey &&
-    !blockedRoles.includes(roleKey)
-  );
+  return !!roleKey && !blockedRoles.includes(roleKey);
 }
 
 export default function InvoiceRequestModal({
@@ -11507,37 +14689,27 @@ export default function InvoiceRequestModal({
   editingInvoice = null,
 }: BudgetRequestModalProps) {
   const { userProfile } = useAuth();
+
   const { toast } = useToast();
 
-  const currentUserRole = getRoleKey(
-    userProfile?.role || "",
-  );
+  const currentUserRole = getRoleKey(userProfile?.role || "");
 
-  const canSubmitBudgetRequest =
-    canRoleCreateBudgetRequest(currentUserRole);
+  const canSubmitBudgetRequest = canRoleCreateBudgetRequest(currentUserRole);
 
   const [loading, setLoading] = useState(false);
 
-  const [invoiceType, setInvoiceType] =
-    useState<InvoiceType>("general");
+  const [invoiceType, setInvoiceType] = useState<InvoiceType>("general");
 
-  const [estimates, setEstimates] =
-    useState<any[]>([]);
+  const [estimates, setEstimates] = useState<any[]>([]);
 
-  const [suppliers, setSuppliers] =
-    useState<any[]>([]);
+  const [suppliers, setSuppliers] = useState<any[]>([]);
 
-  const [
-    selectedEstimateId,
-    setSelectedEstimateId,
-  ] = useState("");
+  const [selectedEstimateId, setSelectedEstimateId] = useState("");
 
-  const [
-    selectedEstimateInput,
-    setSelectedEstimateInput,
-  ] = useState("");
+  const [selectedEstimateInput, setSelectedEstimateInput] = useState("");
 
   const [subject, setSubject] = useState("");
+
   const [message, setMessage] = useState("");
 
   const [formData, setFormData] = useState({
@@ -11549,46 +14721,27 @@ export default function InvoiceRequestModal({
     comment: "",
   });
 
-  const [lineItems, setLineItems] =
-    useState<LineItem[]>([
-      {
-        id: 1,
-        date: "",
-        service: "",
-        description: "",
-        vendor: "",
-        supplierId: "",
-        supplierName: "",
-        units: "",
-        unitRate: "",
-        total: 0,
-        comment: "",
-      },
-    ]);
+  const [lineItems, setLineItems] = useState<LineItem[]>([
+    {
+      id: 1,
+      date: "",
+      service: "",
+      description: "",
+      vendor: "",
+      supplierId: "",
+      supplierName: "",
+      units: "",
+      unitRate: "",
+      total: 0,
+      comment: "",
+    },
+  ]);
 
-  const [draggedRowId, setDraggedRowId] =
-    useState<number | null>(null);
+  const [draggedRowId, setDraggedRowId] = useState<number | null>(null);
 
-  const [dragOverRowId, setDragOverRowId] =
-    useState<number | null>(null);
+  const [dragOverRowId, setDragOverRowId] = useState<number | null>(null);
 
-  /*
-   * Prevent duplicate Request IDs from being generated
-   * if React Strict Mode runs the effect twice.
-   */
-  const requestIdPreparedRef =
-    useRef(false);
-
-  /*
-   * Used to prevent an older async Request ID
-   * operation from overwriting a newer one.
-   */
-  const requestIdGenerationTokenRef =
-    useRef(0);
-
-  function getEmptyLineItem(
-    id = 1,
-  ): LineItem {
+  function getEmptyLineItem(id = 1): LineItem {
     return {
       id,
       date: "",
@@ -11608,6 +14761,7 @@ export default function InvoiceRequestModal({
     setInvoiceType("general");
 
     setSelectedEstimateId("");
+
     setSelectedEstimateInput("");
 
     setSubject("");
@@ -11622,14 +14776,10 @@ export default function InvoiceRequestModal({
       comment: "",
     });
 
-    setLineItems([
-      getEmptyLineItem(1),
-    ]);
+    setLineItems([getEmptyLineItem(1)]);
   }
 
-  function getSupplierDisplayName(
-    supplier: any,
-  ) {
+  function getSupplierDisplayName(supplier: any) {
     return (
       supplier?.supplierName ||
       supplier?.vendorName ||
@@ -11641,9 +14791,7 @@ export default function InvoiceRequestModal({
     );
   }
 
-  function normalizeVendorLookup(
-    value: any,
-  ) {
+  function normalizeVendorLookup(value: any) {
     return String(value || "")
       .trim()
       .toLowerCase()
@@ -11653,13 +14801,12 @@ export default function InvoiceRequestModal({
       .trim();
   }
 
-  function findSupplierByVendorValue(
-    value: any,
-  ) {
-    const lookup =
-      normalizeVendorLookup(value);
+  function findSupplierByVendorValue(value: any) {
+    const lookup = normalizeVendorLookup(value);
 
-    if (!lookup) return null;
+    if (!lookup) {
+      return null;
+    }
 
     return (
       suppliers.find((supplier) => {
@@ -11673,17 +14820,13 @@ export default function InvoiceRequestModal({
         ];
 
         return supplierNames.some(
-          (name) =>
-            normalizeVendorLookup(name) ===
-            lookup,
+          (name) => normalizeVendorLookup(name) === lookup,
         );
       }) || null
     );
   }
 
-  function getEstimateProjectCode(
-    estimate: any,
-  ) {
+  function getEstimateProjectCode(estimate: any) {
     return (
       estimate?.projectCode ||
       estimate?.projectcode ||
@@ -11693,52 +14836,40 @@ export default function InvoiceRequestModal({
     );
   }
 
-  function getEstimateTitle(
-    estimate: any,
-  ) {
+  function getEstimateTitle(estimate: any) {
+    return estimate?.subject || estimate?.title || "";
+  }
+
+  function getEstimateClientName(estimate: any) {
+    return estimate?.client || estimate?.clientName || "";
+  }
+
+  function getEstimateProjectName(estimate: any) {
     return (
-      estimate?.subject ||
-      estimate?.title ||
-      ""
+      estimate?.projectOwner || estimate?.project || estimate?.projectName || ""
     );
   }
 
-  function getEstimateClientName(
-    estimate: any,
-  ) {
-    return (
-      estimate?.client ||
-      estimate?.clientName ||
-      ""
-    );
-  }
-
-  function getEstimateProjectName(
-    estimate: any,
-  ) {
-    return (
-      estimate?.projectOwner ||
-      estimate?.project ||
-      estimate?.projectName ||
-      ""
-    );
-  }
-
-  function getEstimateDisplayNo(
-    estimate: any,
-  ) {
-    return (
-      estimate?.estimateNo ||
-      estimate?.estimateNumber ||
-      estimate?.id ||
-      ""
+  function getEstimateDisplayNo(estimate: any) {
+    return String(
+      estimate?.estimateNo || estimate?.estimateNumber || estimate?.id || "",
     );
   }
 
   /*
-   * Generate unique Request ID.
+   * =========================================================
+   * ATOMIC REQUEST CREATION + REQUEST ID GENERATION
+   * =========================================================
+   *
+   * Request ID is NOT generated when the form opens.
+   * It is generated only when the request is actually saved.
+   * Counter increment + request creation happen in one
+   * Firestore transaction, so concurrent users receive
+   * unique sequential IDs.
    */
-  async function generateRequestId() {
+  async function createBudgetRequestWithRequestId(
+    requestData: Record<string, any>,
+  ) {
     const counterRef = doc(
       db,
       "Panels",
@@ -11747,216 +14878,132 @@ export default function InvoiceRequestModal({
       "invoiceRequests",
     );
 
-    return await runTransaction(
-      db,
-      async (transaction) => {
-        const snap =
-          await transaction.get(counterRef);
-
-        let count = 1;
-
-        if (!snap.exists()) {
-          transaction.set(counterRef, {
-            count: 1,
-          });
-        } else {
-          count =
-            (snap.data().count || 0) + 1;
-
-          transaction.update(counterRef, {
-            count,
-          });
-        }
-
-        const year =
-          new Date().getFullYear();
-
-        return `PR-${year}-${String(
-          count,
-        ).padStart(4, "0")}`;
-      },
+    const requestRef = doc(
+      collection(db, "Panels", PANEL_ID, "invoiceRequests"),
     );
+
+    return await runTransaction(db, async (transaction) => {
+      const counterSnapshot = await transaction.get(counterRef);
+
+      let currentCount = 0;
+
+      if (counterSnapshot.exists()) {
+        currentCount = Number(counterSnapshot.data()?.count || 0);
+      }
+
+      const nextCount = currentCount + 1;
+
+      const year = new Date().getFullYear();
+
+      const requestId = `PR-${year}-${String(nextCount).padStart(4, "0")}`;
+
+      if (counterSnapshot.exists()) {
+        transaction.update(counterRef, {
+          count: nextCount,
+
+          updatedAt: serverTimestamp(),
+        });
+      } else {
+        transaction.set(counterRef, {
+          count: nextCount,
+
+          createdAt: serverTimestamp(),
+
+          updatedAt: serverTimestamp(),
+        });
+      }
+
+      transaction.set(requestRef, {
+        ...requestData,
+
+        requestId,
+
+        sequenceNumber: nextCount,
+
+        requestYear: year,
+      });
+
+      return {
+        id: requestRef.id,
+        requestId,
+        sequenceNumber: nextCount,
+      };
+    });
   }
 
   /*
-   * Reset form whenever a NEW Budget Request
-   * modal is opened.
+   * Reset new-request form whenever the popup is opened.
+   * No Request ID is generated here.
    */
   useEffect(() => {
-    if (!isOpen || editingInvoice) return;
+    if (!isOpen || editingInvoice) {
+      return;
+    }
 
     resetForm();
   }, [isOpen, editingInvoice]);
 
-  /*
-   * NEW:
-   * Generate Request ID as soon as the
-   * Create Budget Request screen opens.
-   */
+  /* Fetch suppliers. */
   useEffect(() => {
     if (!isOpen) {
-      requestIdPreparedRef.current =
-        false;
-
-      requestIdGenerationTokenRef.current +=
-        1;
-
       return;
     }
 
-    /*
-     * Editing requests already have
-     * their existing Request ID.
-     */
-    if (editingInvoice) {
-      return;
-    }
+    const fetchSuppliers = async () => {
+      try {
+        const snap = await getDocs(
+          collection(db, "Panels", PANEL_ID, "suppliers"),
+        );
 
-    /*
-     * Prevent React StrictMode from
-     * generating two IDs.
-     */
-    if (
-      requestIdPreparedRef.current
-    ) {
-      return;
-    }
-
-    requestIdPreparedRef.current = true;
-
-    const generationToken =
-      ++requestIdGenerationTokenRef.current;
-
-    const prepareRequestId =
-      async () => {
-        try {
-          const requestId =
-            await generateRequestId();
-
-          /*
-           * Ignore result if this is an
-           * old generation request.
-           */
-          if (
-            requestIdGenerationTokenRef.current !==
-            generationToken
-          ) {
-            return;
-          }
-
-          setFormData((prev) => ({
-            ...prev,
-            requestId,
-          }));
-        } catch (error) {
-          console.error(
-            "Failed to generate Request ID:",
-            error,
+        const data = snap.docs
+          .map((d) => ({
+            id: d.id,
+            ...d.data(),
+          }))
+          .sort((a, b) =>
+            getSupplierDisplayName(a).localeCompare(getSupplierDisplayName(b)),
           );
 
-          if (
-            requestIdGenerationTokenRef.current ===
-            generationToken
-          ) {
-            requestIdPreparedRef.current =
-              false;
-          }
-
-          toast({
-            title:
-              "Request ID Error",
-            description:
-              "Could not generate the Budget Request ID.",
-            variant: "destructive",
-          });
-        }
-      };
-
-    prepareRequestId();
-  }, [isOpen, editingInvoice]);
-
-  useEffect(() => {
-    if (!isOpen) return;
-
-    const fetchSuppliers =
-      async () => {
-        try {
-          const snap =
-            await getDocs(
-              collection(
-                db,
-                "Panels",
-                PANEL_ID,
-                "suppliers",
-              ),
-            );
-
-          const data = snap.docs
-            .map((d) => ({
-              id: d.id,
-              ...d.data(),
-            }))
-            .sort((a, b) =>
-              getSupplierDisplayName(
-                a,
-              ).localeCompare(
-                getSupplierDisplayName(b),
-              ),
-            );
-
-          setSuppliers(data);
-        } catch (error) {
-          console.error(
-            "Failed to fetch suppliers:",
-            error,
-          );
-        }
-      };
+        setSuppliers(data);
+      } catch (error) {
+        console.error("Failed to fetch suppliers:", error);
+      }
+    };
 
     fetchSuppliers();
   }, [isOpen]);
 
+  /* Fetch estimates only for Project requests. */
   useEffect(() => {
-    if (
-      !isOpen ||
-      invoiceType !== "project"
-    ) {
+    if (!isOpen || invoiceType !== "project") {
       return;
     }
 
-    const fetchEstimates =
-      async () => {
-        try {
-          const snap =
-            await getDocs(
-              collection(
-                db,
-                "Panels",
-                PANEL_ID,
-                "estimates",
-              ),
-            );
+    const fetchEstimates = async () => {
+      try {
+        const snap = await getDocs(
+          collection(db, "Panels", PANEL_ID, "estimates"),
+        );
 
-          setEstimates(
-            snap.docs.map((d) => ({
-              id: d.id,
-              ...d.data(),
-            })),
-          );
-        } catch (error) {
-          console.error(
-            "Failed to fetch estimates:",
-            error,
-          );
-        }
-      };
+        setEstimates(
+          snap.docs.map((d) => ({
+            id: d.id,
+            ...d.data(),
+          })),
+        );
+      } catch (error) {
+        console.error("Failed to fetch estimates:", error);
+      }
+    };
 
     fetchEstimates();
   }, [isOpen, invoiceType]);
 
+  /* Clear Project-specific fields if request type changes. */
   useEffect(() => {
     if (invoiceType !== "project") {
       setSelectedEstimateId("");
+
       setSelectedEstimateInput("");
 
       setFormData((prev) => ({
@@ -11969,54 +15016,27 @@ export default function InvoiceRequestModal({
   }, [invoiceType]);
 
   useEffect(() => {
-    if (
-      !selectedEstimateId ||
-      !estimates.length
-    ) {
+    if (!selectedEstimateId || !estimates.length) {
       return;
     }
 
-    const matchedEstimate =
-      estimates.find(
-        (e) =>
-          e.id ===
-          selectedEstimateId,
-      );
+    const matchedEstimate = estimates.find((e) => e.id === selectedEstimateId);
 
     if (matchedEstimate) {
-      setSelectedEstimateInput(
-        getEstimateDisplayNo(
-          matchedEstimate,
-        ),
-      );
+      setSelectedEstimateInput(getEstimateDisplayNo(matchedEstimate));
     }
-  }, [
-    selectedEstimateId,
-    estimates,
-  ]);
+  }, [selectedEstimateId, estimates]);
 
-  function handleEstimateSelect(
-    value: string,
-  ) {
+  function handleEstimateSelect(value: string) {
     setSelectedEstimateInput(value);
 
-    const normalizedValue = value
-      .trim()
-      .toLowerCase();
+    const normalizedValue = value.trim().toLowerCase();
 
-    const est = estimates.find(
-      (e) => {
-        const displayNo =
-          getEstimateDisplayNo(e)
-            .trim()
-            .toLowerCase();
+    const est = estimates.find((e) => {
+      const displayNo = getEstimateDisplayNo(e).trim().toLowerCase();
 
-        return (
-          e.id === value ||
-          displayNo === normalizedValue
-        );
-      },
-    );
+      return e.id === value || displayNo === normalizedValue;
+    });
 
     if (!est) {
       setSelectedEstimateId(value);
@@ -12037,25 +15057,17 @@ export default function InvoiceRequestModal({
     setFormData((prev) => ({
       ...prev,
 
-      clientName:
-        getEstimateClientName(est),
+      clientName: getEstimateClientName(est),
 
-      title:
-        getEstimateTitle(est),
+      title: getEstimateTitle(est),
 
-      project:
-        getEstimateProjectName(est),
+      project: getEstimateProjectName(est),
 
-      projectCode:
-        getEstimateProjectCode(est),
+      projectCode: getEstimateProjectCode(est),
     }));
   }
 
-  function updateLineItem(
-    id: number,
-    field: keyof LineItem,
-    value: string,
-  ) {
+  function updateLineItem(id: number, field: keyof LineItem, value: string) {
     setLineItems((prev) =>
       prev.map((item) => {
         if (item.id !== id) {
@@ -12068,32 +15080,20 @@ export default function InvoiceRequestModal({
         };
 
         if (field === "vendor") {
-          const matchedSupplier =
-            findSupplierByVendorValue(
-              value,
-            );
+          const matchedSupplier = findSupplierByVendorValue(value);
 
-          updated.supplierId =
-            matchedSupplier?.id || "";
+          updated.supplierId = matchedSupplier?.id || "";
 
-          updated.supplierName =
-            matchedSupplier
-              ? getSupplierDisplayName(
-                  matchedSupplier,
-                )
-              : "";
+          updated.supplierName = matchedSupplier
+            ? getSupplierDisplayName(matchedSupplier)
+            : "";
         }
 
-        const units = parseAmount(
-          updated.units,
-        );
+        const units = parseAmount(updated.units);
 
-        const rate = parseAmount(
-          updated.unitRate,
-        );
+        const rate = parseAmount(updated.unitRate);
 
-        updated.total =
-          units * rate;
+        updated.total = units * rate;
 
         return updated;
       }),
@@ -12103,75 +15103,37 @@ export default function InvoiceRequestModal({
   function addLineItem() {
     setLineItems((prev) => {
       const nextId =
-        prev.length > 0
-          ? Math.max(
-              ...prev.map(
-                (item) =>
-                  item.id || 0,
-              ),
-            ) + 1
-          : 1;
+        prev.length > 0 ? Math.max(...prev.map((item) => item.id || 0)) + 1 : 1;
 
-      return [
-        ...prev,
-        getEmptyLineItem(nextId),
-      ];
+      return [...prev, getEmptyLineItem(nextId)];
     });
   }
 
   function removeLineItem(id: number) {
     if (lineItems.length > 1) {
-      setLineItems((prev) =>
-        prev.filter(
-          (i) => i.id !== id,
-        ),
-      );
+      setLineItems((prev) => prev.filter((i) => i.id !== id));
     }
   }
 
-  function moveLineItemRow(
-    sourceRowId: number,
-    targetRowId: number,
-  ) {
-    if (
-      sourceRowId === targetRowId
-    ) {
+  function moveLineItemRow(sourceRowId: number, targetRowId: number) {
+    if (sourceRowId === targetRowId) {
       return;
     }
 
     setLineItems((prev) => {
-      const sourceIndex =
-        prev.findIndex(
-          (item) =>
-            item.id === sourceRowId,
-        );
+      const sourceIndex = prev.findIndex((item) => item.id === sourceRowId);
 
-      const targetIndex =
-        prev.findIndex(
-          (item) =>
-            item.id === targetRowId,
-        );
+      const targetIndex = prev.findIndex((item) => item.id === targetRowId);
 
-      if (
-        sourceIndex === -1 ||
-        targetIndex === -1
-      ) {
+      if (sourceIndex === -1 || targetIndex === -1) {
         return prev;
       }
 
       const nextItems = [...prev];
 
-      const [movedItem] =
-        nextItems.splice(
-          sourceIndex,
-          1,
-        );
+      const [movedItem] = nextItems.splice(sourceIndex, 1);
 
-      nextItems.splice(
-        targetIndex,
-        0,
-        movedItem,
-      );
+      nextItems.splice(targetIndex, 0, movedItem);
 
       return nextItems;
     });
@@ -12183,13 +15145,9 @@ export default function InvoiceRequestModal({
   ) {
     setDraggedRowId(rowId);
 
-    event.dataTransfer.effectAllowed =
-      "move";
+    event.dataTransfer.effectAllowed = "move";
 
-    event.dataTransfer.setData(
-      "text/plain",
-      String(rowId),
-    );
+    event.dataTransfer.setData("text/plain", String(rowId));
   }
 
   function handleRowDragOver(
@@ -12202,8 +15160,7 @@ export default function InvoiceRequestModal({
 
     event.preventDefault();
 
-    event.dataTransfer.dropEffect =
-      "move";
+    event.dataTransfer.dropEffect = "move";
 
     setDragOverRowId(rowId);
   }
@@ -12215,20 +15172,10 @@ export default function InvoiceRequestModal({
     event.preventDefault();
 
     const sourceRowId =
-      draggedRowId ??
-      Number(
-        event.dataTransfer.getData(
-          "text/plain",
-        ),
-      );
+      draggedRowId ?? Number(event.dataTransfer.getData("text/plain"));
 
-    if (
-      Number.isFinite(sourceRowId)
-    ) {
-      moveLineItemRow(
-        sourceRowId,
-        targetRowId,
-      );
+    if (Number.isFinite(sourceRowId)) {
+      moveLineItemRow(sourceRowId, targetRowId);
     }
 
     setDraggedRowId(null);
@@ -12240,228 +15187,120 @@ export default function InvoiceRequestModal({
     setDragOverRowId(null);
   }
 
-  function normalizeLineItemsForSave(
-    items: any[],
-  ): LineItem[] {
-    return items.map(
-      (item, index) => {
-        const unitsValue =
-          item.units ??
-          item.unit ??
-          item.quantity ??
-          item.qty ??
-          "";
+  function normalizeLineItemsForSave(items: any[]): LineItem[] {
+    return items.map((item, index) => {
+      const unitsValue =
+        item.units ?? item.unit ?? item.quantity ?? item.qty ?? "";
 
-        const unitRateValue =
-          item.unitRate ??
-          item.rate ??
-          item.price ??
-          "";
+      const unitRateValue = item.unitRate ?? item.rate ?? item.price ?? "";
 
-        const units =
-          parseAmount(unitsValue);
+      const units = parseAmount(unitsValue);
 
-        const unitRate =
-          parseAmount(
-            unitRateValue,
-          );
+      const unitRate = parseAmount(unitRateValue);
 
-        const savedTotal =
-          parseAmount(item.total);
+      const savedTotal = parseAmount(item.total);
 
-        const vendorName =
-          item.vendor ||
-          item.vendorName ||
-          item.supplierName ||
-          "";
+      const vendorName =
+        item.vendor || item.vendorName || item.supplierName || "";
 
-        const matchedSupplier =
-          suppliers.find(
-            (supplier) =>
-              String(
-                supplier?.id || "",
-              ) ===
-              String(
-                item.supplierId ||
-                  item.vendorId ||
-                  "",
-              ),
-          ) ||
-          findSupplierByVendorValue(
-            vendorName,
-          );
+      const matchedSupplier =
+        suppliers.find(
+          (supplier) =>
+            String(supplier?.id || "") ===
+            String(item.supplierId || item.vendorId || ""),
+        ) || findSupplierByVendorValue(vendorName);
 
-        return {
-          id:
-            item.id ||
-            index + 1,
+      return {
+        id: item.id || index + 1,
 
-          date:
-            item.date || "",
+        date: item.date || "",
 
-          service:
-            item.service || "",
+        service: item.service || "",
 
-          description:
-            item.description || "",
+        description: item.description || "",
 
-          vendor:
-            vendorName,
+        vendor: vendorName,
 
-          supplierId:
-            matchedSupplier?.id ||
-            item.supplierId ||
-            item.vendorId ||
-            "",
+        supplierId:
+          matchedSupplier?.id || item.supplierId || item.vendorId || "",
 
-          supplierName:
-            matchedSupplier
-              ? getSupplierDisplayName(
-                  matchedSupplier,
-                )
-              : item.supplierName ||
-                "",
+        supplierName: matchedSupplier
+          ? getSupplierDisplayName(matchedSupplier)
+          : item.supplierName || "",
 
-          units:
-            String(unitsValue),
+        units: String(unitsValue),
 
-          unitRate:
-            String(unitRateValue),
+        unitRate: String(unitRateValue),
 
-          total:
-            savedTotal ||
-            units * unitRate,
+        total: savedTotal || units * unitRate,
 
-          comment:
-            item.comment || "",
-        };
-      },
-    );
+        comment: item.comment || "",
+      };
+    });
   }
 
-  const totalAmount =
-    lineItems.reduce(
-      (sum, item) =>
-        sum +
-        parseAmount(item.total),
-      0,
-    );
+  const totalAmount = lineItems.reduce(
+    (sum, item) => sum + parseAmount(item.total),
+    0,
+  );
 
   function getRequestNumber() {
-    return (
-      formData.requestId ||
-      editingInvoice?.requestId ||
-      "DRAFT"
-    );
+    return formData.requestId || editingInvoice?.requestId || "DRAFT";
   }
 
   function getRequestTitle() {
-    return (
-      formData.title ||
-      subject ||
-      "Budget Request"
-    );
+    return formData.title || subject || "Budget Request";
   }
 
-  function getExportFileName(
-    extension: "pdf" | "xlsx",
-  ) {
-    const baseName =
-      safeExportFileName(
-        `${getRequestNumber()}-${getRequestTitle()}`,
-      );
+  function getExportFileName(extension: "pdf" | "xlsx") {
+    const baseName = safeExportFileName(
+      `${getRequestNumber()}-${getRequestTitle()}`,
+    );
 
     return `${baseName || "budget-request"}.${extension}`;
   }
 
   function getExportMetaRows() {
     return [
-      [
-        "Request ID",
-        getRequestNumber(),
-      ],
+      ["Request ID", getRequestNumber()],
 
-      [
-        "Request Type",
-        getInvoiceTypeLabel(
-          invoiceType,
-        ),
-      ],
+      ["Request Type", getInvoiceTypeLabel(invoiceType)],
 
-      [
-        "Title",
-        getRequestTitle(),
-      ],
+      ["Title", getRequestTitle()],
 
-      [
-        "Subject",
-        subject ||
-          formData.title ||
-          "-",
-      ],
+      ["Subject", subject || formData.title || "-"],
 
       [
         "Estimate No",
-        invoiceType === "project"
-          ? selectedEstimateInput ||
-            "-"
-          : "-",
+        invoiceType === "project" ? selectedEstimateInput || "-" : "-",
       ],
 
-      [
-        "Client",
-        invoiceType === "project"
-          ? formData.clientName ||
-            "-"
-          : "-",
-      ],
+      ["Client", invoiceType === "project" ? formData.clientName || "-" : "-"],
 
-      [
-        "Project",
-        invoiceType === "project"
-          ? formData.project || "-"
-          : "-",
-      ],
+      ["Project", invoiceType === "project" ? formData.project || "-" : "-"],
 
       [
         "Project Code",
-        invoiceType === "project"
-          ? formData.projectCode ||
-            "-"
-          : "-",
+        invoiceType === "project" ? formData.projectCode || "-" : "-",
       ],
 
       [
         "Prepared By",
         userProfile?.displayName ||
-          (userProfile as any)
-            ?.name ||
+          (userProfile as any)?.name ||
           userProfile?.email ||
           "-",
       ],
 
-      [
-        "Prepared On",
-        formatDateForDisplay(
-          new Date(),
-        ),
-      ],
+      ["Prepared On", formatDateForDisplay(new Date())],
 
-      [
-        "Total",
-        `Rs ${formatAmount(
-          totalAmount,
-        )}`,
-      ],
+      ["Total", `Rs ${formatAmount(totalAmount)}`],
     ];
   }
 
   function handleExportPdf() {
     try {
-      const exportItems =
-        normalizeLineItemsForSave(
-          lineItems,
-        );
+      const exportItems = normalizeLineItemsForSave(lineItems);
 
       const pdf = new jsPDF({
         orientation: "landscape",
@@ -12469,41 +15308,28 @@ export default function InvoiceRequestModal({
         format: "a4",
       });
 
-      const pageWidth =
-        pdf.internal.pageSize.getWidth();
+      const pageWidth = pdf.internal.pageSize.getWidth();
 
-      const metaRows =
-        getExportMetaRows();
+      const metaRows = getExportMetaRows();
 
       pdf.setProperties({
         title: `Budget Request - ${getRequestNumber()}`,
       });
 
-      pdf.setFont(
-        "helvetica",
-        "bold",
-      );
+      pdf.setFont("helvetica", "bold");
 
       pdf.setFontSize(22);
 
-      pdf.text(
-        "Budget Request",
-        40,
-        44,
-      );
+      pdf.text("Budget Request", 40, 44);
 
-      pdf.setFont(
-        "helvetica",
-        "normal",
-      );
+      pdf.setFont("helvetica", "normal");
 
       pdf.setFontSize(10);
+
       pdf.setTextColor(90);
 
       pdf.text(
-        `Generated ${formatDateForDisplay(
-          new Date(),
-        )}`,
+        `Generated ${formatDateForDisplay(new Date())}`,
         pageWidth - 40,
         44,
         {
@@ -12513,52 +15339,33 @@ export default function InvoiceRequestModal({
 
       pdf.setTextColor(30);
 
-      metaRows.forEach(
-        ([label, value], index) => {
-          const column =
-            index % 3;
+      metaRows.forEach(([label, value], index) => {
+        const column = index % 3;
 
-          const row =
-            Math.floor(index / 3);
+        const row = Math.floor(index / 3);
 
-          const x =
-            40 + column * 260;
+        const x = 40 + column * 260;
 
-          const y =
-            78 + row * 34;
+        const y = 78 + row * 34;
 
-          pdf.setFont(
-            "helvetica",
-            "bold",
-          );
+        pdf.setFont("helvetica", "bold");
 
-          pdf.setFontSize(8);
-          pdf.setTextColor(100);
+        pdf.setFontSize(8);
 
-          pdf.text(
-            label,
-            x,
-            y,
-          );
+        pdf.setTextColor(100);
 
-          pdf.setFont(
-            "helvetica",
-            "normal",
-          );
+        pdf.text(label, x, y);
 
-          pdf.setFontSize(10);
-          pdf.setTextColor(25);
+        pdf.setFont("helvetica", "normal");
 
-          pdf.text(
-            String(value || "-"),
-            x,
-            y + 14,
-            {
-              maxWidth: 220,
-            },
-          );
-        },
-      );
+        pdf.setFontSize(10);
+
+        pdf.setTextColor(25);
+
+        pdf.text(String(value || "-"), x, y + 14, {
+          maxWidth: 220,
+        });
+      });
 
       autoTable(pdf, {
         startY: 220,
@@ -12567,9 +15374,7 @@ export default function InvoiceRequestModal({
           [
             "#",
             "Date",
-            getLineItemLabel(
-              invoiceType,
-            ),
+            getLineItemLabel(invoiceType),
             "Description",
             "Vendor",
             "Units",
@@ -12579,34 +15384,25 @@ export default function InvoiceRequestModal({
           ],
         ],
 
-        body: exportItems.map(
-          (item, index) => [
-            String(index + 1),
+        body: exportItems.map((item, index) => [
+          String(index + 1),
 
-            formatDateForDisplay(
-              item.date,
-            ) || "-",
+          formatDateForDisplay(item.date) || "-",
 
-            item.service || "-",
+          item.service || "-",
 
-            item.description ||
-              "-",
+          item.description || "-",
 
-            item.vendor || "-",
+          item.vendor || "-",
 
-            item.units || "0",
+          item.units || "0",
 
-            formatAmount(
-              item.unitRate,
-            ),
+          formatAmount(item.unitRate),
 
-            formatAmount(
-              item.total,
-            ),
+          formatAmount(item.total),
 
-            item.comment || "-",
-          ],
-        ),
+          item.comment || "-",
+        ]),
 
         foot: [
           [
@@ -12617,9 +15413,7 @@ export default function InvoiceRequestModal({
             "",
             "",
             "Total",
-            `Rs ${formatAmount(
-              totalAmount,
-            )}`,
+            `Rs ${formatAmount(totalAmount)}`,
             "",
           ],
         ],
@@ -12628,41 +15422,21 @@ export default function InvoiceRequestModal({
           font: "helvetica",
           fontSize: 8,
           cellPadding: 5,
-          lineColor: [
-            229,
-            231,
-            235,
-          ],
+          lineColor: [229, 231, 235],
           lineWidth: 0.5,
           overflow: "linebreak",
           valign: "top",
         },
 
         headStyles: {
-          fillColor: [
-            15,
-            23,
-            42,
-          ],
-          textColor: [
-            255,
-            255,
-            255,
-          ],
+          fillColor: [15, 23, 42],
+          textColor: [255, 255, 255],
           fontStyle: "bold",
         },
 
         footStyles: {
-          fillColor: [
-            248,
-            250,
-            252,
-          ],
-          textColor: [
-            15,
-            23,
-            42,
-          ],
+          fillColor: [248, 250, 252],
+          textColor: [15, 23, 42],
           fontStyle: "bold",
         },
 
@@ -12714,65 +15488,37 @@ export default function InvoiceRequestModal({
         },
       });
 
-      const lastTableY =
-        (pdf as any)
-          .lastAutoTable?.finalY ||
-        220;
+      const lastTableY = (pdf as any).lastAutoTable?.finalY || 220;
 
-      if (
-        message &&
-        lastTableY <
-          pdf.internal.pageSize.getHeight() -
-            70
-      ) {
-        pdf.setFont(
-          "helvetica",
-          "bold",
-        );
+      if (message && lastTableY < pdf.internal.pageSize.getHeight() - 70) {
+        pdf.setFont("helvetica", "bold");
 
         pdf.setFontSize(9);
 
-        pdf.text(
-          "Message",
-          40,
-          lastTableY + 28,
-        );
+        pdf.text("Message", 40, lastTableY + 28);
 
-        pdf.setFont(
-          "helvetica",
-          "normal",
-        );
+        pdf.setFont("helvetica", "normal");
 
         pdf.setFontSize(9);
 
-        pdf.text(
-          message,
-          40,
-          lastTableY + 44,
-          {
-            maxWidth:
-              pageWidth - 80,
-          },
-        );
+        pdf.text(message, 40, lastTableY + 44, {
+          maxWidth: pageWidth - 80,
+        });
       }
 
-      pdf.save(
-        getExportFileName("pdf"),
-      );
+      pdf.save(getExportFileName("pdf"));
 
       toast({
         title: "PDF exported",
       });
     } catch (error) {
-      console.error(
-        "Failed to export PDF:",
-        error,
-      );
+      console.error("Failed to export PDF:", error);
 
       toast({
         title: "Export failed",
-        description:
-          "Could not export the Budget Request PDF.",
+
+        description: "Could not export the Budget Request PDF.",
+
         variant: "destructive",
       });
     }
@@ -12780,15 +15526,11 @@ export default function InvoiceRequestModal({
 
   function handleExportExcel() {
     try {
-      const exportItems =
-        normalizeLineItemsForSave(
-          lineItems,
-        );
+      const exportItems = normalizeLineItemsForSave(lineItems);
 
-      const rows: Array<
-        Array<string | number>
-      > = [
+      const rows: Array<Array<string | number>> = [
         ["Budget Request"],
+
         [],
 
         ...getExportMetaRows(),
@@ -12800,9 +15542,7 @@ export default function InvoiceRequestModal({
         [
           "#",
           "Date",
-          getLineItemLabel(
-            invoiceType,
-          ),
+          getLineItemLabel(invoiceType),
           "Description",
           "Vendor",
           "Units",
@@ -12811,60 +15551,34 @@ export default function InvoiceRequestModal({
           "Comment",
         ],
 
-        ...exportItems.map(
-          (item, index) => [
-            index + 1,
+        ...exportItems.map((item, index) => [
+          index + 1,
 
-            formatDateForDisplay(
-              item.date,
-            ),
+          formatDateForDisplay(item.date),
 
-            item.service,
+          item.service,
 
-            item.description,
+          item.description,
 
-            item.vendor,
+          item.vendor,
 
-            parseAmount(
-              item.units,
-            ),
+          parseAmount(item.units),
 
-            parseAmount(
-              item.unitRate,
-            ),
+          parseAmount(item.unitRate),
 
-            parseAmount(
-              item.total,
-            ),
+          parseAmount(item.total),
 
-            item.comment,
-          ],
-        ),
+          item.comment,
+        ]),
 
-        [
-          "",
-          "",
-          "",
-          "",
-          "",
-          "",
-          "Total",
-          totalAmount,
-          "",
-        ],
+        ["", "", "", "", "", "", "Total", totalAmount, ""],
       ];
 
       if (message) {
-        rows.push(
-          [],
-          ["Message", message],
-        );
+        rows.push([], ["Message", message]);
       }
 
-      const worksheet =
-        XLSX.utils.aoa_to_sheet(
-          rows,
-        );
+      const worksheet = XLSX.utils.aoa_to_sheet(rows);
 
       worksheet["!cols"] = [
         { wch: 6 },
@@ -12878,71 +15592,61 @@ export default function InvoiceRequestModal({
         { wch: 28 },
       ];
 
-      const workbook =
-        XLSX.utils.book_new();
+      const workbook = XLSX.utils.book_new();
 
-      XLSX.utils.book_append_sheet(
-        workbook,
-        worksheet,
-        "Budget Request",
-      );
+      XLSX.utils.book_append_sheet(workbook, worksheet, "Budget Request");
 
-      XLSX.writeFile(
-        workbook,
-        getExportFileName("xlsx"),
-      );
+      XLSX.writeFile(workbook, getExportFileName("xlsx"));
 
       toast({
         title: "Excel exported",
       });
     } catch (error) {
-      console.error(
-        "Failed to export Excel:",
-        error,
-      );
+      console.error("Failed to export Excel:", error);
 
       toast({
         title: "Export failed",
-        description:
-          "Could not export the Budget Request Excel file.",
+
+        description: "Could not export the Budget Request Excel file.",
+
         variant: "destructive",
       });
     }
   }
 
-  async function handleSubmit(
-    e: FormEvent<HTMLFormElement>,
-  ) {
+  /*
+   * =========================================================
+   * SUBMIT - ROLE / BUDGET ROLE BASED
+   * =========================================================
+   */
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
 
-    if (
-      !userProfile ||
-      !canSubmitBudgetRequest
-    ) {
+    if (!userProfile || !canSubmitBudgetRequest) {
       toast({
-        title:
-          "Permission denied",
-        description:
-          "Only Admin users cannot create Budget Requests.",
+        title: "Permission denied",
+
+        description: "Only Admin users cannot create Budget Requests.",
+
         variant: "destructive",
       });
 
       return;
     }
 
+    if (loading) {
+      return;
+    }
+
     try {
       setLoading(true);
 
-      const lineItemsForSave =
-        normalizeLineItemsForSave(
-          lineItems,
-        );
+      const lineItemsForSave = normalizeLineItemsForSave(lineItems);
 
       const submittedBy =
         (userProfile as any).id ||
         (userProfile as any).uid ||
-        (userProfile as any)
-          .userId ||
+        (userProfile as any).userId ||
         userProfile.email ||
         "";
 
@@ -12952,191 +15656,173 @@ export default function InvoiceRequestModal({
         userProfile.email ||
         "";
 
+      /*
+       * Budget Request routing is ROLE based.
+       * Department is NOT required.
+       *
+       * When editing/resubmitting a returned request,
+       * preserve the request's original Budget Role.
+       */
+      const requestBudgetRoleId = String(
+        editingInvoice?.budgetRoleId ||
+          editingInvoice?.budgetRole ||
+          editingInvoice?.submittedByBudgetRole ||
+          editingInvoice?.submittedByRole ||
+          (userProfile as any)?.role ||
+          currentUserRole ||
+          "",
+      ).trim();
+
+      const requestBudgetRoleKey = getRoleKey(
+        editingInvoice?.budgetRoleKey ||
+          editingInvoice?.submittedByBudgetRoleKey ||
+          requestBudgetRoleId,
+      );
+
+      const requestBudgetRoleLabel = String(
+        editingInvoice?.budgetRoleLabel ||
+          editingInvoice?.submittedByRoleLabel ||
+          getRoleLabel(requestBudgetRoleId) ||
+          requestBudgetRoleId,
+      ).trim();
+
+      if (!requestBudgetRoleId || !requestBudgetRoleKey) {
+        toast({
+          title: "Budget Role required",
+
+          description:
+            "Your user account does not have a Role assigned. Please assign a Role in User Management before creating a Budget Request.",
+
+          variant: "destructive",
+        });
+
+        return;
+      }
+
       if (!editingInvoice) {
-        /*
-         * IMPORTANT:
-         * Use the Request ID that was already
-         * generated when the modal opened.
-         */
-        const requestId =
-          formData.requestId;
+        const result = await createBudgetRequestWithRequestId({
+          invoiceType,
 
-        if (!requestId) {
-          toast({
-            title:
-              "Request ID missing",
-            description:
-              "Please wait for the Request ID to be generated.",
-            variant: "destructive",
-          });
+          estimateId: selectedEstimateId || "",
 
-          return;
-        }
+          estimateNumber:
+            invoiceType === "project" ? selectedEstimateInput : "",
 
-        await addDoc(
-          collection(
-            db,
-            "Panels",
-            PANEL_ID,
-            "invoiceRequests",
-          ),
-          {
-            requestId,
+          clientName: invoiceType === "project" ? formData.clientName : "",
 
-            invoiceType,
+          project: invoiceType === "project" ? formData.project : "",
 
-            estimateId:
-              selectedEstimateId ||
-              "",
+          projectName: invoiceType === "project" ? formData.project : "",
 
-            estimateNumber:
-              invoiceType ===
-              "project"
-                ? selectedEstimateInput
-                : "",
+          projectCode: invoiceType === "project" ? formData.projectCode : "",
 
-            clientName:
-              invoiceType ===
-              "project"
-                ? formData.clientName
-                : "",
+          title: formData.title,
 
-            project:
-              invoiceType ===
-              "project"
-                ? formData.project
-                : "",
+          lineItems: lineItemsForSave,
 
-            projectName:
-              invoiceType ===
-              "project"
-                ? formData.project
-                : "",
+          items: lineItemsForSave,
 
-            projectCode:
-              invoiceType ===
-              "project"
-                ? formData.projectCode
-                : "",
+          totalAmount,
 
-            title:
-              formData.title,
+          subject,
 
-            lineItems:
-              lineItemsForSave,
+          message,
 
-            items:
-              lineItemsForSave,
+          /*
+           * Budget Role ownership.
+           * InvoiceRequests.tsx uses these fields
+           * to select the correct approval workflow.
+           */
+          budgetRoleId: requestBudgetRoleId,
 
-            totalAmount,
+          budgetRole: requestBudgetRoleId,
 
-            subject,
+          budgetRoleKey: requestBudgetRoleKey,
 
-            message,
+          budgetRoleLabel: requestBudgetRoleLabel,
 
-            status:
-              "pending_main_admin",
+          submittedByBudgetRole: requestBudgetRoleId,
 
-            currentApprover:
-              "main_admin",
+          submittedByBudgetRoleKey: requestBudgetRoleKey,
 
-            returnedToRole: "",
+          status: "pending_workflow_configuration",
 
-            returnedToRoleLabel:
-              "",
+          currentApprover: "",
 
-            returnedToCreator:
-              false,
+          currentApprovalLevel: 0,
 
-            needsCreatorRevision:
-              false,
+          currentApprovalLevelId: "",
 
-            submittedAt:
-              serverTimestamp(),
+          currentApprovalLevelName: "",
 
-            editDate: null,
+          currentApproverUserIds: [],
 
-            submittedBy,
+          currentApproverRoleIds: [],
 
-            createdBy:
-              submittedBy,
+          currentApproverRoleNames: [],
 
-            submittedByRole:
-              currentUserRole,
+          returnedToRole: "",
 
-            submittedByRoleLabel:
-              getRoleLabel(
-                currentUserRole,
-              ),
+          returnedToRoleLabel: "",
 
-            submittedByName,
+          returnedToCreator: false,
 
-            createdByName:
-              submittedByName,
+          needsCreatorRevision: false,
 
-            updatedAt:
-              serverTimestamp(),
-          },
-        );
+          submittedAt: serverTimestamp(),
+
+          editDate: null,
+
+          submittedBy,
+
+          createdBy: submittedBy,
+
+          /* Existing role fields preserved. */
+          submittedByRole: requestBudgetRoleId,
+
+          submittedByRoleLabel: requestBudgetRoleLabel,
+
+          submittedByName,
+
+          createdByName: submittedByName,
+
+          updatedAt: serverTimestamp(),
+        });
+
+        setFormData((prev) => ({
+          ...prev,
+          requestId: result.requestId,
+        }));
 
         toast({
-          title:
-            "Budget request submitted",
+          title: "Budget request submitted",
+
+          description: `Request ${result.requestId} created successfully.`,
         });
       } else {
         await updateDoc(
-          doc(
-            db,
-            "Panels",
-            PANEL_ID,
-            "invoiceRequests",
-            editingInvoice.id,
-          ),
+          doc(db, "Panels", PANEL_ID, "invoiceRequests", editingInvoice.id),
           {
             invoiceType,
 
-            estimateId:
-              selectedEstimateId ||
-              "",
+            estimateId: selectedEstimateId || "",
 
             estimateNumber:
-              invoiceType ===
-              "project"
-                ? selectedEstimateInput
-                : "",
+              invoiceType === "project" ? selectedEstimateInput : "",
 
-            clientName:
-              invoiceType ===
-              "project"
-                ? formData.clientName
-                : "",
+            clientName: invoiceType === "project" ? formData.clientName : "",
 
-            project:
-              invoiceType ===
-              "project"
-                ? formData.project
-                : "",
+            project: invoiceType === "project" ? formData.project : "",
 
-            projectName:
-              invoiceType ===
-              "project"
-                ? formData.project
-                : "",
+            projectName: invoiceType === "project" ? formData.project : "",
 
-            projectCode:
-              invoiceType ===
-              "project"
-                ? formData.projectCode
-                : "",
+            projectCode: invoiceType === "project" ? formData.projectCode : "",
 
-            title:
-              formData.title,
+            title: formData.title,
 
-            lineItems:
-              lineItemsForSave,
+            lineItems: lineItemsForSave,
 
-            items:
-              lineItemsForSave,
+            items: lineItemsForSave,
 
             totalAmount,
 
@@ -13144,34 +15830,60 @@ export default function InvoiceRequestModal({
 
             message,
 
-            status:
-              "pending_main_admin",
+            budgetRoleId: requestBudgetRoleId,
 
-            currentApprover:
-              "main_admin",
+            budgetRole: requestBudgetRoleId,
+
+            budgetRoleKey: requestBudgetRoleKey,
+
+            budgetRoleLabel: requestBudgetRoleLabel,
+
+            submittedByBudgetRole: requestBudgetRoleId,
+
+            submittedByBudgetRoleKey: requestBudgetRoleKey,
+
+            submittedByRole: requestBudgetRoleId,
+
+            submittedByRoleLabel: requestBudgetRoleLabel,
+
+            status: "pending_workflow_configuration",
+
+            currentApprover: "",
+
+            currentApprovalLevel: 0,
+
+            currentApprovalLevelId: "",
+
+            currentApprovalLevelName: "",
+
+            currentApproverUserIds: [],
+
+            currentApproverRoleIds: [],
+
+            currentApproverRoleNames: [],
 
             returnedToRole: "",
 
-            returnedToRoleLabel:
-              "",
+            returnedToRoleLabel: "",
 
-            returnedToCreator:
-              false,
+            returnedToCreator: false,
 
-            needsCreatorRevision:
-              false,
+            needsCreatorRevision: false,
 
-            editDate:
-              serverTimestamp(),
+            editDate: serverTimestamp(),
 
-            updatedAt:
-              serverTimestamp(),
+            resubmittedAt: serverTimestamp(),
+
+            updatedAt: serverTimestamp(),
           },
         );
 
         toast({
-          title:
-            "Budget request resubmitted",
+          title: "Budget request resubmitted",
+
+          description: editingInvoice.requestId
+            ? `Request ${editingInvoice.requestId} updated successfully.`
+            : "Budget request updated successfully.",
         });
       }
 
@@ -13179,12 +15891,14 @@ export default function InvoiceRequestModal({
 
       resetForm();
     } catch (err) {
-      console.error(err);
+      console.error("Failed to submit Budget Request:", err);
 
       toast({
         title: "Error",
+
         description:
-          "Failed to submit Budget Request.",
+          "Failed to submit Budget Request. No Request ID was consumed if the transaction failed.",
+
         variant: "destructive",
       });
     } finally {
@@ -13192,104 +15906,64 @@ export default function InvoiceRequestModal({
     }
   }
 
+  /* Load existing request when editing. */
   useEffect(() => {
-    if (!editingInvoice) return;
+    if (!editingInvoice) {
+      return;
+    }
 
-    setInvoiceType(
-      normalizeInvoiceType(
-        editingInvoice.invoiceType,
-      ),
-    );
+    setInvoiceType(normalizeInvoiceType(editingInvoice.invoiceType));
 
-    setSelectedEstimateId(
-      editingInvoice.estimateId ||
-        "",
-    );
+    setSelectedEstimateId(editingInvoice.estimateId || "");
 
     setSelectedEstimateInput(
-      editingInvoice.estimateNumber ||
-        editingInvoice.estimateId ||
-        "",
+      editingInvoice.estimateNumber || editingInvoice.estimateId || "",
     );
 
-    setSubject(
-      editingInvoice.subject ||
-        "",
-    );
+    setSubject(editingInvoice.subject || "");
 
-    setMessage(
-      editingInvoice.message ||
-        "",
-    );
+    setMessage(editingInvoice.message || "");
 
     setFormData({
-      requestId:
-        editingInvoice.requestId ||
-        "",
+      requestId: editingInvoice.requestId || "",
 
-      clientName:
-        editingInvoice.clientName ||
-        "",
+      clientName: editingInvoice.clientName || "",
 
-      project:
-        editingInvoice.project ||
-        editingInvoice.projectName ||
-        "",
+      project: editingInvoice.project || editingInvoice.projectName || "",
 
-      projectCode:
-        editingInvoice.projectCode ||
-        "",
+      projectCode: editingInvoice.projectCode || "",
 
-      title:
-        editingInvoice.title ||
-        "",
+      title: editingInvoice.title || "",
 
-      comment:
-        editingInvoice.comment ||
-        "",
+      comment: editingInvoice.comment || "",
     });
 
-    const sourceItems =
-      editingInvoice.lineItems
-        ?.length
-        ? editingInvoice.lineItems
-        : editingInvoice.items
-              ?.length
-          ? editingInvoice.items
-          : [];
+    const sourceItems = editingInvoice.lineItems?.length
+      ? editingInvoice.lineItems
+      : editingInvoice.items?.length
+        ? editingInvoice.items
+        : [];
 
     setLineItems(
       sourceItems.length
-        ? normalizeLineItemsForSave(
-            sourceItems,
-          )
-        : [
-            getEmptyLineItem(1),
-          ],
+        ? normalizeLineItemsForSave(sourceItems)
+        : [getEmptyLineItem(1)],
     );
   }, [editingInvoice]);
 
-  const tableColumns: Record<
-    TableColumnKey,
-    TableColumnConfig
-  > = {
+  const tableColumns: Record<TableColumnKey, TableColumnConfig> = {
     date: {
       label: "Date",
 
-      headerClassName:
-        "min-w-[150px] px-3 text-left font-semibold",
+      headerClassName: "min-w-[150px] px-3 text-left font-semibold",
 
-      headerContentClassName:
-        "justify-start",
+      headerContentClassName: "justify-start",
 
-      cellClassName:
-        "px-3 py-3 align-top",
+      cellClassName: "px-3 py-3 align-top",
 
       render: (item) => (
         <Popover>
-          <PopoverTrigger
-            asChild
-          >
+          <PopoverTrigger asChild>
             <Button
               type="button"
               variant="outline"
@@ -13297,34 +15971,16 @@ export default function InvoiceRequestModal({
             >
               <CalendarIcon className="mr-2 h-4 w-4 text-slate-400" />
 
-              {item.date
-                ? format(
-                    new Date(
-                      item.date,
-                    ),
-                    "PPP",
-                  )
-                : "Pick date"}
+              {item.date ? format(new Date(item.date), "PPP") : "Pick date"}
             </Button>
           </PopoverTrigger>
 
           <PopoverContent className="w-auto rounded-xl p-0">
             <Calendar
               mode="single"
-              selected={
-                item.date
-                  ? new Date(
-                      item.date,
-                    )
-                  : undefined
-              }
+              selected={item.date ? new Date(item.date) : undefined}
               onSelect={(date) =>
-                updateLineItem(
-                  item.id,
-                  "date",
-                  date?.toISOString() ||
-                    "",
-                )
+                updateLineItem(item.id, "date", date?.toISOString() || "")
               }
               initialFocus
             />
@@ -13334,36 +15990,20 @@ export default function InvoiceRequestModal({
     },
 
     service: {
-      label:
-        getLineItemLabel(
-          invoiceType,
-        ),
+      label: getLineItemLabel(invoiceType),
 
-      headerClassName:
-        "min-w-[160px] px-3 text-left font-semibold",
+      headerClassName: "min-w-[160px] px-3 text-left font-semibold",
 
-      headerContentClassName:
-        "justify-start",
+      headerContentClassName: "justify-start",
 
-      cellClassName:
-        "px-3 py-3 align-top",
+      cellClassName: "px-3 py-3 align-top",
 
       render: (item) => (
         <Input
           className="h-10 rounded-xl border-slate-200 bg-slate-50/60 text-sm"
           value={item.service}
-          onChange={(e) =>
-            updateLineItem(
-              item.id,
-              "service",
-              e.target.value,
-            )
-          }
-          placeholder={
-            invoiceType === "asset"
-              ? "Asset name"
-              : "Service"
-          }
+          onChange={(e) => updateLineItem(item.id, "service", e.target.value)}
+          placeholder={invoiceType === "asset" ? "Asset name" : "Service"}
         />
       ),
     },
@@ -13371,14 +16011,11 @@ export default function InvoiceRequestModal({
     description: {
       label: "Description",
 
-      headerClassName:
-        "min-w-[240px] px-3 text-left font-semibold",
+      headerClassName: "min-w-[240px] px-3 text-left font-semibold",
 
-      headerContentClassName:
-        "justify-start",
+      headerContentClassName: "justify-start",
 
-      cellClassName:
-        "px-3 py-3 align-top",
+      cellClassName: "px-3 py-3 align-top",
 
       render: (item) => (
         <AutoResizeTextarea
@@ -13390,11 +16027,7 @@ export default function InvoiceRequestModal({
           placeholder="Enter description"
           className="rounded-xl border-slate-200 bg-slate-50/60"
           onChange={(e) =>
-            updateLineItem(
-              item.id,
-              "description",
-              e.target.value,
-            )
+            updateLineItem(item.id, "description", e.target.value)
           }
         />
       ),
@@ -13403,14 +16036,11 @@ export default function InvoiceRequestModal({
     vendor: {
       label: "Vendor",
 
-      headerClassName:
-        "min-w-[190px] px-3 text-left font-semibold",
+      headerClassName: "min-w-[190px] px-3 text-left font-semibold",
 
-      headerContentClassName:
-        "justify-start",
+      headerContentClassName: "justify-start",
 
-      cellClassName:
-        "px-3 py-3 align-top",
+      cellClassName: "px-3 py-3 align-top",
 
       render: (item) => (
         <>
@@ -13418,47 +16048,25 @@ export default function InvoiceRequestModal({
             list={`vendor-options-${item.id}`}
             className="h-10 rounded-xl border-slate-200 bg-slate-50/60 text-sm"
             value={item.vendor}
-            onChange={(e) =>
-              updateLineItem(
-                item.id,
-                "vendor",
-                e.target.value,
-              )
-            }
+            onChange={(e) => updateLineItem(item.id, "vendor", e.target.value)}
             placeholder="Enter vendor name"
             required
           />
 
-          <datalist
-            id={`vendor-options-${item.id}`}
-          >
-            {suppliers.map(
-              (supplier) => {
-                const supplierName =
-                  getSupplierDisplayName(
-                    supplier,
-                  );
+          <datalist id={`vendor-options-${item.id}`}>
+            {suppliers.map((supplier) => {
+              const supplierName = getSupplierDisplayName(supplier);
 
-                if (!supplierName) {
-                  return null;
-                }
+              if (!supplierName) {
+                return null;
+              }
 
-                return (
-                  <option
-                    key={
-                      supplier.id
-                    }
-                    value={
-                      supplierName
-                    }
-                  >
-                    {
-                      supplierName
-                    }
-                  </option>
-                );
-              },
-            )}
+              return (
+                <option key={supplier.id} value={supplierName}>
+                  {supplierName}
+                </option>
+              );
+            })}
           </datalist>
         </>
       ),
@@ -13467,14 +16075,11 @@ export default function InvoiceRequestModal({
     units: {
       label: "Units",
 
-      headerClassName:
-        "w-[100px] px-3 text-center font-semibold",
+      headerClassName: "w-[100px] px-3 text-center font-semibold",
 
-      headerContentClassName:
-        "justify-center",
+      headerContentClassName: "justify-center",
 
-      cellClassName:
-        "px-3 py-3 align-top",
+      cellClassName: "px-3 py-3 align-top",
 
       render: (item) => (
         <Input
@@ -13486,9 +16091,7 @@ export default function InvoiceRequestModal({
             updateLineItem(
               item.id,
               "units",
-              sanitizeDecimalInput(
-                e.target.value,
-              ),
+              sanitizeDecimalInput(e.target.value),
             )
           }
           placeholder="0"
@@ -13499,20 +16102,15 @@ export default function InvoiceRequestModal({
     unitRate: {
       label: "Rate",
 
-      headerClassName:
-        "w-[130px] px-3 text-center font-semibold",
+      headerClassName: "w-[130px] px-3 text-center font-semibold",
 
-      headerContentClassName:
-        "justify-center",
+      headerContentClassName: "justify-center",
 
-      cellClassName:
-        "px-3 py-3 align-top",
+      cellClassName: "px-3 py-3 align-top",
 
       render: (item) => (
         <AutoResizeTextarea
-          value={formatNumberWithCommas(
-            item.unitRate,
-          )}
+          value={formatNumberWithCommas(item.unitRate)}
           inputMode="decimal"
           minWidthCh={8}
           maxWidthCh={18}
@@ -13521,9 +16119,7 @@ export default function InvoiceRequestModal({
           className="rounded-xl border-slate-200 bg-slate-50/60 text-center"
           placeholder="0"
           onKeyDown={(e) => {
-            if (
-              e.key === "Enter"
-            ) {
+            if (e.key === "Enter") {
               e.preventDefault();
             }
           }}
@@ -13531,9 +16127,7 @@ export default function InvoiceRequestModal({
             updateLineItem(
               item.id,
               "unitRate",
-              sanitizeDecimalInput(
-                e.target.value,
-              ),
+              sanitizeDecimalInput(e.target.value),
             )
           }
         />
@@ -13543,42 +16137,30 @@ export default function InvoiceRequestModal({
     total: {
       label: "Total",
 
-      headerClassName:
-        "w-[130px] px-3 text-right font-semibold",
+      headerClassName: "w-[130px] px-3 text-right font-semibold",
 
-      headerContentClassName:
-        "justify-end",
+      headerContentClassName: "justify-end",
 
       cellClassName:
         "px-3 py-4 text-right align-top font-semibold text-slate-950",
 
-      render: (item) =>
-        formatAmount(item.total),
+      render: (item) => formatAmount(item.total),
     },
 
     comment: {
       label: "Comment",
 
-      headerClassName:
-        "min-w-[210px] px-3 text-left font-semibold",
+      headerClassName: "min-w-[210px] px-3 text-left font-semibold",
 
-      headerContentClassName:
-        "justify-start",
+      headerContentClassName: "justify-start",
 
-      cellClassName:
-        "px-3 py-3 align-top",
+      cellClassName: "px-3 py-3 align-top",
 
       render: (item) => (
         <Input
           className="h-10 rounded-xl border-slate-200 bg-slate-50/60 text-sm"
           value={item.comment}
-          onChange={(e) =>
-            updateLineItem(
-              item.id,
-              "comment",
-              e.target.value,
-            )
-          }
+          onChange={(e) => updateLineItem(item.id, "comment", e.target.value)}
           placeholder="Comment"
         />
       ),
@@ -13587,14 +16169,11 @@ export default function InvoiceRequestModal({
     actions: {
       label: "Action",
 
-      headerClassName:
-        "w-[110px] px-3 text-center font-semibold",
+      headerClassName: "w-[110px] px-3 text-center font-semibold",
 
-      headerContentClassName:
-        "justify-center",
+      headerContentClassName: "justify-center",
 
-      cellClassName:
-        "px-3 py-4 text-center align-top",
+      cellClassName: "px-3 py-4 text-center align-top",
 
       render: (item) => (
         <div className="flex items-center justify-center gap-1">
@@ -13602,41 +16181,22 @@ export default function InvoiceRequestModal({
             role="button"
             tabIndex={0}
             draggable
-            onDragStart={(
-              event,
-            ) =>
-              handleRowDragStart(
-                event,
-                item.id,
-              )
-            }
-            onDragEnd={
-              handleRowDragEnd
-            }
+            onDragStart={(event) => handleRowDragStart(event, item.id)}
+            onDragEnd={handleRowDragEnd}
             className="inline-flex cursor-grab items-center justify-center rounded-full p-2 text-slate-400 transition-colors hover:bg-slate-100 hover:text-slate-700 active:cursor-grabbing"
             title="Drag to reorder row"
           >
-            <GripVertical
-              size={18}
-            />
+            <GripVertical size={18} />
           </span>
 
           <button
             type="button"
-            onClick={() =>
-              removeLineItem(
-                item.id,
-              )
-            }
+            onClick={() => removeLineItem(item.id)}
             className="rounded-full p-2 text-red-500 transition-colors hover:bg-red-50 hover:text-red-700 disabled:cursor-not-allowed disabled:opacity-40"
             title="Delete row"
-            disabled={
-              lineItems.length === 1
-            }
+            disabled={lineItems.length === 1}
           >
-            <Trash2
-              size={18}
-            />
+            <Trash2 size={18} />
           </button>
         </div>
       ),
@@ -13647,29 +16207,14 @@ export default function InvoiceRequestModal({
     <Dialog
       open={isOpen}
       onOpenChange={() => {
-        /*
-         * Keep popup open for overlay click,
-         * escape key and default Radix close.
-         */
+        /* Keep popup open for overlay click, Escape key and default Radix close. */
       }}
     >
       <DialogContent
         className="left-0 top-0 h-[100dvh] max-h-none w-screen max-w-none translate-x-0 translate-y-0 overflow-hidden rounded-none border-0 bg-slate-50 p-0 text-slate-950 shadow-none sm:rounded-none [&>button]:hidden"
-        onEscapeKeyDown={(
-          event,
-        ) =>
-          event.preventDefault()
-        }
-        onPointerDownOutside={(
-          event,
-        ) =>
-          event.preventDefault()
-        }
-        onInteractOutside={(
-          event,
-        ) =>
-          event.preventDefault()
-        }
+        onEscapeKeyDown={(event) => event.preventDefault()}
+        onPointerDownOutside={(event) => event.preventDefault()}
+        onInteractOutside={(event) => event.preventDefault()}
       >
         <div className="flex h-full min-h-0 flex-col">
           <DialogHeader className="border-b border-slate-200 bg-white/95 px-6 py-4 shadow-sm backdrop-blur">
@@ -13681,16 +16226,12 @@ export default function InvoiceRequestModal({
                   </span>
 
                   <span className="rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-500">
-                    {editingInvoice
-                      ? "Editing draft"
-                      : "New submission"}
+                    {editingInvoice ? "Editing draft" : "New submission"}
                   </span>
 
-                  {formData.requestId && (
+                  {editingInvoice && formData.requestId && (
                     <span className="rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-xs font-semibold text-blue-700">
-                      {
-                        formData.requestId
-                      }
+                      {formData.requestId}
                     </span>
                   )}
                 </div>
@@ -13702,11 +16243,8 @@ export default function InvoiceRequestModal({
                 </DialogTitle>
 
                 <p className="mt-1 text-sm text-slate-500">
-                  Full-screen workspace
-                  with controlled close,
-                  clean line items, and
-                  export-ready request
-                  data.
+                  Full-screen workspace with controlled close, clean line items,
+                  and export-ready request data.
                 </p>
               </div>
 
@@ -13731,23 +16269,18 @@ export default function InvoiceRequestModal({
           >
             <div className="flex-1 overflow-y-auto px-6 py-6">
               <div className="mx-auto flex w-full flex-col gap-6">
-                {/* Summary Cards */}
-
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-                  {/* Request ID */}
-
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
                       Request ID
                     </p>
 
                     <p className="mt-2 text-xl font-semibold text-slate-950">
-                      {formData.requestId ||
-                        "Generating..."}
+                      {editingInvoice
+                        ? formData.requestId || "-"
+                        : "Assigned on submission"}
                     </p>
                   </div>
-
-                  {/* Total */}
 
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
@@ -13755,14 +16288,9 @@ export default function InvoiceRequestModal({
                     </p>
 
                     <p className="mt-2 text-2xl font-semibold text-slate-950">
-                      Rs{" "}
-                      {formatAmount(
-                        totalAmount,
-                      )}
+                      Rs {formatAmount(totalAmount)}
                     </p>
                   </div>
-
-                  {/* Type */}
 
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
@@ -13770,20 +16298,13 @@ export default function InvoiceRequestModal({
                     </p>
 
                     <p className="mt-2 text-2xl font-semibold capitalize text-slate-950">
-                      {getInvoiceTypeLabel(
-                        invoiceType,
-                      )}
+                      {getInvoiceTypeLabel(invoiceType)}
                     </p>
                   </div>
 
-                  {/* Rows */}
-
                   <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                     <p className="text-xs font-medium uppercase tracking-[0.18em] text-slate-400">
-                      {invoiceType ===
-                      "asset"
-                        ? "Asset Rows"
-                        : "Service Rows"}
+                      {invoiceType === "asset" ? "Asset Rows" : "Service Rows"}
                     </p>
 
                     <p className="mt-2 text-2xl font-semibold text-slate-950">
@@ -13791,8 +16312,6 @@ export default function InvoiceRequestModal({
                     </p>
                   </div>
                 </div>
-
-                {/* Request Details */}
 
                 <section className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
                   <div className="mb-5 flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
@@ -13802,9 +16321,7 @@ export default function InvoiceRequestModal({
                       </h3>
 
                       <p className="text-sm text-slate-500">
-                        Select the request
-                        mode and fill the
-                        required details.
+                        Select the request mode and fill the required details.
                       </p>
                     </div>
 
@@ -13812,16 +16329,9 @@ export default function InvoiceRequestModal({
                       <Button
                         type="button"
                         variant={
-                          invoiceType ===
-                          "general"
-                            ? "default"
-                            : "ghost"
+                          invoiceType === "general" ? "default" : "ghost"
                         }
-                        onClick={() =>
-                          setInvoiceType(
-                            "general",
-                          )
-                        }
+                        onClick={() => setInvoiceType("general")}
                         className="rounded-full px-5"
                       >
                         General
@@ -13830,16 +16340,9 @@ export default function InvoiceRequestModal({
                       <Button
                         type="button"
                         variant={
-                          invoiceType ===
-                          "project"
-                            ? "default"
-                            : "ghost"
+                          invoiceType === "project" ? "default" : "ghost"
                         }
-                        onClick={() =>
-                          setInvoiceType(
-                            "project",
-                          )
-                        }
+                        onClick={() => setInvoiceType("project")}
                         className="rounded-full px-5"
                       >
                         Project
@@ -13847,25 +16350,14 @@ export default function InvoiceRequestModal({
 
                       <Button
                         type="button"
-                        variant={
-                          invoiceType ===
-                          "asset"
-                            ? "default"
-                            : "ghost"
-                        }
-                        onClick={() =>
-                          setInvoiceType(
-                            "asset",
-                          )
-                        }
+                        variant={invoiceType === "asset" ? "default" : "ghost"}
+                        onClick={() => setInvoiceType("asset")}
                         className="rounded-full px-5"
                       >
                         Asset
                       </Button>
                     </div>
                   </div>
-
-                  {/* Request ID Field */}
 
                   <div className="mb-5 grid grid-cols-1 gap-4 md:grid-cols-2">
                     <div className="space-y-2">
@@ -13874,52 +16366,45 @@ export default function InvoiceRequestModal({
                       </Label>
 
                       <Input
-                        value={
-                          formData.requestId
-                        }
+                        value={editingInvoice ? formData.requestId : ""}
                         readOnly
-                        placeholder="Generating Request ID..."
+                        placeholder={
+                          editingInvoice
+                            ? "Request ID"
+                            : "Assigned automatically when submitted"
+                        }
                         className="h-11 rounded-xl border-blue-200 bg-blue-50 font-semibold text-blue-800"
                       />
 
-                      {!formData.requestId &&
-                        !editingInvoice && (
-                          <p className="text-xs text-slate-400">
-                            Request ID is
-                            being generated...
-                          </p>
-                        )}
+                      {!editingInvoice && (
+                        <p className="text-xs text-slate-400">
+                          The Request ID will be generated automatically only
+                          after this request is successfully saved.
+                        </p>
+                      )}
                     </div>
                   </div>
 
-                  {/* General / Asset */}
-
-                  {invoiceType !==
-                    "project" && (
+                  {invoiceType !== "project" && (
                     <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
                       <div className="space-y-2">
                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          {invoiceType ===
-                          "asset"
+                          {invoiceType === "asset"
                             ? "Asset Title *"
                             : "Title *"}
                         </Label>
 
                         <Input
-                          value={
-                            formData.title
-                          }
+                          value={formData.title}
                           onChange={(e) =>
                             setFormData({
                               ...formData,
-                              title:
-                                e.target
-                                  .value,
+
+                              title: e.target.value,
                             })
                           }
                           placeholder={
-                            invoiceType ===
-                            "asset"
+                            invoiceType === "asset"
                               ? "Enter asset request title"
                               : "Enter request title"
                           }
@@ -13930,23 +16415,16 @@ export default function InvoiceRequestModal({
 
                       <div className="space-y-2">
                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          {invoiceType ===
-                          "asset"
+                          {invoiceType === "asset"
                             ? "Asset Subject"
                             : "Subject"}
                         </Label>
 
                         <Input
                           value={subject}
-                          onChange={(e) =>
-                            setSubject(
-                              e.target
-                                .value,
-                            )
-                          }
+                          onChange={(e) => setSubject(e.target.value)}
                           placeholder={
-                            invoiceType ===
-                            "asset"
+                            invoiceType === "asset"
                               ? "Enter asset subject"
                               : "Enter request subject"
                           }
@@ -13956,23 +16434,16 @@ export default function InvoiceRequestModal({
 
                       <div className="space-y-2 md:col-span-2">
                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                          {invoiceType ===
-                          "asset"
+                          {invoiceType === "asset"
                             ? "Asset Details"
                             : "Message"}
                         </Label>
 
                         <Textarea
                           value={message}
-                          onChange={(e) =>
-                            setMessage(
-                              e.target
-                                .value,
-                            )
-                          }
+                          onChange={(e) => setMessage(e.target.value)}
                           placeholder={
-                            invoiceType ===
-                            "asset"
+                            invoiceType === "asset"
                               ? "Enter asset details or justification"
                               : "Enter request message"
                           }
@@ -13983,10 +16454,7 @@ export default function InvoiceRequestModal({
                     </div>
                   )}
 
-                  {/* Project */}
-
-                  {invoiceType ===
-                    "project" && (
+                  {invoiceType === "project" && (
                     <div className="space-y-4">
                       <div className="space-y-2">
                         <Label className="text-xs font-semibold uppercase tracking-wide text-slate-500">
@@ -13995,35 +16463,20 @@ export default function InvoiceRequestModal({
 
                         <Input
                           list="estimate-options"
-                          value={
-                            selectedEstimateInput
-                          }
-                          onChange={(
-                            e,
-                          ) =>
-                            handleEstimateSelect(
-                              e.target
-                                .value,
-                            )
-                          }
+                          value={selectedEstimateInput}
+                          onChange={(e) => handleEstimateSelect(e.target.value)}
                           placeholder="Select or type estimate number"
                           required
                           className="h-11 rounded-xl border-slate-200 bg-slate-50/60"
                         />
 
                         <datalist id="estimate-options">
-                          {estimates.map(
-                            (e) => (
-                              <option
-                                key={
-                                  e.id
-                                }
-                                value={getEstimateDisplayNo(
-                                  e,
-                                )}
-                              />
-                            ),
-                          )}
+                          {estimates.map((e) => (
+                            <option
+                              key={e.id}
+                              value={getEstimateDisplayNo(e)}
+                            />
+                          ))}
                         </datalist>
                       </div>
 
@@ -14034,9 +16487,7 @@ export default function InvoiceRequestModal({
                           </Label>
 
                           <Input
-                            value={
-                              formData.clientName
-                            }
+                            value={formData.clientName}
                             readOnly
                             className="h-11 rounded-xl border-slate-200 bg-slate-100 text-slate-600"
                             placeholder="Auto-filled from estimate"
@@ -14049,9 +16500,7 @@ export default function InvoiceRequestModal({
                           </Label>
 
                           <Input
-                            value={
-                              formData.title
-                            }
+                            value={formData.title}
                             readOnly
                             className="h-11 rounded-xl border-slate-200 bg-slate-100 text-slate-600"
                             placeholder="Auto-filled from estimate"
@@ -14064,9 +16513,7 @@ export default function InvoiceRequestModal({
                           </Label>
 
                           <Input
-                            value={
-                              formData.project
-                            }
+                            value={formData.project}
                             readOnly
                             className="h-11 rounded-xl border-slate-200 bg-slate-100 text-slate-600"
                             placeholder="Auto-filled from estimate"
@@ -14079,21 +16526,13 @@ export default function InvoiceRequestModal({
                           </Label>
 
                           <Input
-                            value={
-                              formData.projectCode
-                            }
-                            onChange={(
-                              e,
-                            ) =>
-                              setFormData(
-                                {
-                                  ...formData,
-                                  projectCode:
-                                    e
-                                      .target
-                                      .value,
-                                },
-                              )
+                            value={formData.projectCode}
+                            onChange={(e) =>
+                              setFormData({
+                                ...formData,
+
+                                projectCode: e.target.value,
+                              })
                             }
                             placeholder="Auto-filled from estimate"
                             required
@@ -14105,21 +16544,17 @@ export default function InvoiceRequestModal({
                   )}
                 </section>
 
-                {/* Items Table */}
-
                 <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
                   <div className="flex flex-col gap-3 border-b border-slate-200 px-5 py-4 md:flex-row md:items-center md:justify-between">
                     <div>
                       <h3 className="text-base font-semibold text-slate-950">
-                        {invoiceType ===
-                        "asset"
+                        {invoiceType === "asset"
                           ? "Assets & Costing"
                           : "Services & Costing"}
                       </h3>
 
                       <p className="text-sm text-slate-500">
-                        {invoiceType ===
-                        "asset"
+                        {invoiceType === "asset"
                           ? "Add each asset with vendor, quantity, rate, and comments."
                           : "Add each service row with vendor, units, rate, and comments."}
                       </p>
@@ -14127,16 +16562,13 @@ export default function InvoiceRequestModal({
 
                     <Button
                       type="button"
-                      onClick={
-                        addLineItem
-                      }
+                      onClick={addLineItem}
                       variant="outline"
                       className="gap-2 rounded-full border-slate-200 bg-white shadow-sm hover:bg-slate-50"
                     >
                       <Plus className="h-4 w-4" />
 
-                      {invoiceType ===
-                      "asset"
+                      {invoiceType === "asset"
                         ? "Add Asset Row"
                         : "Add Service Row"}
                     </Button>
@@ -14146,131 +16578,75 @@ export default function InvoiceRequestModal({
                     <table className="w-full min-w-[1250px] border-collapse text-sm">
                       <thead className="bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                         <tr className="h-12 border-b border-slate-200">
-                          {DEFAULT_TABLE_COLUMN_ORDER.map(
-                            (
-                              columnKey,
-                            ) => {
-                              const column =
-                                tableColumns[
-                                  columnKey
-                                ];
+                          {DEFAULT_TABLE_COLUMN_ORDER.map((columnKey) => {
+                            const column = tableColumns[columnKey];
 
-                              return (
-                                <th
-                                  key={
-                                    columnKey
-                                  }
-                                  scope="col"
-                                  className={
-                                    column.headerClassName
-                                  }
+                            return (
+                              <th
+                                key={columnKey}
+                                scope="col"
+                                className={column.headerClassName}
+                              >
+                                <span
+                                  className={`flex items-center gap-1.5 ${column.headerContentClassName}`}
                                 >
-                                  <span
-                                    className={`flex items-center gap-1.5 ${column.headerContentClassName}`}
-                                  >
-                                    <span>
-                                      {
-                                        column.label
-                                      }
-                                    </span>
-                                  </span>
-                                </th>
-                              );
-                            },
-                          )}
+                                  <span>{column.label}</span>
+                                </span>
+                              </th>
+                            );
+                          })}
                         </tr>
                       </thead>
 
                       <tbody>
-                        {lineItems.map(
-                          (item) => {
-                            const isDragging =
-                              draggedRowId ===
-                              item.id;
+                        {lineItems.map((item) => {
+                          const isDragging = draggedRowId === item.id;
 
-                            const isDropTarget =
-                              dragOverRowId ===
-                                item.id &&
-                              draggedRowId !==
-                                item.id;
+                          const isDropTarget =
+                            dragOverRowId === item.id &&
+                            draggedRowId !== item.id;
 
-                            return (
-                              <tr
-                                key={
-                                  item.id
-                                }
-                                onDragOver={(
-                                  event,
-                                ) =>
-                                  handleRowDragOver(
-                                    event,
-                                    item.id,
-                                  )
-                                }
-                                onDragLeave={() =>
-                                  setDragOverRowId(
-                                    (
-                                      current,
-                                    ) =>
-                                      current ===
-                                      item.id
-                                        ? null
-                                        : current,
-                                  )
-                                }
-                                onDrop={(
-                                  event,
-                                ) =>
-                                  handleRowDrop(
-                                    event,
-                                    item.id,
-                                  )
-                                }
-                                className={`border-b border-slate-100 transition-colors hover:bg-slate-50/70 ${
-                                  isDragging
-                                    ? "opacity-60"
-                                    : ""
-                                } ${
-                                  isDropTarget
-                                    ? "bg-blue-50 ring-1 ring-inset ring-blue-200"
-                                    : ""
-                                }`}
-                              >
-                                {DEFAULT_TABLE_COLUMN_ORDER.map(
-                                  (
-                                    columnKey,
-                                  ) => {
-                                    const column =
-                                      tableColumns[
-                                        columnKey
-                                      ];
+                          return (
+                            <tr
+                              key={item.id}
+                              onDragOver={(event) =>
+                                handleRowDragOver(event, item.id)
+                              }
+                              onDragLeave={() =>
+                                setDragOverRowId((current) =>
+                                  current === item.id ? null : current,
+                                )
+                              }
+                              onDrop={(event) => handleRowDrop(event, item.id)}
+                              className={`border-b border-slate-100 transition-colors hover:bg-slate-50/70 ${
+                                isDragging ? "opacity-60" : ""
+                              } ${
+                                isDropTarget
+                                  ? "bg-blue-50 ring-1 ring-inset ring-blue-200"
+                                  : ""
+                              }`}
+                            >
+                              {DEFAULT_TABLE_COLUMN_ORDER.map((columnKey) => {
+                                const column = tableColumns[columnKey];
 
-                                    return (
-                                      <td
-                                        key={`${item.id}-${columnKey}`}
-                                        className={
-                                          column.cellClassName
-                                        }
-                                      >
-                                        {column.render(
-                                          item,
-                                        )}
-                                      </td>
-                                    );
-                                  },
-                                )}
-                              </tr>
-                            );
-                          },
-                        )}
+                                return (
+                                  <td
+                                    key={`${item.id}-${columnKey}`}
+                                    className={column.cellClassName}
+                                  >
+                                    {column.render(item)}
+                                  </td>
+                                );
+                              })}
+                            </tr>
+                          );
+                        })}
                       </tbody>
                     </table>
                   </div>
                 </section>
               </div>
             </div>
-
-            {/* Bottom Bar */}
 
             <div className="border-t border-slate-200 bg-white px-6 py-4 shadow-[0_-8px_30px_rgba(15,23,42,0.04)]">
               <div className="mx-auto flex w-full flex-col gap-3 md:flex-row md:items-center md:justify-between">
@@ -14281,8 +16657,9 @@ export default function InvoiceRequestModal({
                     </p>
 
                     <p className="text-sm font-semibold text-slate-700">
-                      {formData.requestId ||
-                        "Generating..."}
+                      {editingInvoice
+                        ? formData.requestId || "-"
+                        : "Assigned on submission"}
                     </p>
                   </div>
 
@@ -14292,10 +16669,7 @@ export default function InvoiceRequestModal({
                     </p>
 
                     <p className="text-xl font-semibold text-slate-950">
-                      Rs{" "}
-                      {formatAmount(
-                        totalAmount,
-                      )}
+                      Rs {formatAmount(totalAmount)}
                     </p>
                   </div>
                 </div>
@@ -14304,9 +16678,7 @@ export default function InvoiceRequestModal({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={
-                      handleExportPdf
-                    }
+                    onClick={handleExportPdf}
                     className="gap-2 rounded-full border-slate-200 bg-white"
                   >
                     <FileText className="h-4 w-4" />
@@ -14316,9 +16688,7 @@ export default function InvoiceRequestModal({
                   <Button
                     type="button"
                     variant="outline"
-                    onClick={
-                      handleExportExcel
-                    }
+                    onClick={handleExportExcel}
                     className="gap-2 rounded-full border-slate-200 bg-white"
                   >
                     <FileSpreadsheet className="h-4 w-4" />
@@ -14327,21 +16697,14 @@ export default function InvoiceRequestModal({
 
                   <Button
                     type="submit"
-                    disabled={
-                      loading ||
-                      (!editingInvoice &&
-                        !formData.requestId)
-                    }
+                    disabled={loading}
                     className="rounded-full px-7"
                   >
                     {loading
                       ? "Submitting..."
-                      : !editingInvoice &&
-                          !formData.requestId
-                        ? "Preparing ID..."
-                        : editingInvoice
-                          ? "Update & Resubmit"
-                          : "Submit Request"}
+                      : editingInvoice
+                        ? "Update & Resubmit"
+                        : "Submit Request"}
                   </Button>
                 </div>
               </div>
