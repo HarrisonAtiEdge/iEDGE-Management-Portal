@@ -31594,10 +31594,6 @@
 //     );
 // }
 
-
-
-
-
 // import { useEffect, useMemo, useRef, useState } from "react";
 // import { useLocation } from "wouter";
 // import { useAuth } from "@/contexts/AuthContext";
@@ -35838,10 +35834,6 @@
 //     </div>
 //   );
 // }
-
-
-
-
 
 // import { useEffect, useMemo, useRef, useState } from "react";
 // import { useLocation } from "wouter";
@@ -43252,8 +43244,6 @@
 //     );
 // }
 
-
-
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useLocation } from "wouter";
 import { useAuth } from "@/contexts/AuthContext";
@@ -43420,9 +43410,7 @@ function getChequeFilterText(invoice: any): string {
 
 function getRequestDetailsItems(invoice: any): any[] {
   const items = Array.isArray(invoice?.items) ? invoice.items : [];
-  const lineItems = Array.isArray(invoice?.lineItems)
-    ? invoice.lineItems
-    : [];
+  const lineItems = Array.isArray(invoice?.lineItems) ? invoice.lineItems : [];
   const approvalItems = Array.isArray(invoice?.approvalItems)
     ? invoice.approvalItems
     : [];
@@ -43623,11 +43611,15 @@ function isPaymentFullyReleased(invoice: any): boolean {
 }
 
 function hasPartialPaymentReleased(invoice: any): boolean {
-  return getTotalReleasedAmount(invoice) > 0 && !isPaymentFullyReleased(invoice);
+  return (
+    getTotalReleasedAmount(invoice) > 0 && !isPaymentFullyReleased(invoice)
+  );
 }
 
 function normalizeText(value: any) {
-  return String(value || "").toLowerCase().trim();
+  return String(value || "")
+    .toLowerCase()
+    .trim();
 }
 
 const ROLE_LABELS: Record<string, string> = {
@@ -43838,7 +43830,9 @@ function getLatestApprovalAction(invoice: any): string {
 function wasReturnedToCreator(invoice: any): boolean {
   const status = normalizeText(invoice?.status);
 
-  if (["rejected", "returned_to_creator", "changes_requested"].includes(status)) {
+  if (
+    ["rejected", "returned_to_creator", "changes_requested"].includes(status)
+  ) {
     return true;
   }
 
@@ -43859,7 +43853,10 @@ function isWaitingForAdminApproval(invoice: any): boolean {
     return true;
   }
 
-  if (status === "pending_operational_admin" && !wasReturnedToCreator(invoice)) {
+  if (
+    status === "pending_operational_admin" &&
+    !wasReturnedToCreator(invoice)
+  ) {
     return true;
   }
 
@@ -43943,7 +43940,10 @@ function getStatusLabel(status: string, invoice?: any): string {
       : "Budget Role Workflow Not Configured";
   }
 
-  if (normalizedStatus === "pending_main_admin" || normalizedStatus === "pending_admin") {
+  if (
+    normalizedStatus === "pending_main_admin" ||
+    normalizedStatus === "pending_admin"
+  ) {
     return "Pending Admin";
   }
 
@@ -44020,10 +44020,26 @@ function getTableStatusSortRank(invoice: any): number {
   if (status === "pending_approval") return 0;
   if (status === "pending_workflow_configuration") return 1;
   if (wasReturnedToCreator(invoice)) return 2;
-  if (["approved", "po_created", "po_submitted", "po_approved", "po_issued", "ready_for_payment", "payment_partially_released"].includes(status)) return 3;
+  if (
+    [
+      "approved",
+      "po_created",
+      "po_submitted",
+      "po_approved",
+      "po_issued",
+      "ready_for_payment",
+      "payment_partially_released",
+    ].includes(status)
+  )
+    return 3;
   if (status === "pending_finance") return 4;
   if (status.startsWith("pending")) return 5;
-  if (["payment_released", "expense_submitted", "expense_completed"].includes(status)) return 6;
+  if (
+    ["payment_released", "expense_submitted", "expense_completed"].includes(
+      status,
+    )
+  )
+    return 6;
   return 7;
 }
 
@@ -44154,8 +44170,9 @@ export default function InvoiceRequests() {
   const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
   const [isExpenseModalOpen, setIsExpenseModalOpen] = useState(false);
   const [isDetailsModalOpen, setIsDetailsModalOpen] = useState(false);
-  const [selectedInvoice, setSelectedInvoice] =
-    useState<InvoiceRequest | null>(null);
+  const [selectedInvoice, setSelectedInvoice] = useState<InvoiceRequest | null>(
+    null,
+  );
   const [isPaymentHistoryModalOpen, setIsPaymentHistoryModalOpen] =
     useState(false);
   const [paymentHistoryInvoice, setPaymentHistoryInvoice] =
@@ -44189,7 +44206,7 @@ export default function InvoiceRequests() {
     `Panels/${PANEL_ID}/expenseSheets`,
   );
   const { data: purchaseOrders = [] } = useFirestoreQuery<any>(
-    `Panels/${PANEL_ID}/purchaseOrders`,
+    `Panels/${PANEL_ID}/PO`,
   );
   const { data: suppliers = [] } = useFirestoreQuery<any>(
     `Panels/${PANEL_ID}/suppliers`,
@@ -44239,7 +44256,9 @@ export default function InvoiceRequests() {
           id === BUDGET_WORKFLOW_CONFIG_ID ||
           id.startsWith(`${BUDGET_WORKFLOW_CONFIG_ID}__role__`) ||
           config?.workflowScope === "role" ||
-          Boolean(config?.budgetRoleKey || config?.budgetRoleId || config?.budgetRole)
+          Boolean(
+            config?.budgetRoleKey || config?.budgetRoleId || config?.budgetRole,
+          )
         );
       })
       .map((config: any) => {
@@ -44294,7 +44313,11 @@ export default function InvoiceRequests() {
       request?.submittedByEmail,
       request?.email,
     ]
-      .map((value) => String(value || "").trim().toLowerCase())
+      .map((value) =>
+        String(value || "")
+          .trim()
+          .toLowerCase(),
+      )
       .filter(Boolean);
 
     if (!ownerValues.length) return "";
@@ -44309,7 +44332,11 @@ export default function InvoiceRequests() {
           user?.authUid,
           user?.email,
         ]
-          .map((value) => String(value || "").trim().toLowerCase())
+          .map((value) =>
+            String(value || "")
+              .trim()
+              .toLowerCase(),
+          )
           .filter(Boolean);
 
         return ownerValues.some((value) => identities.includes(value));
@@ -44400,7 +44427,10 @@ export default function InvoiceRequests() {
       budgetRole: String(config?.budgetRole || "").trim(),
       budgetRoleId: String(config?.budgetRoleId || "").trim(),
       budgetRoleKey: getRoleKey(
-        config?.budgetRoleKey || config?.budgetRoleId || config?.budgetRole || "",
+        config?.budgetRoleKey ||
+          config?.budgetRoleId ||
+          config?.budgetRole ||
+          "",
       ),
     };
   }
@@ -44470,8 +44500,9 @@ export default function InvoiceRequests() {
             status === "pending_workflow_configuration" &&
             String(request?.currentApprover || "") === "" &&
             Number(request?.currentApprovalLevel || 0) === 0 &&
-            getRoleKey(request?.budgetRoleKey || request?.budgetRoleId || "") ===
-              budgetRoleKey;
+            getRoleKey(
+              request?.budgetRoleKey || request?.budgetRoleId || "",
+            ) === budgetRoleKey;
 
           if (!alreadyMarked) {
             try {
@@ -44480,7 +44511,8 @@ export default function InvoiceRequests() {
                 {
                   status: "pending_workflow_configuration",
                   workflowScope: "role",
-                  budgetRole: budgetRoleName || formatRoleLabel(budgetRoleValue),
+                  budgetRole:
+                    budgetRoleName || formatRoleLabel(budgetRoleValue),
                   budgetRoleId: budgetRoleValue || "",
                   budgetRoleKey,
                   approvalBudgetRole:
@@ -44498,7 +44530,10 @@ export default function InvoiceRequests() {
               );
             } catch (error) {
               workflowRepairSignaturesRef.current.delete(requestId);
-              console.error("Failed to mark missing Budget Role workflow:", error);
+              console.error(
+                "Failed to mark missing Budget Role workflow:",
+                error,
+              );
             }
           }
 
@@ -44573,7 +44608,9 @@ export default function InvoiceRequests() {
             resolvedRoleLabel || pendingFields.currentApprover || "",
         };
 
-        const currentRoleNames = Array.isArray(request?.currentApproverRoleNames)
+        const currentRoleNames = Array.isArray(
+          request?.currentApproverRoleNames,
+        )
           ? request.currentApproverRoleNames
           : [];
         const expectedRoleNames = Array.isArray(
@@ -44594,7 +44631,8 @@ export default function InvoiceRequests() {
           currentConfigId !== expectedConfigId ||
           String(request?.currentApprover || "") !==
             String(resolvedPendingFields.currentApprover || "") ||
-          JSON.stringify(currentRoleNames) !== JSON.stringify(expectedRoleNames) ||
+          JSON.stringify(currentRoleNames) !==
+            JSON.stringify(expectedRoleNames) ||
           JSON.stringify(request?.currentApproverRoleIds || []) !==
             JSON.stringify(resolvedPendingFields.currentApproverRoleIds || []);
 
@@ -44629,7 +44667,9 @@ export default function InvoiceRequests() {
                 budgetRoleName ||
                 formatRoleLabel(budgetRoleValue),
               budgetRoleId:
-                (budgetRoleConfig as any)?.budgetRoleId || budgetRoleValue || "",
+                (budgetRoleConfig as any)?.budgetRoleId ||
+                budgetRoleValue ||
+                "",
               budgetRoleKey:
                 getRoleKey((budgetRoleConfig as any)?.budgetRoleKey) ||
                 budgetRoleKey,
@@ -44982,10 +45022,11 @@ export default function InvoiceRequests() {
       if (!alreadyAdded) group.vendorNames.push(vendorName);
     };
 
-    const requestItems = getRequestDetailsItems(invoice).filter((item: any) =>
-      !["rejected", "declined", "cancelled"].includes(
-        normalizeText(item?.status),
-      ),
+    const requestItems = getRequestDetailsItems(invoice).filter(
+      (item: any) =>
+        !["rejected", "declined", "cancelled"].includes(
+          normalizeText(item?.status),
+        ),
     );
 
     requestItems.forEach((item: any) => {
@@ -45000,9 +45041,7 @@ export default function InvoiceRequests() {
       const amount = getItemApprovedAmount(item);
 
       if (currentSupplier) {
-        const supplierId = String(
-          currentSupplier?.id || savedSupplierId || "",
-        );
+        const supplierId = String(currentSupplier?.id || savedSupplierId || "");
         const key = `supplier:${supplierId}`;
         const existing = groups.get(key);
 
@@ -45190,7 +45229,8 @@ export default function InvoiceRequests() {
 
     const matched = candidates.find((po: any) => {
       const poSupplierId = getPOVendorId(po);
-      if (supplierId && poSupplierId && supplierId === poSupplierId) return true;
+      if (supplierId && poSupplierId && supplierId === poSupplierId)
+        return true;
 
       const poVendorName = normalizeVendorIdentity(getPOVendorName(po));
       return Boolean(poVendorName && vendorNames.has(poVendorName));
@@ -45198,7 +45238,10 @@ export default function InvoiceRequests() {
 
     if (matched) return matched;
 
-    if (candidates.length === 1 && getBudgetVendorGroups(invoice).length === 1) {
+    if (
+      candidates.length === 1 &&
+      getBudgetVendorGroups(invoice).length === 1
+    ) {
       return candidates[0];
     }
 
@@ -45389,8 +45432,7 @@ export default function InvoiceRequests() {
       return;
     }
 
-    const supplierName =
-      getSupplierDisplayName(vendor.supplier) || vendor.name;
+    const supplierName = getSupplierDisplayName(vendor.supplier) || vendor.name;
     const vendorGroups = getVendorWorkflowGroups(request);
     const vendorIndex = vendorGroups.findIndex(
       (group) => group.key === vendor.key,
@@ -45446,7 +45488,8 @@ export default function InvoiceRequests() {
   ) {
     const request: any = invoice;
     const isCombinedLocalVendorPayment = Boolean(
-      vendor.isLocalVendorGroup || vendor.key === COMBINED_LOCAL_VENDOR_GROUP_KEY,
+      vendor.isLocalVendorGroup ||
+        vendor.key === COMBINED_LOCAL_VENDOR_GROUP_KEY,
     );
     const paymentVendorNames = [
       ...new Set(
@@ -45525,7 +45568,9 @@ export default function InvoiceRequests() {
         user?.authUid,
         user?.email,
       ].forEach((key) => {
-        const lookupKey = String(key || "").trim().toLowerCase();
+        const lookupKey = String(key || "")
+          .trim()
+          .toLowerCase();
         if (lookupKey) map.set(lookupKey, user);
       });
     });
@@ -45544,7 +45589,9 @@ export default function InvoiceRequests() {
     ];
 
     for (const value of lookupValues) {
-      const lookupKey = String(value || "").trim().toLowerCase();
+      const lookupKey = String(value || "")
+        .trim()
+        .toLowerCase();
       if (!lookupKey) continue;
       const matchedUser = usersByLookup.get(lookupKey);
       if (matchedUser) return matchedUser;
@@ -45782,7 +45829,9 @@ export default function InvoiceRequests() {
     ];
 
     for (const value of ownerLookupValues) {
-      const lookupKey = String(value || "").trim().toLowerCase();
+      const lookupKey = String(value || "")
+        .trim()
+        .toLowerCase();
       if (!lookupKey) continue;
       const matchedUser = usersByLookup.get(lookupKey);
       const matchedRole = getUserRoleLabel(matchedUser);
@@ -45797,11 +45846,19 @@ export default function InvoiceRequests() {
       (userProfile as any)?.authUid,
       userProfile?.email,
     ]
-      .map((value) => String(value || "").trim().toLowerCase())
+      .map((value) =>
+        String(value || "")
+          .trim()
+          .toLowerCase(),
+      )
       .filter(Boolean);
 
     const isCurrentUserOwner = ownerLookupValues
-      .map((value) => String(value || "").trim().toLowerCase())
+      .map((value) =>
+        String(value || "")
+          .trim()
+          .toLowerCase(),
+      )
       .filter(Boolean)
       .some((ownerKey) => currentUserLookupValues.includes(ownerKey));
 
@@ -46225,7 +46282,9 @@ export default function InvoiceRequests() {
         invoice?.submittedByEmail,
         invoice?.email,
       ].forEach((key) => {
-        const lookupKey = String(key || "").trim().toLowerCase();
+        const lookupKey = String(key || "")
+          .trim()
+          .toLowerCase();
         if (lookupKey && !map.has(lookupKey)) map.set(lookupKey, name);
       });
     });
@@ -46297,11 +46356,19 @@ export default function InvoiceRequests() {
       (userProfile as any)?.authUid,
       userProfile?.email,
     ]
-      .map((value) => String(value || "").trim().toLowerCase())
+      .map((value) =>
+        String(value || "")
+          .trim()
+          .toLowerCase(),
+      )
       .filter(Boolean);
 
     const isCurrentUserOwner = lookupValues
-      .map((value) => String(value || "").trim().toLowerCase())
+      .map((value) =>
+        String(value || "")
+          .trim()
+          .toLowerCase(),
+      )
       .filter(Boolean)
       .some((ownerKey) => currentUserLookupValues.includes(ownerKey));
 
@@ -46452,7 +46519,8 @@ export default function InvoiceRequests() {
       const matchesSearch = !search || haystack.includes(search);
       const matchesType = typeFilter === "all" || requestType === typeFilter;
       const matchesStatus =
-        statusFilter === "all" || normalizeText(invoice.status) === statusFilter;
+        statusFilter === "all" ||
+        normalizeText(invoice.status) === statusFilter;
       const matchesCreatedBy =
         createdByFilter === "all" || createdByName === createdByFilter;
       const matchesProjectCode =
@@ -46469,7 +46537,8 @@ export default function InvoiceRequests() {
         normalizeText(chequeFilterText).includes(normalizeText(chequeFilter));
 
       let matchesDate = true;
-      if (fromDate && (!requestDate || requestDate < fromDate)) matchesDate = false;
+      if (fromDate && (!requestDate || requestDate < fromDate))
+        matchesDate = false;
       if (toDate && (!requestDate || requestDate > toDate)) matchesDate = false;
 
       const matchesMonth =
@@ -46724,7 +46793,9 @@ export default function InvoiceRequests() {
               <p className="mt-3 text-3xl font-semibold text-slate-950">
                 {summary.projectCount}
               </p>
-              <p className="mt-1 text-xs text-slate-400">PO flow after approval</p>
+              <p className="mt-1 text-xs text-slate-400">
+                PO flow after approval
+              </p>
             </CardContent>
           </Card>
 
@@ -46736,7 +46807,9 @@ export default function InvoiceRequests() {
               <p className="mt-3 text-3xl font-semibold text-slate-950">
                 {summary.generalCount}
               </p>
-              <p className="mt-1 text-xs text-slate-400">Payment release flow</p>
+              <p className="mt-1 text-xs text-slate-400">
+                Payment release flow
+              </p>
             </CardContent>
           </Card>
 
@@ -46748,13 +46821,17 @@ export default function InvoiceRequests() {
               <p className="mt-3 text-3xl font-semibold text-slate-950">
                 {summary.assetCount}
               </p>
-              <p className="mt-1 text-xs text-slate-400">Dynamic vendor workflow</p>
+              <p className="mt-1 text-xs text-slate-400">
+                Dynamic vendor workflow
+              </p>
             </CardContent>
           </Card>
 
           <Card className="rounded-3xl border-slate-200 bg-white shadow-sm">
             <CardContent className="p-5">
-              <p className="text-sm font-medium text-slate-500">Filtered Value</p>
+              <p className="text-sm font-medium text-slate-500">
+                Filtered Value
+              </p>
               <p className="mt-3 text-2xl font-semibold text-slate-950">
                 Rs {formatPKR(summary.totalAmount)}
               </p>
@@ -47097,7 +47174,8 @@ export default function InvoiceRequests() {
                             </div>
                             {(invoice as any)?.approvalWorkflow?.budgetRole && (
                               <div className="mt-1 text-xs text-slate-400">
-                                Workflow: {(invoice as any).approvalWorkflow.budgetRole}
+                                Workflow:{" "}
+                                {(invoice as any).approvalWorkflow.budgetRole}
                               </div>
                             )}
                           </td>
@@ -47132,9 +47210,7 @@ export default function InvoiceRequests() {
                           <td className="px-5 py-4">
                             <div className="min-w-[180px]">
                               <div className="flex items-center justify-between gap-3 text-xs">
-                                <span className="text-slate-500">
-                                  Released
-                                </span>
+                                <span className="text-slate-500">Released</span>
                                 <span className="font-semibold text-slate-700">
                                   Rs {formatPKR(totalReleasedAmount)}
                                 </span>
@@ -47401,9 +47477,16 @@ export default function InvoiceRequests() {
 
             <div className="flex flex-col gap-3 border-t border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
               <p className="text-sm text-slate-500">
-                Showing <span className="font-medium text-slate-700">{showingFrom}</span>{" "}
-                to <span className="font-medium text-slate-700">{showingTo}</span>{" "}
-                of <span className="font-medium text-slate-700">{sortedInvoices.length}</span>{" "}
+                Showing{" "}
+                <span className="font-medium text-slate-700">
+                  {showingFrom}
+                </span>{" "}
+                to{" "}
+                <span className="font-medium text-slate-700">{showingTo}</span>{" "}
+                of{" "}
+                <span className="font-medium text-slate-700">
+                  {sortedInvoices.length}
+                </span>{" "}
                 requests
               </p>
 
