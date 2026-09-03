@@ -173,6 +173,7 @@ const DEFAULT_SIDEBAR_CONFIG: Record<string, SidebarItem[]> = {
 
   main_admin: [
     { label: "Dashboard", path: "/dashboard", icon: "LayoutDashboard" },
+    { label: "RTD Management", path: "/rtd-management", icon: "FileText" },
     CONTACTS_DROPDOWN,
     FINANCE_DROPDOWN,
   ],

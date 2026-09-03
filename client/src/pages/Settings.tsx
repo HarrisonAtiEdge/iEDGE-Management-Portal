@@ -126,26 +126,30 @@ import TaxSettings from "./TaxSettings";
 import CompanySettings from "./CompanySettings";
 import PaymentTerms from "./PaymentTerms";
 import TermsConditionsSettings from "./TermsConditionsSettings";
-import PackageSettings from "./PackageSettings"; // ✅ ADD
+import FooterTextSettings from "./FooterTextSettings";
+import PackageSettings from "./PackageSettings";
+import PaymentWaiverSettings from "./PaymentWaiverSettings";
 import { Link } from "wouter";
 import { travelTabs } from "@/data/travelTabs";
 
+type SettingsTab =
+  | "general"
+  | "services"
+  | "tax"
+  | "TermsConditionsSettings"
+  | "footerTextSettings"
+  | "companySettings"
+  | "paymentTerms"
+  | "packageSettings"
+  | "paymentWaiver";
+
 export default function Settings() {
-  const [activeTab, setActiveTab] = useState<
-    | "general"
-    | "services"
-    | "tax"
-    | "TermsConditionsSettings"
-    | "companySettings"
-    | "paymentTerms"
-    | "packageSettings" // ✅ ADD
-  >("general");
+  const [activeTab, setActiveTab] = useState<SettingsTab>("general");
 
   return (
     <div className="p-6 space-y-6">
       <h1 className="text-2xl font-semibold border-b pb-2">Settings</h1>
 
-      {/* Tab Navigation */}
       <div className="flex flex-wrap gap-2">
         <Button
           variant={activeTab === "general" ? "default" : "outline"}
@@ -162,8 +166,8 @@ export default function Settings() {
         </Button>
 
         <Button
-          variant={activeTab === "packageSettings" ? "default" : "outline"} // ✅ ADD
-          onClick={() => setActiveTab("packageSettings")} // ✅ ADD
+          variant={activeTab === "packageSettings" ? "default" : "outline"}
+          onClick={() => setActiveTab("packageSettings")}
         >
           Package
         </Button>
@@ -190,6 +194,13 @@ export default function Settings() {
         </Button>
 
         <Button
+          variant={activeTab === "paymentWaiver" ? "default" : "outline"}
+          onClick={() => setActiveTab("paymentWaiver")}
+        >
+          Payment Waiver
+        </Button>
+
+        <Button
           variant={
             activeTab === "TermsConditionsSettings" ? "default" : "outline"
           }
@@ -198,19 +209,25 @@ export default function Settings() {
           Terms & Conditions
         </Button>
 
-        {/* Travel Hover Dropdown */}
+        <Button
+          variant={activeTab === "footerTextSettings" ? "default" : "outline"}
+          onClick={() => setActiveTab("footerTextSettings")}
+        >
+          Footer Text
+        </Button>
+
         <div className="relative group">
           <Button variant="outline">Travel</Button>
 
           <div className="absolute left-0 top-full z-50 hidden min-w-[180px] rounded-md border bg-white shadow-md group-hover:block">
             <div className="py-1">
-              {travelTabs.map((t) => (
-                <Link key={t.path} href={t.path}>
+              {travelTabs.map((tab) => (
+                <Link key={tab.path} href={tab.path}>
                   <button
                     type="button"
                     className="w-full text-left px-3 py-2 text-sm hover:bg-gray-100"
                   >
-                    {t.label}
+                    {tab.label}
                   </button>
                 </Link>
               ))}
@@ -219,7 +236,6 @@ export default function Settings() {
         </div>
       </div>
 
-      {/* Tab Content */}
       <div className="mt-4">
         {activeTab === "general" && (
           <div className="p-4 border rounded-lg bg-gray-50">
@@ -229,12 +245,15 @@ export default function Settings() {
             </p>
           </div>
         )}
+
         {activeTab === "services" && <ServicesSettings />}
-        {activeTab === "packageSettings" && <PackageSettings />} {/* ✅ ADD */}
+        {activeTab === "packageSettings" && <PackageSettings />}
         {activeTab === "tax" && <TaxSettings />}
         {activeTab === "companySettings" && <CompanySettings />}
         {activeTab === "paymentTerms" && <PaymentTerms />}
+        {activeTab === "paymentWaiver" && <PaymentWaiverSettings />}
         {activeTab === "TermsConditionsSettings" && <TermsConditionsSettings />}
+        {activeTab === "footerTextSettings" && <FooterTextSettings />}
       </div>
     </div>
   );

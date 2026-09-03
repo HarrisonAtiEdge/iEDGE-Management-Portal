@@ -1,4 +1,3 @@
-
 // "use client";
 
 // import { useEffect, useMemo, useState } from "react";
@@ -2941,13 +2940,6 @@
 //   );
 // }
 
-
-
-
-
-
-
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -3048,6 +3040,8 @@ const AVAILABLE_TABS = [
   { path: "/sales-management", label: "Sales Management", icon: "PieChart" },
   { path: "/travel/hotel", label: "Travel", icon: "PlaneTakeoff" },
   { path: "/invoice-estimate", label: "Invoice Estimates", icon: "ScrollText" },
+
+  { path: "/rtd-management", label: "RTD Management", icon: "FileText" },
   { path: "/usertravel", label: "Book Hotel", icon: "BedDouble" },
   { path: "/booking", label: "Bookings", icon: "Hotel" },
   { path: "/suppliers", label: "Suppliers", icon: "BookUser" },
@@ -3272,14 +3266,12 @@ export default function UserManagement() {
 
   // dynamic Purchase Order approval workflow
   const [purchaseOrderWorkflow, setPurchaseOrderWorkflow] =
-    useState<BudgetApprovalWorkflowConfig>(
-      {
-        module: "purchase_orders",
-        enabled: true,
-        version: 0,
-        levels: [],
-      } as any,
-    );
+    useState<BudgetApprovalWorkflowConfig>({
+      module: "purchase_orders",
+      enabled: true,
+      version: 0,
+      levels: [],
+    } as any);
   const [savingPurchaseOrderWorkflow, setSavingPurchaseOrderWorkflow] =
     useState(false);
 
@@ -3466,10 +3458,7 @@ export default function UserManagement() {
     }));
   }
 
-  function movePurchaseOrderApprovalLevel(
-    levelId: string,
-    direction: -1 | 1,
-  ) {
+  function movePurchaseOrderApprovalLevel(levelId: string, direction: -1 | 1) {
     setPurchaseOrderWorkflow((previous) => {
       const levels = [...previous.levels];
       const currentIndex = levels.findIndex((level) => level.id === levelId);
@@ -3591,9 +3580,8 @@ export default function UserManagement() {
 
   const selectedBudgetRole = useMemo(() => {
     return (
-      availableBudgetRoles.find(
-        (role) => role.key === selectedBudgetRoleKey,
-      ) || null
+      availableBudgetRoles.find((role) => role.key === selectedBudgetRoleKey) ||
+      null
     );
   }, [availableBudgetRoles, selectedBudgetRoleKey]);
 
@@ -3693,28 +3681,24 @@ export default function UserManagement() {
       ),
       (snapshot) => {
         if (!snapshot.exists()) {
-          setPurchaseOrderWorkflow(
-            {
-              module: "purchase_orders",
-              enabled: true,
-              version: 0,
-              levels: [],
-            } as any,
-          );
+          setPurchaseOrderWorkflow({
+            module: "purchase_orders",
+            enabled: true,
+            version: 0,
+            levels: [],
+          } as any);
           return;
         }
 
         const data = snapshot.data() as BudgetApprovalWorkflowConfig;
-        setPurchaseOrderWorkflow(
-          {
-            ...data,
-            id: snapshot.id,
-            module: "purchase_orders",
-            enabled: data.enabled !== false,
-            version: Number(data.version || 1),
-            levels: sanitizeApprovalLevels(data.levels || []),
-          } as any,
-        );
+        setPurchaseOrderWorkflow({
+          ...data,
+          id: snapshot.id,
+          module: "purchase_orders",
+          enabled: data.enabled !== false,
+          version: Number(data.version || 1),
+          levels: sanitizeApprovalLevels(data.levels || []),
+        } as any);
       },
     );
 
@@ -3813,7 +3797,8 @@ export default function UserManagement() {
     } catch (err: any) {
       toast({
         title: "Error",
-        description: err.message || "Failed to save Budget Role approval workflow.",
+        description:
+          err.message || "Failed to save Budget Role approval workflow.",
         variant: "destructive",
       });
     } finally {
@@ -3942,7 +3927,9 @@ export default function UserManagement() {
     };
   };
 
-  const inactiveUsersCount = activeUsers.filter((user) => !user.isActive).length;
+  const inactiveUsersCount = activeUsers.filter(
+    (user) => !user.isActive,
+  ).length;
 
   const filteredActiveUsers = useMemo(() => {
     const keyword = searchTerm.trim().toLowerCase();
@@ -4077,27 +4064,24 @@ export default function UserManagement() {
         displayName: newUser.displayName,
       });
 
-      await setDoc(
-        doc(db, "Panels", PANEL_ID, "users", credential.user.uid),
-        {
-          displayName: newUser.displayName.trim(),
-          email: newUser.email.trim(),
-          role: newUser.role,
-          accountStatus: "approved",
-          isActive: true,
-          createdAt: new Date(),
-          mobileCountryCode: newUser.mobileCountryCode.trim(),
-          mobileNo: newUser.mobileNo.trim(),
-          region: newUser.region.trim(),
-          reportingTo: newUser.reportingTo.trim(),
-          financialLimit: financialLimitNumber,
-          designation: newUser.designation.trim(),
-          budgetRequestVisibility: newUser.budgetRequestVisibility,
-          canViewAllBudgetRequests: newUser.budgetRequestVisibility === "all",
-          purchaseOrderVisibility: newUser.purchaseOrderVisibility,
-          canViewAllPurchaseOrders: newUser.purchaseOrderVisibility === "all",
-        },
-      );
+      await setDoc(doc(db, "Panels", PANEL_ID, "users", credential.user.uid), {
+        displayName: newUser.displayName.trim(),
+        email: newUser.email.trim(),
+        role: newUser.role,
+        accountStatus: "approved",
+        isActive: true,
+        createdAt: new Date(),
+        mobileCountryCode: newUser.mobileCountryCode.trim(),
+        mobileNo: newUser.mobileNo.trim(),
+        region: newUser.region.trim(),
+        reportingTo: newUser.reportingTo.trim(),
+        financialLimit: financialLimitNumber,
+        designation: newUser.designation.trim(),
+        budgetRequestVisibility: newUser.budgetRequestVisibility,
+        canViewAllBudgetRequests: newUser.budgetRequestVisibility === "all",
+        purchaseOrderVisibility: newUser.purchaseOrderVisibility,
+        canViewAllPurchaseOrders: newUser.purchaseOrderVisibility === "all",
+      });
 
       toast({
         title: "User Created",
@@ -4117,7 +4101,7 @@ export default function UserManagement() {
         reportingTo: "",
         financialLimit: "",
         designation: "",
-            budgetRequestVisibility: "role",
+        budgetRequestVisibility: "role",
         purchaseOrderVisibility: "own",
       });
     } catch (err: any) {
@@ -4214,8 +4198,7 @@ export default function UserManagement() {
           description: editingRole.description ?? "",
           users: editingRole.users ?? 0,
           items: itemsToSave,
-          budgetRequestVisibility:
-            editingRole.budgetRequestVisibility || "own",
+          budgetRequestVisibility: editingRole.budgetRequestVisibility || "own",
           updatedAt: new Date(),
         },
         { merge: true },
@@ -4275,8 +4258,8 @@ export default function UserManagement() {
                 User Management
               </h1>
               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-                Manage users, role-based Budget Request approval workflows, roles, and
-                page-level permissions from one dashboard.
+                Manage users, role-based Budget Request approval workflows,
+                roles, and page-level permissions from one dashboard.
               </p>
             </div>
 
@@ -4375,7 +4358,8 @@ export default function UserManagement() {
               Active User Accounts
             </h2>
             <p className="text-sm text-slate-500">
-              Search, filter, view details, activate/deactivate, or delete users.
+              Search, filter, view details, activate/deactivate, or delete
+              users.
             </p>
           </div>
 
@@ -4812,7 +4796,9 @@ export default function UserManagement() {
                               type="button"
                               variant="outline"
                               size="sm"
-                              disabled={index === budgetWorkflow.levels.length - 1}
+                              disabled={
+                                index === budgetWorkflow.levels.length - 1
+                              }
                               onClick={() => moveApprovalLevel(level.id, 1)}
                               className="rounded-xl bg-white"
                             >
@@ -5062,7 +5048,8 @@ export default function UserManagement() {
                               variant="outline"
                               size="sm"
                               disabled={
-                                index === purchaseOrderWorkflow.levels.length - 1
+                                index ===
+                                purchaseOrderWorkflow.levels.length - 1
                               }
                               onClick={() =>
                                 movePurchaseOrderApprovalLevel(level.id, 1)
@@ -5235,7 +5222,9 @@ export default function UserManagement() {
                               {role.users || 0} users
                             </span>
                             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-                              {Array.isArray(role.items) ? role.items.length : 0}{" "}
+                              {Array.isArray(role.items)
+                                ? role.items.length
+                                : 0}{" "}
                               permissions
                             </span>
                             <span className="rounded-full bg-blue-50 px-2.5 py-1 text-xs font-semibold text-blue-700">
@@ -5667,7 +5656,10 @@ export default function UserManagement() {
             >
               Cancel
             </Button>
-            <Button onClick={handleCreateRole} className="rounded-xl bg-slate-950">
+            <Button
+              onClick={handleCreateRole}
+              className="rounded-xl bg-slate-950"
+            >
               Create Role
             </Button>
           </DialogFooter>
@@ -5685,7 +5677,8 @@ export default function UserManagement() {
             </DialogHeader>
             <p className="mt-2 text-sm text-slate-500">
               The user's Role is used as the Budget Role for Budget Request
-              approval workflow selection. Department remains profile information.
+              approval workflow selection. Department remains profile
+              information.
             </p>
           </div>
 
@@ -5767,8 +5760,9 @@ export default function UserManagement() {
                 ))}
               </select>
               <p className="text-xs text-slate-400">
-                This Role is also the user's Budget Role. Budget Request approval
-                routing uses this Role and does not require a Department assignment.
+                This Role is also the user's Budget Role. Budget Request
+                approval routing uses this Role and does not require a
+                Department assignment.
               </p>
             </div>
 
@@ -5927,5 +5921,3 @@ export default function UserManagement() {
     </div>
   );
 }
-
-
