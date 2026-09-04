@@ -2181,6 +2181,13 @@ const categoryOptions: string[] = [
   "Stationery & Printing",
   "Office Equipment",
   "Owners Drawing",
+  "Fuel",
+  "Licence",
+  "Medical",
+  "Credit Card",
+  "RTD",
+  "Tax",
+  "Expense",
 ];
 
 const emptyItem: RecordItem = {
