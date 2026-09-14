@@ -1670,6 +1670,16 @@ export default function POManagementPage() {
   };
 
   const handleEditPO = (po: PurchaseOrder) => {
+    if (!isPurchaseOrderOwnedByUser(po, effectiveUser)) {
+      toast({
+        title: "Edit not allowed",
+        description:
+          "Only the person who created this Purchase Order can edit it.",
+        variant: "destructive",
+      });
+      return;
+    }
+
     const editPayload = buildPOTransferPayload(po);
 
     localStorage.setItem("createPOEditData", JSON.stringify(editPayload));
@@ -2548,17 +2558,19 @@ export default function POManagementPage() {
                             <Banknote className="h-4 w-4" />
                           </Button>
 
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="h-9 w-9 rounded-xl"
-                            title="Edit"
-                            aria-label="Edit purchase order"
-                            onClick={() => handleEditPO(po)}
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
+                          {isPurchaseOrderOwnedByUser(po, effectiveUser) && (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-9 w-9 rounded-xl"
+                              title="Edit"
+                              aria-label="Edit purchase order"
+                              onClick={() => handleEditPO(po)}
+                            >
+                              <Pencil className="h-4 w-4" />
+                            </Button>
+                          )}
 
                           <Button
                             type="button"
@@ -2618,6 +2630,10 @@ export default function POManagementPage() {
       </Card>
 
       {paymentReleasePO && (
+        // Explicit <PurchaseOrder> generic arg removed: esbuild's JSX parser
+        // (what Vite/some deploy environments use) doesn't reliably support
+        // generic type arguments directly on a JSX tag, unlike tsc. TS still
+        // infers T = PurchaseOrder correctly from the `context` prop below.
         <PaymentReleaseModal
           isOpen={paymentReleaseOpen}
           onClose={handleClosePaymentRelease}

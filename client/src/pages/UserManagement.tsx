@@ -3,13 +3,13 @@
 // import { useEffect, useMemo, useState } from "react";
 // import {
 //   collection,
+//   deleteDoc,
 //   doc,
 //   onSnapshot,
+//   query,
 //   setDoc,
 //   updateDoc,
-//   query,
 //   where,
-//   deleteDoc,
 // } from "firebase/firestore";
 // import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
 // import { db, secondaryAuth } from "@/lib/firebase";
@@ -18,33 +18,32 @@
 // import {
 //   Dialog,
 //   DialogContent,
+//   DialogFooter,
 //   DialogHeader,
 //   DialogTitle,
-//   DialogFooter,
 // } from "@/components/ui/dialog";
 // import { Button } from "@/components/ui/button";
-// import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+// import { Card, CardContent, CardHeader } from "@/components/ui/card";
 // import { Checkbox } from "@/components/ui/checkbox";
 // import { Badge } from "@/components/ui/badge";
 // import { Input } from "@/components/ui/input";
 // import { Label } from "@/components/ui/label";
 // import {
-//   BUDGET_WORKFLOW_CONFIG_ID,
 //   type BudgetApprovalLevel,
 //   type BudgetApprovalWorkflowConfig,
 //   type BudgetRequestVisibility,
 //   type RoleBudgetRequestVisibility,
 //   createApprovalLevel,
 //   enrichApprovalLevelsWithRoleMetadata,
+//   normalizeWorkflowKey,
 //   sanitizeApprovalLevels,
 // } from "@/lib/budgetApprovalWorkflow";
 // import {
 //   Archive,
 //   BarChart3,
 //   BedDouble,
-//   BriefcaseBusiness,
-//   Building2,
-//   CheckCircle2,
+//   BookUser,
+//   CalendarCheck,
 //   ChevronDown,
 //   ChevronLeft,
 //   ChevronRight,
@@ -58,7 +57,6 @@
 //   LineChart,
 //   Loader2,
 //   Mail,
-//   MapPin,
 //   Pencil,
 //   PieChart,
 //   PlaneTakeoff,
@@ -66,20 +64,16 @@
 //   Power,
 //   PowerOff,
 //   Receipt,
+//   ReceiptText,
 //   Scroll,
 //   ScrollText,
 //   Search,
 //   Settings,
 //   ShieldCheck,
-//   Smartphone,
 //   Trash2,
-//   UserCog,
 //   UserPlus,
 //   Users,
 //   WalletCards,
-//   XCircle,
-//   CalendarCheck,
-//   ReceiptText,
 // } from "lucide-react";
 
 // // --------------------
@@ -104,6 +98,8 @@
 //   { path: "/sales-management", label: "Sales Management", icon: "PieChart" },
 //   { path: "/travel/hotel", label: "Travel", icon: "PlaneTakeoff" },
 //   { path: "/invoice-estimate", label: "Invoice Estimates", icon: "ScrollText" },
+
+//   { path: "/rtd-management", label: "RTD Management", icon: "FileText" },
 //   { path: "/usertravel", label: "Book Hotel", icon: "BedDouble" },
 //   { path: "/booking", label: "Bookings", icon: "Hotel" },
 //   { path: "/suppliers", label: "Suppliers", icon: "BookUser" },
@@ -144,6 +140,7 @@
 //   FileText,
 //   CalendarCheck,
 //   ReceiptText,
+//   BookUser,
 // };
 
 // // --------------------
@@ -180,6 +177,24 @@
 //   purchaseOrderVisibility?: PurchaseOrderVisibility;
 // }
 
+// type BudgetRoleOption = {
+//   id: string;
+//   key: string;
+//   name: string;
+// };
+
+// type BudgetRoleWorkflowConfig = BudgetApprovalWorkflowConfig & {
+//   budgetRole?: string;
+//   budgetRoleId?: string;
+//   budgetRoleKey?: string;
+//   workflowScope?: "role";
+// };
+
+// function getBudgetRoleWorkflowConfigId(roleValue: any): string {
+//   const roleKey = normalizeWorkflowKey(roleValue);
+//   return roleKey ? `budgetRequests__role__${roleKey}` : "budgetRequests__role";
+// }
+
 // // --------------------
 // // Small UI helpers
 // // --------------------
@@ -199,13 +214,10 @@
 // }
 
 // function canRoleAccessPurchaseOrders(role?: Pick<Role, "id" | "name"> | null) {
-//   // Any configured role can be granted the Purchase Orders module.
 //   return Boolean(role?.id || role?.name);
 // }
 
 // function canUserApprovePurchaseOrders(user: User, _roles: Role[]) {
-//   // PO workflow assignments are available to every active user,
-//   // regardless of department or role.
 //   return user.isActive !== false;
 // }
 
@@ -295,26 +307,29 @@
 //   const [editingRole, setEditingRole] = useState<Role | null>(null);
 //   const [selectedTabs, setSelectedTabs] = useState<string[]>([]);
 
-//   // dynamic Budget Request approval workflow
+//   // Role-specific Budget Request approval workflow
 //   const [budgetWorkflow, setBudgetWorkflow] =
-//     useState<BudgetApprovalWorkflowConfig>({
+//     useState<BudgetRoleWorkflowConfig>({
 //       module: "budget_requests",
+//       budgetRole: "",
+//       budgetRoleId: "",
+//       budgetRoleKey: "",
+//       workflowScope: "role",
 //       enabled: true,
 //       version: 0,
 //       levels: [],
 //     });
+//   const [selectedBudgetRoleKey, setSelectedBudgetRoleKey] = useState("");
 //   const [savingWorkflow, setSavingWorkflow] = useState(false);
 
 //   // dynamic Purchase Order approval workflow
 //   const [purchaseOrderWorkflow, setPurchaseOrderWorkflow] =
-//     useState<BudgetApprovalWorkflowConfig>(
-//       {
-//         module: "purchase_orders",
-//         enabled: true,
-//         version: 0,
-//         levels: [],
-//       } as any,
-//     );
+//     useState<BudgetApprovalWorkflowConfig>({
+//       module: "purchase_orders",
+//       enabled: true,
+//       version: 0,
+//       levels: [],
+//     } as any);
 //   const [savingPurchaseOrderWorkflow, setSavingPurchaseOrderWorkflow] =
 //     useState(false);
 
@@ -331,7 +346,7 @@
 //   // create user
 //   const [showCreateUser, setShowCreateUser] = useState(false);
 //   const [creating, setCreating] = useState(false);
-
+//   const [showPassword, setShowPassword] = useState(false);
 //   const [newUser, setNewUser] = useState({
 //     displayName: "",
 //     email: "",
@@ -343,12 +358,9 @@
 //     reportingTo: "",
 //     financialLimit: "",
 //     designation: "",
-//     department: "",
 //     budgetRequestVisibility: "role" as BudgetRequestVisibility,
 //     purchaseOrderVisibility: "own" as PurchaseOrderVisibility,
 //   });
-
-//   const [showPassword, setShowPassword] = useState(false);
 
 //   // create role
 //   const [showCreateRole, setShowCreateRole] = useState(false);
@@ -377,7 +389,9 @@
 
 //       toast({
 //         title: "Status Updated",
-//         description: `${user.displayName} is now ${!user.isActive ? "Active" : "Inactive"}.`,
+//         description: `${user.displayName || "User"} is now ${
+//           !user.isActive ? "Active" : "Inactive"
+//         }.`,
 //       });
 //     } catch (err: any) {
 //       toast({
@@ -395,7 +409,6 @@
 //     try {
 //       await updateDoc(doc(db, "Panels", PANEL_ID, "users", user.id), {
 //         budgetRequestVisibility,
-//         // Backward compatibility for older screens that still read this flag.
 //         canViewAllBudgetRequests: budgetRequestVisibility === "all",
 //         updatedAt: new Date(),
 //       });
@@ -421,7 +434,6 @@
 //     try {
 //       await updateDoc(doc(db, "Panels", PANEL_ID, "users", user.id), {
 //         purchaseOrderVisibility,
-//         // Backward compatibility for screens that prefer a boolean flag.
 //         canViewAllPurchaseOrders: purchaseOrderVisibility === "all",
 //         updatedAt: new Date(),
 //       });
@@ -504,10 +516,7 @@
 //     }));
 //   }
 
-//   function movePurchaseOrderApprovalLevel(
-//     levelId: string,
-//     direction: -1 | 1,
-//   ) {
+//   function movePurchaseOrderApprovalLevel(levelId: string, direction: -1 | 1) {
 //     setPurchaseOrderWorkflow((previous) => {
 //       const levels = [...previous.levels];
 //       const currentIndex = levels.findIndex((level) => level.id === levelId);
@@ -547,12 +556,234 @@
 //     }));
 //   }
 
+//   // --------------------
+//   // Load roles from Firestore
+//   // --------------------
+//   useEffect(() => {
+//     const unsubscribe = onSnapshot(
+//       collection(db, "Panels", PANEL_ID, "sidebarConfig"),
+//       (snapshot) => {
+//         const list: Role[] = snapshot.docs.map((item) => {
+//           const data = item.data() as any;
+
+//           let items: any[] = data.items ?? [];
+//           if (items.length > 0 && typeof items[0] === "object") {
+//             items = items.map((entry: any) => entry.path ?? entry);
+//           }
+
+//           return {
+//             id: item.id,
+//             name: data.name ?? data.id ?? item.id,
+//             description: data.description ?? "",
+//             users: data.users ?? 0,
+//             items,
+//             budgetRequestVisibility: data.budgetRequestVisibility || "own",
+//           } as Role;
+//         });
+
+//         setRoles(list);
+//       },
+//     );
+
+//     return () => unsubscribe();
+//   }, []);
+
+//   // --------------------
+//   // Load users
+//   // --------------------
+//   useEffect(() => {
+//     const usersRef = collection(db, "Panels", PANEL_ID, "users");
+
+//     const pendingQ = query(usersRef, where("accountStatus", "==", "pending"));
+//     const activeQ = query(usersRef, where("accountStatus", "==", "approved"));
+
+//     const unsubPending = onSnapshot(pendingQ, (snapshot) => {
+//       setPendingUsers(
+//         snapshot.docs.map((item) => ({
+//           ...(item.data() as User),
+//           id: item.id,
+//         })),
+//       );
+//     });
+
+//     const unsubActive = onSnapshot(activeQ, (snapshot) => {
+//       setActiveUsers(
+//         snapshot.docs.map((item) => ({
+//           ...(item.data() as User),
+//           isActive: (item.data() as any)?.isActive ?? true,
+//           id: item.id,
+//         })),
+//       );
+//     });
+
+//     return () => {
+//       unsubPending();
+//       unsubActive();
+//     };
+//   }, []);
+
+//   // --------------------
+//   // Dynamic Budget Role list
+//   // --------------------
+//   const availableBudgetRoles = useMemo<BudgetRoleOption[]>(() => {
+//     return roles
+//       .map((role) => ({
+//         id: role.id,
+//         key: normalizeWorkflowKey(role.id || role.name),
+//         name: role.name || role.id,
+//       }))
+//       .filter((role) => Boolean(role.key))
+//       .sort((a, b) => a.name.localeCompare(b.name));
+//   }, [roles]);
+
+//   const selectedBudgetRole = useMemo(() => {
+//     return (
+//       availableBudgetRoles.find((role) => role.key === selectedBudgetRoleKey) ||
+//       null
+//     );
+//   }, [availableBudgetRoles, selectedBudgetRoleKey]);
+
+//   useEffect(() => {
+//     if (selectedBudgetRoleKey) return;
+//     if (availableBudgetRoles.length === 0) return;
+
+//     setSelectedBudgetRoleKey(availableBudgetRoles[0].key);
+//   }, [availableBudgetRoles, selectedBudgetRoleKey]);
+
+//   // --------------------
+//   // Load selected Budget Role workflow
+//   // --------------------
+//   useEffect(() => {
+//     if (!selectedBudgetRole) {
+//       setBudgetWorkflow({
+//         module: "budget_requests",
+//         budgetRole: "",
+//         budgetRoleId: "",
+//         budgetRoleKey: "",
+//         workflowScope: "role",
+//         enabled: true,
+//         version: 0,
+//         levels: [],
+//       });
+//       return;
+//     }
+
+//     const budgetRole = selectedBudgetRole.name;
+//     const budgetRoleId = selectedBudgetRole.id;
+//     const budgetRoleKey = selectedBudgetRole.key;
+//     const configId = getBudgetRoleWorkflowConfigId(budgetRoleKey);
+
+//     setBudgetWorkflow({
+//       id: configId,
+//       module: "budget_requests",
+//       budgetRole,
+//       budgetRoleId,
+//       budgetRoleKey,
+//       workflowScope: "role",
+//       enabled: true,
+//       version: 0,
+//       levels: [],
+//     });
+
+//     const unsubscribe = onSnapshot(
+//       doc(db, "Panels", PANEL_ID, "workflowConfigs", configId),
+//       (snapshot) => {
+//         if (!snapshot.exists()) {
+//           setBudgetWorkflow({
+//             id: configId,
+//             module: "budget_requests",
+//             budgetRole,
+//             budgetRoleId,
+//             budgetRoleKey,
+//             workflowScope: "role",
+//             enabled: true,
+//             version: 0,
+//             levels: [],
+//           });
+//           return;
+//         }
+
+//         const data = snapshot.data() as BudgetRoleWorkflowConfig;
+
+//         setBudgetWorkflow({
+//           ...data,
+//           id: snapshot.id,
+//           module: "budget_requests",
+//           budgetRole: String(data?.budgetRole || budgetRole).trim(),
+//           budgetRoleId: String(data?.budgetRoleId || budgetRoleId).trim(),
+//           budgetRoleKey: normalizeWorkflowKey(
+//             data?.budgetRoleKey || data?.budgetRoleId || budgetRoleKey,
+//           ),
+//           workflowScope: "role",
+//           enabled: data.enabled !== false,
+//           version: Number(data.version || 1),
+//           levels: sanitizeApprovalLevels(data.levels || []),
+//         });
+//       },
+//     );
+
+//     return () => unsubscribe();
+//   }, [selectedBudgetRole]);
+
+//   // --------------------
+//   // Load dynamic Purchase Order workflow
+//   // --------------------
+//   useEffect(() => {
+//     const unsubscribe = onSnapshot(
+//       doc(
+//         db,
+//         "Panels",
+//         PANEL_ID,
+//         "workflowConfigs",
+//         PURCHASE_ORDER_WORKFLOW_CONFIG_ID,
+//       ),
+//       (snapshot) => {
+//         if (!snapshot.exists()) {
+//           setPurchaseOrderWorkflow({
+//             module: "purchase_orders",
+//             enabled: true,
+//             version: 0,
+//             levels: [],
+//           } as any);
+//           return;
+//         }
+
+//         const data = snapshot.data() as BudgetApprovalWorkflowConfig;
+//         setPurchaseOrderWorkflow({
+//           ...data,
+//           id: snapshot.id,
+//           module: "purchase_orders",
+//           enabled: data.enabled !== false,
+//           version: Number(data.version || 1),
+//           levels: sanitizeApprovalLevels(data.levels || []),
+//         } as any);
+//       },
+//     );
+
+//     return () => unsubscribe();
+//   }, []);
+
+//   // --------------------
+//   // Save selected Budget Role workflow
+//   // --------------------
 //   async function saveBudgetWorkflow() {
-//     // Persist readable role metadata together with the assignment IDs.
-//     // This allows Budget Requests to display "Finance Manager" instead of
-//     // the internal level title such as "Approval Level 1".
+//     if (!selectedBudgetRole) {
+//       toast({
+//         title: "Budget Role required",
+//         description:
+//           "Select a Role before configuring its Budget Request approval workflow.",
+//         variant: "destructive",
+//       });
+//       return;
+//     }
+
+//     const budgetRole = selectedBudgetRole.name;
+//     const budgetRoleId = selectedBudgetRole.id;
+//     const budgetRoleKey = selectedBudgetRole.key;
+//     const configId = getBudgetRoleWorkflowConfigId(budgetRoleKey);
+
 //     const levels = enrichApprovalLevelsWithRoleMetadata(
-//       budgetWorkflow.levels,
+//       sanitizeApprovalLevels(budgetWorkflow.levels),
 //       roles,
 //       activeUsers,
 //     );
@@ -560,7 +791,7 @@
 //     if (levels.length === 0) {
 //       toast({
 //         title: "Approval level required",
-//         description: "Add at least one approval level before saving.",
+//         description: `Add at least one approval level for ${budgetRole} before saving.`,
 //         variant: "destructive",
 //       });
 //       return;
@@ -583,34 +814,49 @@
 
 //     try {
 //       const nextVersion = Number(budgetWorkflow.version || 0) + 1;
+
 //       await setDoc(
-//         doc(
-//           db,
-//           "Panels",
-//           PANEL_ID,
-//           "workflowConfigs",
-//           BUDGET_WORKFLOW_CONFIG_ID,
-//         ),
+//         doc(db, "Panels", PANEL_ID, "workflowConfigs", configId),
 //         {
 //           module: "budget_requests",
+//           workflowScope: "role",
+//           budgetRole,
+//           budgetRoleId,
+//           budgetRoleKey,
 //           enabled: budgetWorkflow.enabled !== false,
 //           version: nextVersion,
 //           levels,
 //           updatedAt: new Date(),
 //           updatedBy:
-//             userProfile?.displayName || userProfile?.email || userProfile?.id || "",
+//             userProfile?.displayName ||
+//             userProfile?.email ||
+//             userProfile?.id ||
+//             "",
 //         },
 //         { merge: true },
 //       );
 
+//       setBudgetWorkflow((previous) => ({
+//         ...previous,
+//         id: configId,
+//         module: "budget_requests",
+//         workflowScope: "role",
+//         budgetRole,
+//         budgetRoleId,
+//         budgetRoleKey,
+//         version: nextVersion,
+//         levels,
+//       }));
+
 //       toast({
-//         title: "Workflow saved",
-//         description: "Budget Requests will now follow this approval hierarchy.",
+//         title: "Budget Role workflow saved",
+//         description: `${budgetRole} Budget Requests will now follow this approval hierarchy.`,
 //       });
 //     } catch (err: any) {
 //       toast({
 //         title: "Error",
-//         description: err.message || "Failed to save approval workflow.",
+//         description:
+//           err.message || "Failed to save Budget Role approval workflow.",
 //         variant: "destructive",
 //       });
 //     } finally {
@@ -633,7 +879,8 @@
 //     if (levels.length === 0) {
 //       toast({
 //         title: "Approval level required",
-//         description: "Add at least one Purchase Order approval level before saving.",
+//         description:
+//           "Add at least one Purchase Order approval level before saving.",
 //         variant: "destructive",
 //       });
 //       return;
@@ -656,6 +903,7 @@
 
 //     try {
 //       const nextVersion = Number(purchaseOrderWorkflow.version || 0) + 1;
+
 //       await setDoc(
 //         doc(
 //           db,
@@ -671,7 +919,10 @@
 //           levels,
 //           updatedAt: new Date(),
 //           updatedBy:
-//             userProfile?.displayName || userProfile?.email || userProfile?.id || "",
+//             userProfile?.displayName ||
+//             userProfile?.email ||
+//             userProfile?.id ||
+//             "",
 //         },
 //         { merge: true },
 //       );
@@ -699,160 +950,13 @@
 //   }
 
 //   // --------------------
-//   // Load roles from Firestore (dynamic)
-//   // --------------------
-//   useEffect(() => {
-//     const unsub = onSnapshot(
-//       collection(db, "Panels", PANEL_ID, "sidebarConfig"),
-//       (snap) => {
-//         const list: Role[] = snap.docs.map((d) => {
-//           const data = d.data() as any;
-
-//           let items: any[] = data.items ?? [];
-//           if (items && items.length > 0 && typeof items[0] === "object") {
-//             items = items.map((it: any) => it.path ?? it);
-//           }
-
-//           return {
-//             id: d.id,
-//             name: data.name ?? data.id,
-//             description: data.description ?? "",
-//             users: data.users ?? 0,
-//             items,
-//             budgetRequestVisibility:
-//               data.budgetRequestVisibility || "own",
-//           } as Role;
-//         });
-
-//         setRoles(list);
-//       },
-//     );
-
-//     return () => unsub();
-//   }, []);
-
-//   // --------------------
-//   // Load dynamic Budget Request workflow
-//   // --------------------
-//   useEffect(() => {
-//     const unsubscribe = onSnapshot(
-//       doc(
-//         db,
-//         "Panels",
-//         PANEL_ID,
-//         "workflowConfigs",
-//         BUDGET_WORKFLOW_CONFIG_ID,
-//       ),
-//       (snapshot) => {
-//         if (!snapshot.exists()) {
-//           setBudgetWorkflow({
-//             module: "budget_requests",
-//             enabled: true,
-//             version: 0,
-//             levels: [],
-//           });
-//           return;
-//         }
-
-//         const data = snapshot.data() as BudgetApprovalWorkflowConfig;
-//         setBudgetWorkflow({
-//           ...data,
-//           id: snapshot.id,
-//           module: "budget_requests",
-//           enabled: data.enabled !== false,
-//           version: Number(data.version || 1),
-//           levels: sanitizeApprovalLevels(data.levels || []),
-//         });
-//       },
-//     );
-
-//     return () => unsubscribe();
-//   }, []);
-
-//   // --------------------
-//   // Load dynamic Purchase Order workflow
-//   // --------------------
-//   useEffect(() => {
-//     const unsubscribe = onSnapshot(
-//       doc(
-//         db,
-//         "Panels",
-//         PANEL_ID,
-//         "workflowConfigs",
-//         PURCHASE_ORDER_WORKFLOW_CONFIG_ID,
-//       ),
-//       (snapshot) => {
-//         if (!snapshot.exists()) {
-//           setPurchaseOrderWorkflow(
-//             {
-//               module: "purchase_orders",
-//               enabled: true,
-//               version: 0,
-//               levels: [],
-//             } as any,
-//           );
-//           return;
-//         }
-
-//         const data = snapshot.data() as BudgetApprovalWorkflowConfig;
-//         setPurchaseOrderWorkflow(
-//           {
-//             ...data,
-//             id: snapshot.id,
-//             module: "purchase_orders",
-//             enabled: data.enabled !== false,
-//             version: Number(data.version || 1),
-//             levels: sanitizeApprovalLevels(data.levels || []),
-//           } as any,
-//         );
-//       },
-//     );
-
-//     return () => unsubscribe();
-//   }, []);
-
-//   // --------------------
-//   // Load users (pending & active) from PANEL path
-//   // --------------------
-//   useEffect(() => {
-//     const usersRef = collection(db, "Panels", PANEL_ID, "users");
-
-//     const pendingQ = query(usersRef, where("accountStatus", "==", "pending"));
-//     const activeQ = query(usersRef, where("accountStatus", "==", "approved"));
-
-//     const unsubPending = onSnapshot(pendingQ, (snap) => {
-//       setPendingUsers(
-//         snap.docs.map((d) => ({
-//           ...(d.data() as User),
-//           id: d.id,
-//         })),
-//       );
-//     });
-
-//     const unsubActive = onSnapshot(activeQ, (snap) => {
-//       setActiveUsers(
-//         snap.docs.map((d) => ({
-//           ...(d.data() as User),
-//           isActive: (d.data() as any)?.isActive ?? true,
-//           id: d.id,
-//         })),
-//       );
-//     });
-
-//     return () => {
-//       unsubPending();
-//       unsubActive();
-//     };
-//   }, []);
-
-//   // --------------------
-//   // Compute displayRoles (attach users list + count)
+//   // Compute displayRoles
 //   // --------------------
 //   const displayRoles = useMemo(() => {
 //     return roles.map((role) => {
-//       const usersInRole = activeUsers.filter((u) => {
-//         if (!u.role) return false;
-//         return u.role === role.id || u.role === role.name;
+//       const usersInRole = activeUsers.filter((user) => {
+//         if (!user.role) return false;
+//         return user.role === role.id || user.role === role.name;
 //       });
 
 //       return {
@@ -884,6 +988,7 @@
 //   const inactiveUsersCount = activeUsers.filter(
 //     (user) => !user.isActive,
 //   ).length;
+
 //   const filteredActiveUsers = useMemo(() => {
 //     const keyword = searchTerm.trim().toLowerCase();
 
@@ -892,7 +997,6 @@
 //         !keyword ||
 //         user.displayName?.toLowerCase().includes(keyword) ||
 //         user.email?.toLowerCase().includes(keyword) ||
-//         user.department?.toLowerCase().includes(keyword) ||
 //         user.designation?.toLowerCase().includes(keyword) ||
 //         getRoleName(user.role).toLowerCase().includes(keyword);
 
@@ -900,6 +1004,7 @@
 //         roleFilter === "all" ||
 //         user.role === roleFilter ||
 //         getRoleName(user.role) === roleFilter;
+
 //       const matchesStatus =
 //         statusFilter === "all" ||
 //         (statusFilter === "active" && user.isActive) ||
@@ -913,6 +1018,7 @@
 //     1,
 //     Math.ceil(filteredActiveUsers.length / USERS_PER_PAGE),
 //   );
+
 //   const paginatedActiveUsers = filteredActiveUsers.slice(
 //     (activeUserPage - 1) * USERS_PER_PAGE,
 //     activeUserPage * USERS_PER_PAGE,
@@ -923,46 +1029,8 @@
 //   }, [searchTerm, roleFilter, statusFilter]);
 
 //   // --------------------
-//   // Approve / Reject user
+//   // User / Role actions
 //   // --------------------
-//   async function handleApproveUser(user: User) {
-//     try {
-//       await updateDoc(doc(db, "Panels", PANEL_ID, "users", user.id), {
-//         accountStatus: "approved",
-//         updatedAt: new Date(),
-//       });
-//       toast({
-//         title: "Success",
-//         description: `User ${user.displayName} has been approved`,
-//       });
-//     } catch (error: any) {
-//       toast({
-//         title: "Error",
-//         description: error.message || "Failed to approve user",
-//         variant: "destructive",
-//       });
-//     }
-//   }
-
-//   async function handleRejectUser(user: User) {
-//     try {
-//       await updateDoc(doc(db, "Panels", PANEL_ID, "users", user.id), {
-//         accountStatus: "rejected",
-//         updatedAt: new Date(),
-//       });
-//       toast({
-//         title: "Success",
-//         description: `User ${user.displayName} has been rejected`,
-//       });
-//     } catch (error: any) {
-//       toast({
-//         title: "Error",
-//         description: error.message || "Failed to reject user",
-//         variant: "destructive",
-//       });
-//     }
-//   }
-
 //   function handleDeleteUserClick(userId: string) {
 //     setUserIdToConfirmDelete(userId);
 //     setConfirmDeleteUser(true);
@@ -1008,9 +1076,6 @@
 //     }
 //   }
 
-//   // --------------------
-//   // Create user (admin) -> save under Panels/PANEL_ID/users/{uid}
-//   // --------------------
 //   const handleCreateUser = async () => {
 //     if (
 //       !newUser.displayName ||
@@ -1020,8 +1085,7 @@
 //       !newUser.mobileCountryCode ||
 //       !newUser.mobileNo ||
 //       !newUser.region ||
-//       !newUser.designation ||
-//       !newUser.department
+//       !newUser.designation
 //     ) {
 //       toast({
 //         title: "Missing fields",
@@ -1048,17 +1112,18 @@
 //     setCreating(true);
 
 //     try {
-//       const cred = await createUserWithEmailAndPassword(
+//       const credential = await createUserWithEmailAndPassword(
 //         secondaryAuth,
 //         newUser.email.trim(),
 //         newUser.password,
 //       );
 
-//       await updateProfile(cred.user, { displayName: newUser.displayName });
-
-//       // IMPORTANT: do NOT store password in Firestore
-//       await setDoc(doc(db, "Panels", PANEL_ID, "users", cred.user.uid), {
+//       await updateProfile(credential.user, {
 //         displayName: newUser.displayName,
+//       });
+
+//       await setDoc(doc(db, "Panels", PANEL_ID, "users", credential.user.uid), {
+//         displayName: newUser.displayName.trim(),
 //         email: newUser.email.trim(),
 //         role: newUser.role,
 //         accountStatus: "approved",
@@ -1070,13 +1135,10 @@
 //         reportingTo: newUser.reportingTo.trim(),
 //         financialLimit: financialLimitNumber,
 //         designation: newUser.designation.trim(),
-//         department: newUser.department.trim(),
 //         budgetRequestVisibility: newUser.budgetRequestVisibility,
-//         canViewAllBudgetRequests:
-//           newUser.budgetRequestVisibility === "all",
+//         canViewAllBudgetRequests: newUser.budgetRequestVisibility === "all",
 //         purchaseOrderVisibility: newUser.purchaseOrderVisibility,
-//         canViewAllPurchaseOrders:
-//           newUser.purchaseOrderVisibility === "all",
+//         canViewAllPurchaseOrders: newUser.purchaseOrderVisibility === "all",
 //       });
 
 //       toast({
@@ -1097,7 +1159,6 @@
 //         reportingTo: "",
 //         financialLimit: "",
 //         designation: "",
-//         department: "",
 //         budgetRequestVisibility: "role",
 //         purchaseOrderVisibility: "own",
 //       });
@@ -1112,9 +1173,6 @@
 //     }
 //   };
 
-//   // --------------------
-//   // Create Role (dynamic)
-//   // --------------------
 //   async function handleCreateRole() {
 //     if (!newRole.name.trim()) {
 //       toast({ title: "Role name required", variant: "destructive" });
@@ -1126,8 +1184,8 @@
 
 //       await setDoc(doc(db, "Panels", PANEL_ID, "sidebarConfig", id), {
 //         id,
-//         name: newRole.name,
-//         description: newRole.description,
+//         name: newRole.name.trim(),
+//         description: newRole.description.trim(),
 //         users: 0,
 //         items: [],
 //         budgetRequestVisibility: "own",
@@ -1150,15 +1208,15 @@
 //     }
 //   }
 
-//   // --------------------
-//   // Edit role: open modal and prepare selectedTabs
-//   // --------------------
 //   const openEditRole = (role: Role) => {
-//     const base = roles.find((r) => r.id === role.id) || role;
+//     const base = roles.find((item) => item.id === role.id) || role;
 //     setEditingRole(base);
 
 //     const items = (base.items || []) as any[];
-//     const paths = items.map((i) => (typeof i === "string" ? i : i.path || i));
+//     const paths = items.map((item) =>
+//       typeof item === "string" ? item : item.path || item,
+//     );
+
 //     setSelectedTabs(
 //       canRoleAccessPurchaseOrders(base)
 //         ? paths
@@ -1166,9 +1224,6 @@
 //     );
 //   };
 
-//   // --------------------
-//   // Save edited role items
-//   // --------------------
 //   const handleSave = async () => {
 //     if (!editingRole) return;
 
@@ -1185,12 +1240,12 @@
 //         ? selectedTabs
 //         : selectedTabs.filter((path) => path !== PURCHASE_ORDER_PATH);
 
-//       const itemsToSave = AVAILABLE_TABS.filter((t) =>
-//         allowedSelectedTabs.includes(t.path),
-//       ).map((t) => ({
-//         path: t.path,
-//         label: t.label,
-//         icon: t.icon,
+//       const itemsToSave = AVAILABLE_TABS.filter((tab) =>
+//         allowedSelectedTabs.includes(tab.path),
+//       ).map((tab) => ({
+//         path: tab.path,
+//         label: tab.label,
+//         icon: tab.icon,
 //       }));
 
 //       await setDoc(
@@ -1201,18 +1256,18 @@
 //           description: editingRole.description ?? "",
 //           users: editingRole.users ?? 0,
 //           items: itemsToSave,
-//           budgetRequestVisibility:
-//             editingRole.budgetRequestVisibility || "own",
+//           budgetRequestVisibility: editingRole.budgetRequestVisibility || "own",
 //           updatedAt: new Date(),
 //         },
 //         { merge: true },
 //       );
 
-//       setEditingRole(null);
 //       toast({
 //         title: "Saved",
 //         description: `Permissions updated for ${editingRole.name}`,
 //       });
+
+//       setEditingRole(null);
 //     } catch (err: any) {
 //       toast({
 //         title: "Error",
@@ -1261,8 +1316,8 @@
 //                 User Management
 //               </h1>
 //               <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-//                 Manage users, approvals, roles, and page-level permissions from
-//                 one clean dashboard.
+//                 Manage users, role-based Budget Request approval workflows,
+//                 roles, and page-level permissions from one dashboard.
 //               </p>
 //             </div>
 
@@ -1275,6 +1330,7 @@
 //                 <Plus className="mr-2 h-4 w-4" />
 //                 New Role
 //               </Button>
+
 //               <Button
 //                 onClick={() => setShowCreateUser(true)}
 //                 className="h-11 rounded-2xl bg-slate-950 px-5 text-white shadow-sm hover:bg-slate-800"
@@ -1315,7 +1371,7 @@
 //                 </p>
 //               </div>
 //               <div className="rounded-2xl bg-amber-50 p-3">
-//                 <UserCog className="h-6 w-6 text-amber-600" />
+//                 <Users className="h-6 w-6 text-amber-600" />
 //               </div>
 //             </CardContent>
 //           </Card>
@@ -1340,10 +1396,10 @@
 //             <CardContent className="flex items-center justify-between p-5">
 //               <div>
 //                 <p className="text-xs font-medium uppercase tracking-wide text-slate-400">
-//                   Total Roles
+//                   Budget Roles
 //                 </p>
 //                 <p className="mt-2 text-3xl font-bold text-slate-950">
-//                   {roles.length}
+//                   {availableBudgetRoles.length}
 //                 </p>
 //               </div>
 //               <div className="rounded-2xl bg-violet-50 p-3">
@@ -1353,79 +1409,16 @@
 //           </Card>
 //         </div>
 
-//         {/* Pending Users */}
-//         {/* <section className="space-y-4">
-//           <div className="flex items-center justify-between">
-//             <div>
-//               <h2 className="text-xl font-bold tracking-tight text-slate-950">Pending Approvals</h2>
-//               <p className="text-sm text-slate-500">Review new account requests before activation.</p>
-//             </div>
-//           </div>
-
-//           <Card className="rounded-[2rem] border-slate-200/80 bg-white/90 shadow-sm">
-//             <CardContent className="p-4 md:p-5">
-//               {pendingUsers.length === 0 ? (
-//                 <EmptyState title="No pending users" description="New registration requests will appear here for approval or rejection." />
-//               ) : (
-//                 <div className="grid grid-cols-1 gap-3 lg:grid-cols-2">
-//                   {pendingUsers.map((user) => (
-//                     <div
-//                       key={user.id}
-//                       className="flex flex-col gap-4 rounded-3xl border border-slate-100 bg-slate-50/60 p-4 transition hover:bg-white hover:shadow-sm sm:flex-row sm:items-center sm:justify-between"
-//                     >
-//                       <div className="flex items-center gap-3">
-//                         <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-white text-sm font-bold text-slate-700 shadow-sm">
-//                           {(user.displayName || user.email || "U").slice(0, 1).toUpperCase()}
-//                         </div>
-//                         <div>
-//                           <p className="font-semibold text-slate-900">{user.displayName || "Unnamed User"}</p>
-//                           <p className="mt-0.5 text-xs text-slate-500">{user.email || "-"}</p>
-//                           <div className="mt-2 flex flex-wrap gap-2 text-xs text-slate-500">
-//                             <span className="rounded-full bg-white px-2 py-1 shadow-sm">{getRoleName(user.role)}</span>
-//                             <span className="rounded-full bg-white px-2 py-1 shadow-sm">{formatDate(user.createdAt)}</span>
-//                           </div>
-//                         </div>
-//                       </div>
-
-//                       <div className="flex gap-2">
-//                         <Button
-//                           size="sm"
-//                           onClick={() => handleApproveUser(user)}
-//                           className="rounded-xl bg-emerald-600 text-white hover:bg-emerald-700"
-//                         >
-//                           <CheckCircle2 className="mr-1.5 h-4 w-4" />
-//                           Approve
-//                         </Button>
-//                         <Button
-//                           size="sm"
-//                           variant="outline"
-//                           onClick={() => handleRejectUser(user)}
-//                           className="rounded-xl border-rose-200 bg-white text-rose-600 hover:bg-rose-50"
-//                         >
-//                           <XCircle className="mr-1.5 h-4 w-4" />
-//                           Reject
-//                         </Button>
-//                       </div>
-//                     </div>
-//                   ))}
-//                 </div>
-//               )}
-//             </CardContent>
-//           </Card>
-//         </section> */}
-
 //         {/* User Accounts */}
 //         <section className="space-y-4">
-//           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
-//             <div>
-//               <h2 className="text-xl font-bold tracking-tight text-slate-950">
-//                 Active User Accounts
-//               </h2>
-//               <p className="text-sm text-slate-500">
-//                 Search, filter, view details, activate/deactivate, or delete
-//                 users.
-//               </p>
-//             </div>
+//           <div>
+//             <h2 className="text-xl font-bold tracking-tight text-slate-950">
+//               Active User Accounts
+//             </h2>
+//             <p className="text-sm text-slate-500">
+//               Search, filter, view details, activate/deactivate, or delete
+//               users.
+//             </p>
 //           </div>
 
 //           <Card className="overflow-hidden rounded-[2rem] border-slate-200/80 bg-white/90 shadow-sm">
@@ -1435,8 +1428,8 @@
 //                   <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
 //                   <Input
 //                     value={searchTerm}
-//                     onChange={(e) => setSearchTerm(e.target.value)}
-//                     placeholder="Search by name, email, role, department..."
+//                     onChange={(event) => setSearchTerm(event.target.value)}
+//                     placeholder="Search by name, email, role, designation..."
 //                     className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-11 shadow-none focus-visible:ring-slate-300"
 //                   />
 //                 </div>
@@ -1444,7 +1437,7 @@
 //                 <select
 //                   className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
 //                   value={roleFilter}
-//                   onChange={(e) => setRoleFilter(e.target.value)}
+//                   onChange={(event) => setRoleFilter(event.target.value)}
 //                 >
 //                   <option value="all">All roles</option>
 //                   {roles.map((role) => (
@@ -1457,7 +1450,7 @@
 //                 <select
 //                   className="h-11 rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
 //                   value={statusFilter}
-//                   onChange={(e) => setStatusFilter(e.target.value)}
+//                   onChange={(event) => setStatusFilter(event.target.value)}
 //                 >
 //                   <option value="all">All status</option>
 //                   <option value="active">Active</option>
@@ -1481,7 +1474,6 @@
 //                       <tr className="border-b border-slate-100 bg-slate-50/80 text-xs uppercase tracking-wide text-slate-400">
 //                         <th className="px-5 py-4 font-semibold">User</th>
 //                         <th className="px-5 py-4 font-semibold">Role</th>
-//                         <th className="px-5 py-4 font-semibold">Department</th>
 //                         <th className="px-5 py-4 font-semibold">Created</th>
 //                         <th className="px-5 py-4 font-semibold">Status</th>
 //                         <th className="px-5 py-4 font-semibold">
@@ -1495,6 +1487,7 @@
 //                         </th>
 //                       </tr>
 //                     </thead>
+
 //                     <tbody className="divide-y divide-slate-100">
 //                       {paginatedActiveUsers.map((user) => (
 //                         <tr
@@ -1519,25 +1512,21 @@
 //                               </div>
 //                             </div>
 //                           </td>
+
 //                           <td className="px-5 py-4">
 //                             <Badge className="rounded-full border border-blue-100 bg-blue-50 px-3 py-1 text-blue-700 hover:bg-blue-50">
 //                               {getRoleName(user.role)}
 //                             </Badge>
 //                           </td>
-//                           <td className="px-5 py-4">
-//                             <p className="text-sm font-medium text-slate-700">
-//                               {user.department || "-"}
-//                             </p>
-//                             <p className="mt-0.5 text-xs text-slate-400">
-//                               {user.designation || "-"}
-//                             </p>
-//                           </td>
+
 //                           <td className="px-5 py-4 text-sm text-slate-500">
 //                             {formatDate(user.createdAt)}
 //                           </td>
+
 //                           <td className="px-5 py-4">
 //                             <StatusBadge active={user.isActive} />
 //                           </td>
+
 //                           <td className="px-5 py-4">
 //                             <select
 //                               value={
@@ -1554,10 +1543,13 @@
 //                             >
 //                               <option value="role">Use role default</option>
 //                               <option value="all">View all requests</option>
-//                               <option value="assigned">Own + assigned approvals</option>
+//                               <option value="assigned">
+//                                 Own + assigned approvals
+//                               </option>
 //                               <option value="own">Own requests only</option>
 //                             </select>
 //                           </td>
+
 //                           <td className="px-5 py-4">
 //                             <select
 //                               value={
@@ -1576,6 +1568,7 @@
 //                               <option value="all">View all POs</option>
 //                             </select>
 //                           </td>
+
 //                           <td className="px-5 py-4">
 //                             <div className="flex justify-end gap-2">
 //                               <Button
@@ -1587,6 +1580,7 @@
 //                                 <Eye className="mr-1.5 h-4 w-4" />
 //                                 View
 //                               </Button>
+
 //                               <Button
 //                                 variant="outline"
 //                                 size="sm"
@@ -1604,6 +1598,7 @@
 //                                 )}
 //                                 {user.isActive ? "Deactivate" : "Activate"}
 //                               </Button>
+
 //                               <Button
 //                                 variant="outline"
 //                                 size="sm"
@@ -1634,6 +1629,7 @@
 //                   )}{" "}
 //                   of {filteredActiveUsers.length} users
 //                 </p>
+
 //                 <div className="flex items-center gap-2">
 //                   <Button
 //                     variant="outline"
@@ -1646,9 +1642,11 @@
 //                   >
 //                     <ChevronLeft className="h-4 w-4" />
 //                   </Button>
+
 //                   <span className="rounded-xl bg-slate-100 px-3 py-2 text-xs font-semibold text-slate-700">
 //                     Page {activeUserPage} / {totalPages}
 //                   </span>
+
 //                   <Button
 //                     variant="outline"
 //                     size="sm"
@@ -1668,16 +1666,17 @@
 //           </Card>
 //         </section>
 
-//         {/* Dynamic Budget Request Approval Workflow */}
+//         {/* Role-based Budget Request Approval Workflows */}
 //         <section className="space-y-4">
 //           <div className="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
 //             <div>
 //               <h2 className="text-xl font-bold tracking-tight text-slate-950">
-//                 Budget Request Approval Workflow
+//                 Budget Role Approval Workflows
 //               </h2>
 //               <p className="text-sm text-slate-500">
-//                 Configure any number of approval levels. A user can approve a
-//                 level when they are assigned directly or belong to an assigned role.
+//                 Each User Management Role can have its own independent Budget
+//                 Request approval sequence. The request creator's Role selects
+//                 the workflow.
 //               </p>
 //             </div>
 
@@ -1685,6 +1684,7 @@
 //               <Button
 //                 type="button"
 //                 variant="outline"
+//                 disabled={!selectedBudgetRole}
 //                 onClick={() =>
 //                   setBudgetWorkflow((previous) => ({
 //                     ...previous,
@@ -1699,10 +1699,11 @@
 //                 <Plus className="mr-2 h-4 w-4" />
 //                 Add Approval Level
 //               </Button>
+
 //               <Button
 //                 type="button"
 //                 onClick={saveBudgetWorkflow}
-//                 disabled={savingWorkflow}
+//                 disabled={savingWorkflow || !selectedBudgetRole}
 //                 className="rounded-2xl bg-slate-950 text-white hover:bg-slate-800"
 //               >
 //                 {savingWorkflow ? (
@@ -1710,187 +1711,271 @@
 //                 ) : (
 //                   <ShieldCheck className="mr-2 h-4 w-4" />
 //                 )}
-//                 Save Workflow
+//                 Save Budget Role Workflow
 //               </Button>
 //             </div>
 //           </div>
 
-//           <Card className="rounded-[2rem] border-slate-200/80 bg-white/90 shadow-sm">
-//             <CardContent className="space-y-4 p-5 md:p-6">
-//               <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-//                 <Checkbox
-//                   checked={budgetWorkflow.enabled !== false}
-//                   onCheckedChange={(checked) =>
-//                     setBudgetWorkflow((previous) => ({
-//                       ...previous,
-//                       enabled: checked === true,
-//                     }))
+//           <Card className="rounded-[2rem] border-blue-200 bg-blue-50/70 shadow-sm">
+//             <CardContent className="p-5 md:p-6">
+//               <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+//                 <div>
+//                   <p className="text-sm font-semibold text-slate-900">
+//                     Select Budget Role
+//                   </p>
+//                   <p className="mt-1 text-xs leading-5 text-slate-500">
+//                     Budget Roles come directly from the Roles you create in User
+//                     Management. Creating a new Role automatically makes it
+//                     available here.
+//                   </p>
+//                 </div>
+
+//                 <select
+//                   value={selectedBudgetRoleKey}
+//                   onChange={(event) =>
+//                     setSelectedBudgetRoleKey(event.target.value)
 //                   }
-//                 />
-//                 <span>
-//                   <span className="block text-sm font-semibold text-slate-800">
-//                     Enable dynamic approval workflow
-//                   </span>
-//                   <span className="block text-xs text-slate-500">
-//                     New and resubmitted Budget Requests use the saved sequence.
-//                   </span>
-//                 </span>
-//               </label>
-
-//               {budgetWorkflow.levels.length === 0 ? (
-//                 <EmptyState
-//                   title="No approval levels configured"
-//                   description="Add the first level, assign users or roles, then save the workflow."
-//                 />
-//               ) : (
-//                 <div className="space-y-4">
-//                   {budgetWorkflow.levels.map((level, index) => (
-//                     <div
-//                       key={level.id}
-//                       className="rounded-3xl border border-slate-200 bg-slate-50/60 p-4 md:p-5"
-//                     >
-//                       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
-//                         <div className="flex flex-1 items-center gap-3">
-//                           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-sm font-bold text-white">
-//                             {index + 1}
-//                           </span>
-//                           <div className="flex-1">
-//                             <Input
-//                               value={level.name}
-//                               onChange={(event) =>
-//                                 updateApprovalLevel(level.id, {
-//                                   name: event.target.value,
-//                                 })
-//                               }
-//                               placeholder={`Internal level title ${index + 1}`}
-//                               className="h-11 rounded-2xl border-slate-200 bg-white"
-//                             />
-//                             <p className="mt-1 text-xs text-slate-400">
-//                               This is an internal title. Budget Request Status and Current Step display the assigned approver role.
-//                             </p>
-//                           </div>
-//                         </div>
-
-//                         <div className="flex gap-2">
-//                           <Button
-//                             type="button"
-//                             variant="outline"
-//                             size="sm"
-//                             disabled={index === 0}
-//                             onClick={() => moveApprovalLevel(level.id, -1)}
-//                             className="rounded-xl bg-white"
-//                           >
-//                             <ChevronUp className="h-4 w-4" />
-//                           </Button>
-//                           <Button
-//                             type="button"
-//                             variant="outline"
-//                             size="sm"
-//                             disabled={index === budgetWorkflow.levels.length - 1}
-//                             onClick={() => moveApprovalLevel(level.id, 1)}
-//                             className="rounded-xl bg-white"
-//                           >
-//                             <ChevronDown className="h-4 w-4" />
-//                           </Button>
-//                           <Button
-//                             type="button"
-//                             variant="outline"
-//                             size="sm"
-//                             onClick={() =>
-//                               setBudgetWorkflow((previous) => ({
-//                                 ...previous,
-//                                 levels: sanitizeApprovalLevels(
-//                                   previous.levels.filter(
-//                                     (item) => item.id !== level.id,
-//                                   ),
-//                                 ),
-//                               }))
-//                             }
-//                             className="rounded-xl border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
-//                           >
-//                             <Trash2 className="h-4 w-4" />
-//                           </Button>
-//                         </div>
-//                       </div>
-
-//                       <div className="mt-4 grid gap-4 lg:grid-cols-2">
-//                         <div className="rounded-2xl border border-slate-200 bg-white p-4">
-//                           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-//                             Assigned Roles
-//                           </p>
-//                           <div className="mt-3 max-h-52 space-y-2 overflow-y-auto">
-//                             {roles.length === 0 ? (
-//                               <p className="text-sm text-slate-400">No roles available.</p>
-//                             ) : (
-//                               roles.map((role) => (
-//                                 <label
-//                                   key={role.id}
-//                                   className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 hover:bg-slate-50"
-//                                 >
-//                                   <Checkbox
-//                                     checked={level.roleIds.includes(role.id)}
-//                                     onCheckedChange={(checked) =>
-//                                       toggleApprovalLevelAssignment(
-//                                         level.id,
-//                                         "roleIds",
-//                                         role.id,
-//                                         checked === true,
-//                                       )
-//                                     }
-//                                   />
-//                                   <span className="text-sm font-medium text-slate-700">
-//                                     {role.name}
-//                                   </span>
-//                                 </label>
-//                               ))
-//                             )}
-//                           </div>
-//                         </div>
-
-//                         <div className="rounded-2xl border border-slate-200 bg-white p-4">
-//                           <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
-//                             Assigned Users
-//                           </p>
-//                           <div className="mt-3 max-h-52 space-y-2 overflow-y-auto">
-//                             {activeUsers.length === 0 ? (
-//                               <p className="text-sm text-slate-400">No active users available.</p>
-//                             ) : (
-//                               activeUsers.map((user) => (
-//                                 <label
-//                                   key={user.id}
-//                                   className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 hover:bg-slate-50"
-//                                 >
-//                                   <Checkbox
-//                                     checked={level.userIds.includes(user.id)}
-//                                     onCheckedChange={(checked) =>
-//                                       toggleApprovalLevelAssignment(
-//                                         level.id,
-//                                         "userIds",
-//                                         user.id,
-//                                         checked === true,
-//                                       )
-//                                     }
-//                                   />
-//                                   <span>
-//                                     <span className="block text-sm font-medium text-slate-700">
-//                                       {user.displayName || user.email || "Unnamed User"}
-//                                     </span>
-//                                     <span className="block text-xs text-slate-400">
-//                                       {getRoleName(user.role)}
-//                                     </span>
-//                                   </span>
-//                                 </label>
-//                               ))
-//                             )}
-//                           </div>
-//                         </div>
-//                       </div>
-//                     </div>
+//                   className="h-11 min-w-[280px] rounded-2xl border border-blue-200 bg-white px-4 text-sm font-semibold text-slate-700 outline-none focus:border-blue-300 focus:ring-2 focus:ring-blue-200"
+//                 >
+//                   <option value="">Select Budget Role</option>
+//                   {availableBudgetRoles.map((role) => (
+//                     <option key={role.id} value={role.key}>
+//                       {role.name}
+//                     </option>
 //                   ))}
+//                 </select>
+//               </div>
+
+//               {selectedBudgetRole && (
+//                 <div className="mt-4 flex flex-wrap gap-2">
+//                   <Badge className="rounded-full border border-blue-200 bg-white px-3 py-1 text-blue-700 hover:bg-white">
+//                     Budget Role: {selectedBudgetRole.name}
+//                   </Badge>
+//                   <Badge className="rounded-full border border-slate-200 bg-white px-3 py-1 text-slate-600 hover:bg-white">
+//                     {budgetWorkflow.levels.length} Approval Level
+//                     {budgetWorkflow.levels.length === 1 ? "" : "s"}
+//                   </Badge>
+//                   <Badge
+//                     className={`rounded-full border px-3 py-1 ${
+//                       budgetWorkflow.enabled !== false
+//                         ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+//                         : "border-rose-200 bg-rose-50 text-rose-700"
+//                     }`}
+//                   >
+//                     {budgetWorkflow.enabled !== false
+//                       ? "Workflow Enabled"
+//                       : "Workflow Disabled"}
+//                   </Badge>
 //                 </div>
 //               )}
 //             </CardContent>
 //           </Card>
+
+//           {!selectedBudgetRole ? (
+//             <Card className="rounded-[2rem] border-slate-200/80 bg-white/90 shadow-sm">
+//               <CardContent className="p-5 md:p-6">
+//                 <EmptyState
+//                   title="Select a Budget Role"
+//                   description="Choose a Role above to configure its Budget Request approval hierarchy."
+//                 />
+//               </CardContent>
+//             </Card>
+//           ) : (
+//             <Card className="rounded-[2rem] border-slate-200/80 bg-white/90 shadow-sm">
+//               <CardContent className="space-y-4 p-5 md:p-6">
+//                 <label className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+//                   <Checkbox
+//                     checked={budgetWorkflow.enabled !== false}
+//                     onCheckedChange={(checked) =>
+//                       setBudgetWorkflow((previous) => ({
+//                         ...previous,
+//                         enabled: checked === true,
+//                       }))
+//                     }
+//                   />
+//                   <span>
+//                     <span className="block text-sm font-semibold text-slate-800">
+//                       Enable {selectedBudgetRole.name} Budget Request workflow
+//                     </span>
+//                     <span className="block text-xs text-slate-500">
+//                       New and resubmitted Budget Requests created by users with
+//                       this Role use this sequence.
+//                     </span>
+//                   </span>
+//                 </label>
+
+//                 {budgetWorkflow.levels.length === 0 ? (
+//                   <EmptyState
+//                     title={`No workflow configured for ${selectedBudgetRole.name}`}
+//                     description={`Add the first approval level for ${selectedBudgetRole.name}, assign users or roles, and save the workflow.`}
+//                   />
+//                 ) : (
+//                   <div className="space-y-4">
+//                     {budgetWorkflow.levels.map((level, index) => (
+//                       <div
+//                         key={level.id}
+//                         className="rounded-3xl border border-slate-200 bg-slate-50/60 p-4 md:p-5"
+//                       >
+//                         <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+//                           <div className="flex flex-1 items-center gap-3">
+//                             <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-sm font-bold text-white">
+//                               {index + 1}
+//                             </span>
+//                             <div className="flex-1">
+//                               <Input
+//                                 value={level.name}
+//                                 onChange={(event) =>
+//                                   updateApprovalLevel(level.id, {
+//                                     name: event.target.value,
+//                                   })
+//                                 }
+//                                 placeholder={`Internal level title ${index + 1}`}
+//                                 className="h-11 rounded-2xl border-slate-200 bg-white"
+//                               />
+//                               <p className="mt-1 text-xs text-slate-400">
+//                                 Internal title only. Budget Request status uses
+//                                 the assigned approver role/user information.
+//                               </p>
+//                             </div>
+//                           </div>
+
+//                           <div className="flex gap-2">
+//                             <Button
+//                               type="button"
+//                               variant="outline"
+//                               size="sm"
+//                               disabled={index === 0}
+//                               onClick={() => moveApprovalLevel(level.id, -1)}
+//                               className="rounded-xl bg-white"
+//                             >
+//                               <ChevronUp className="h-4 w-4" />
+//                             </Button>
+//                             <Button
+//                               type="button"
+//                               variant="outline"
+//                               size="sm"
+//                               disabled={
+//                                 index === budgetWorkflow.levels.length - 1
+//                               }
+//                               onClick={() => moveApprovalLevel(level.id, 1)}
+//                               className="rounded-xl bg-white"
+//                             >
+//                               <ChevronDown className="h-4 w-4" />
+//                             </Button>
+//                             <Button
+//                               type="button"
+//                               variant="outline"
+//                               size="sm"
+//                               onClick={() =>
+//                                 setBudgetWorkflow((previous) => ({
+//                                   ...previous,
+//                                   levels: sanitizeApprovalLevels(
+//                                     previous.levels.filter(
+//                                       (item) => item.id !== level.id,
+//                                     ),
+//                                   ),
+//                                 }))
+//                               }
+//                               className="rounded-xl border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+//                             >
+//                               <Trash2 className="h-4 w-4" />
+//                             </Button>
+//                           </div>
+//                         </div>
+
+//                         <div className="mt-4 grid gap-4 lg:grid-cols-2">
+//                           <div className="rounded-2xl border border-slate-200 bg-white p-4">
+//                             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+//                               Assigned Approver Roles
+//                             </p>
+//                             <p className="mt-1 text-xs text-slate-400">
+//                               Select one or more roles allowed to approve this
+//                               level.
+//                             </p>
+//                             <div className="mt-3 max-h-52 space-y-2 overflow-y-auto">
+//                               {roles.length === 0 ? (
+//                                 <p className="text-sm text-slate-400">
+//                                   No roles available.
+//                                 </p>
+//                               ) : (
+//                                 roles.map((role) => (
+//                                   <label
+//                                     key={role.id}
+//                                     className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 hover:bg-slate-50"
+//                                   >
+//                                     <Checkbox
+//                                       checked={level.roleIds.includes(role.id)}
+//                                       onCheckedChange={(checked) =>
+//                                         toggleApprovalLevelAssignment(
+//                                           level.id,
+//                                           "roleIds",
+//                                           role.id,
+//                                           checked === true,
+//                                         )
+//                                       }
+//                                     />
+//                                     <span className="text-sm font-medium text-slate-700">
+//                                       {role.name}
+//                                     </span>
+//                                   </label>
+//                                 ))
+//                               )}
+//                             </div>
+//                           </div>
+
+//                           <div className="rounded-2xl border border-slate-200 bg-white p-4">
+//                             <p className="text-xs font-semibold uppercase tracking-wide text-slate-400">
+//                               Assigned Approver Users
+//                             </p>
+//                             <p className="mt-1 text-xs text-slate-400">
+//                               Direct user assignments can be used together with
+//                               role assignments.
+//                             </p>
+//                             <div className="mt-3 max-h-52 space-y-2 overflow-y-auto">
+//                               {activeUsers.length === 0 ? (
+//                                 <p className="text-sm text-slate-400">
+//                                   No active users available.
+//                                 </p>
+//                               ) : (
+//                                 activeUsers.map((user) => (
+//                                   <label
+//                                     key={user.id}
+//                                     className="flex cursor-pointer items-center gap-3 rounded-xl px-2 py-2 hover:bg-slate-50"
+//                                   >
+//                                     <Checkbox
+//                                       checked={level.userIds.includes(user.id)}
+//                                       onCheckedChange={(checked) =>
+//                                         toggleApprovalLevelAssignment(
+//                                           level.id,
+//                                           "userIds",
+//                                           user.id,
+//                                           checked === true,
+//                                         )
+//                                       }
+//                                     />
+//                                     <span>
+//                                       <span className="block text-sm font-medium text-slate-700">
+//                                         {user.displayName ||
+//                                           user.email ||
+//                                           "Unnamed User"}
+//                                       </span>
+//                                       <span className="block text-xs text-slate-400">
+//                                         {getRoleName(user.role)}
+//                                       </span>
+//                                     </span>
+//                                   </label>
+//                                 ))
+//                               )}
+//                             </div>
+//                           </div>
+//                         </div>
+//                       </div>
+//                     ))}
+//                   </div>
+//                 )}
+//               </CardContent>
+//             </Card>
+//           )}
 //         </section>
 
 //         {/* Dynamic Purchase Order Approval Workflow */}
@@ -1902,7 +1987,7 @@
 //               </h2>
 //               <p className="text-sm text-slate-500">
 //                 Configure the PO approval sequence using any role or active user
-//                 from any department.
+//                 from any Budget Role.
 //               </p>
 //             </div>
 
@@ -1924,6 +2009,7 @@
 //                 <Plus className="mr-2 h-4 w-4" />
 //                 Add PO Approval Level
 //               </Button>
+
 //               <Button
 //                 type="button"
 //                 onClick={savePurchaseOrderWorkflow}
@@ -2020,7 +2106,8 @@
 //                               variant="outline"
 //                               size="sm"
 //                               disabled={
-//                                 index === purchaseOrderWorkflow.levels.length - 1
+//                                 index ===
+//                                 purchaseOrderWorkflow.levels.length - 1
 //                               }
 //                               onClick={() =>
 //                                 movePurchaseOrderApprovalLevel(level.id, 1)
@@ -2114,7 +2201,9 @@
 //                                     />
 //                                     <span>
 //                                       <span className="block text-sm font-medium text-slate-700">
-//                                         {user.displayName || user.email || "Unnamed User"}
+//                                         {user.displayName ||
+//                                           user.email ||
+//                                           "Unnamed User"}
 //                                       </span>
 //                                       <span className="block text-xs text-slate-400">
 //                                         {getRoleName(user.role)}
@@ -2177,18 +2266,18 @@
 //                     <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
 //                       <div className="flex gap-3">
 //                         <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-2xl bg-slate-950 text-white shadow-sm">
-//                           <ShieldCheck className="h-6 w-6" />
+//                           <ShieldCheck className="h-5 w-5" />
 //                         </div>
 //                         <div>
-//                           <CardTitle className="text-lg font-bold text-slate-950">
+//                           <h3 className="text-lg font-bold text-slate-950">
 //                             {role.name}
-//                           </CardTitle>
+//                           </h3>
 //                           <p className="mt-1 text-sm text-slate-500">
-//                             {role.description || "No description added"}
+//                             {role.description || "No description"}
 //                           </p>
 //                           <div className="mt-3 flex flex-wrap gap-2">
 //                             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
-//                               {role.users ?? 0} users
+//                               {role.users || 0} users
 //                             </span>
 //                             <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-semibold text-slate-600">
 //                               {Array.isArray(role.items)
@@ -2237,11 +2326,11 @@
 //                       </p>
 //                       <div className="flex flex-wrap gap-2">
 //                         {Array.isArray(role.items) && role.items.length > 0 ? (
-//                           role.items.map((item: any, idx: number) => {
+//                           role.items.map((item: any, index: number) => {
 //                             const meta = getPermissionMeta(item);
 //                             return (
 //                               <PermissionBadge
-//                                 key={`${meta.path}-${idx}`}
+//                                 key={`${meta.path}-${index}`}
 //                                 label={meta.label}
 //                                 icon={meta.icon}
 //                               />
@@ -2284,6 +2373,7 @@
 //                               <StatusBadge active={user.isActive} />
 //                             </div>
 //                           ))}
+
 //                           {role.usersList.length > 5 ? (
 //                             <p className="text-xs text-slate-400">
 //                               +{role.usersList.length - 5} more users
@@ -2304,7 +2394,7 @@
 //         </section>
 //       </div>
 
-//       {/* FINAL CONFIRM DELETE USER CONFIRMATION */}
+//       {/* Confirm Delete User */}
 //       <Dialog open={confirmDeleteUser} onOpenChange={setConfirmDeleteUser}>
 //         <DialogContent className="rounded-[2rem] border-slate-200 p-0 shadow-xl sm:max-w-md">
 //           <div className="p-6">
@@ -2313,20 +2403,21 @@
 //                 <Trash2 className="h-6 w-6 text-rose-600" />
 //               </div>
 //               <DialogTitle className="text-xl font-bold text-slate-950">
-//                 Delete this account?
+//                 Delete User?
 //               </DialogTitle>
 //             </DialogHeader>
-
 //             <p className="mt-3 text-sm leading-6 text-slate-500">
-//               This user account will be removed from Firestore. This action
-//               cannot be undone.
+//               This will remove the selected user document from User Management.
 //             </p>
 //           </div>
 
 //           <DialogFooter className="border-t border-slate-100 bg-slate-50 px-6 py-4">
 //             <Button
 //               variant="outline"
-//               onClick={() => setConfirmDeleteUser(false)}
+//               onClick={() => {
+//                 setConfirmDeleteUser(false);
+//                 setUserIdToConfirmDelete(null);
+//               }}
 //               className="rounded-xl bg-white"
 //             >
 //               Cancel
@@ -2336,7 +2427,7 @@
 //               onClick={confirmDeleteUserNow}
 //               className="rounded-xl"
 //             >
-//               Yes, Delete
+//               Delete User
 //             </Button>
 //           </DialogFooter>
 //         </DialogContent>
@@ -2351,7 +2442,7 @@
 //                 <Trash2 className="h-6 w-6 text-rose-600" />
 //               </div>
 //               <DialogTitle className="text-xl font-bold text-slate-950">
-//                 Delete role?
+//                 Delete Role?
 //               </DialogTitle>
 //             </DialogHeader>
 
@@ -2418,12 +2509,13 @@
 //                 <InfoRow label="Role" value={getRoleName(viewUser.role)} />
 //                 <InfoRow
 //                   label="Mobile"
-//                   value={`${viewUser.mobileCountryCode || ""} ${viewUser.mobileNo || ""}`.trim()}
+//                   value={`${viewUser.mobileCountryCode || ""} ${
+//                     viewUser.mobileNo || ""
+//                   }`.trim()}
 //                 />
 //                 <InfoRow label="Region" value={viewUser.region} />
 //                 <InfoRow label="Reporting To" value={viewUser.reportingTo} />
 //                 <InfoRow label="Designation" value={viewUser.designation} />
-//                 <InfoRow label="Department" value={viewUser.department} />
 //                 <InfoRow
 //                   label="Financial Limit"
 //                   value={money(viewUser.financialLimit)}
@@ -2446,7 +2538,7 @@
 
 //               <div className="rounded-3xl border border-amber-100 bg-amber-50/70 p-4 text-sm leading-6 text-amber-800">
 //                 Passwords cannot be viewed or retrieved from Firebase Auth. If
-//                 needed, implement an admin password reset flow instead.
+//                 needed, use your admin password reset flow.
 //               </div>
 //             </div>
 //           )}
@@ -2508,69 +2600,45 @@
 //             </div>
 
 //             <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
-//             {AVAILABLE_TABS.map((tab) => {
-//               const Icon = iconMap[tab.icon];
-//               const purchaseOrderRestricted =
-//                 tab.path === PURCHASE_ORDER_PATH &&
-//                 !canRoleAccessPurchaseOrders(editingRole);
-//               const checked =
-//                 !purchaseOrderRestricted && selectedTabs.includes(tab.path);
+//               {AVAILABLE_TABS.map((tab) => {
+//                 const Icon = iconMap[tab.icon];
+//                 const purchaseOrderRestricted =
+//                   tab.path === PURCHASE_ORDER_PATH &&
+//                   !canRoleAccessPurchaseOrders(editingRole);
+//                 const checked =
+//                   !purchaseOrderRestricted && selectedTabs.includes(tab.path);
 
-//               return (
-//                 <label
-//                   key={tab.path}
-//                   className={
-//                     purchaseOrderRestricted
-//                       ? "flex cursor-not-allowed items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-800 opacity-80"
-//                       : checked
-//                         ? "flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-300 bg-slate-950 p-4 text-white shadow-sm transition"
-//                         : "flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-slate-700 transition hover:bg-slate-50"
-//                   }
-//                 >
-//                   <Checkbox
-//                     checked={checked}
-//                     disabled={purchaseOrderRestricted}
-//                     onCheckedChange={(isChecked) => {
-//                       if (isChecked) {
-//                         setSelectedTabs((prev) =>
-//                           Array.from(new Set([...prev, tab.path])),
+//                 return (
+//                   <label
+//                     key={tab.path}
+//                     className={
+//                       purchaseOrderRestricted
+//                         ? "flex cursor-not-allowed items-center gap-3 rounded-2xl border border-amber-200 bg-amber-50 p-4 text-amber-800 opacity-80"
+//                         : checked
+//                           ? "flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-900 bg-slate-950 p-4 text-white"
+//                           : "flex cursor-pointer items-center gap-3 rounded-2xl border border-slate-200 bg-white p-4 text-slate-700 hover:bg-slate-50"
+//                     }
+//                   >
+//                     <Checkbox
+//                       checked={checked}
+//                       disabled={purchaseOrderRestricted}
+//                       onCheckedChange={(value) => {
+//                         if (purchaseOrderRestricted) return;
+
+//                         setSelectedTabs((previous) =>
+//                           value === true
+//                             ? Array.from(new Set([...previous, tab.path]))
+//                             : previous.filter((path) => path !== tab.path),
 //                         );
-//                       } else {
-//                         setSelectedTabs((prev) =>
-//                           prev.filter((p) => p !== tab.path),
-//                         );
-//                       }
-//                     }}
-//                     className="border-slate-300"
-//                   />
-//                   <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-white/10">
-//                     {Icon ? (
-//                       <Icon className="h-4 w-4" />
-//                     ) : (
-//                       <FileText className="h-4 w-4" />
-//                     )}
-//                   </span>
-//                   <span>
-//                     <span className="block text-sm font-semibold">
+//                       }}
+//                     />
+//                     <span className="flex items-center gap-2 text-sm font-semibold">
+//                       {Icon ? <Icon className="h-4 w-4" /> : null}
 //                       {tab.label}
 //                     </span>
-//                     <span
-//                       className={
-//                         purchaseOrderRestricted
-//                           ? "block text-xs text-amber-700"
-//                           : checked
-//                             ? "block text-xs text-slate-300"
-//                             : "block text-xs text-slate-400"
-//                       }
-//                     >
-//                       {purchaseOrderRestricted
-//                         ? "Restricted to Finance and Head of Operations"
-//                         : tab.path}
-//                     </span>
-//                   </span>
-//                 </label>
-//               );
-//             })}
+//                   </label>
+//                 );
+//               })}
 //             </div>
 //           </div>
 
@@ -2582,17 +2650,14 @@
 //             >
 //               Cancel
 //             </Button>
-//             <Button
-//               onClick={handleSave}
-//               className="rounded-xl bg-slate-950 text-white hover:bg-slate-800"
-//             >
+//             <Button onClick={handleSave} className="rounded-xl bg-slate-950">
 //               Save Permissions
 //             </Button>
 //           </DialogFooter>
 //         </DialogContent>
 //       </Dialog>
 
-//       {/* Create Role Modal */}
+//       {/* Create Role */}
 //       <Dialog open={showCreateRole} onOpenChange={setShowCreateRole}>
 //         <DialogContent className="rounded-[2rem] border-slate-200 p-0 shadow-xl sm:max-w-lg">
 //           <div className="border-b border-slate-100 p-6">
@@ -2602,20 +2667,23 @@
 //               </DialogTitle>
 //             </DialogHeader>
 //             <p className="mt-2 text-sm text-slate-500">
-//               Add a new role, then assign permissions from the edit option.
+//               Create the role first, then edit it to assign module permissions.
 //             </p>
 //           </div>
 
 //           <div className="space-y-4 p-6">
 //             <div className="space-y-2">
-//               <Label>Role Name</Label>
+//               <Label>Role Name *</Label>
 //               <Input
 //                 value={newRole.name}
-//                 onChange={(e) =>
-//                   setNewRole({ ...newRole, name: e.target.value })
+//                 onChange={(event) =>
+//                   setNewRole((previous) => ({
+//                     ...previous,
+//                     name: event.target.value,
+//                   }))
 //                 }
-//                 placeholder="e.g. HR Manager"
-//                 className="h-11 rounded-2xl border-slate-200 bg-slate-50"
+//                 placeholder="e.g. Creative Manager"
+//                 className="h-11 rounded-2xl"
 //               />
 //             </div>
 
@@ -2623,11 +2691,14 @@
 //               <Label>Description</Label>
 //               <Input
 //                 value={newRole.description}
-//                 onChange={(e) =>
-//                   setNewRole({ ...newRole, description: e.target.value })
+//                 onChange={(event) =>
+//                   setNewRole((previous) => ({
+//                     ...previous,
+//                     description: event.target.value,
+//                   }))
 //                 }
-//                 placeholder="Short description"
-//                 className="h-11 rounded-2xl border-slate-200 bg-slate-50"
+//                 placeholder="Short role description"
+//                 className="h-11 rounded-2xl"
 //               />
 //             </div>
 //           </div>
@@ -2635,14 +2706,17 @@
 //           <DialogFooter className="border-t border-slate-100 bg-slate-50 px-6 py-4">
 //             <Button
 //               variant="outline"
-//               onClick={() => setShowCreateRole(false)}
+//               onClick={() => {
+//                 setShowCreateRole(false);
+//                 setNewRole({ name: "", description: "" });
+//               }}
 //               className="rounded-xl bg-white"
 //             >
 //               Cancel
 //             </Button>
 //             <Button
 //               onClick={handleCreateRole}
-//               className="rounded-xl bg-slate-950 text-white hover:bg-slate-800"
+//               className="rounded-xl bg-slate-950"
 //             >
 //               Create Role
 //             </Button>
@@ -2650,288 +2724,254 @@
 //         </DialogContent>
 //       </Dialog>
 
-//       {/* Create User Modal */}
+//       {/* Create User */}
 //       <Dialog open={showCreateUser} onOpenChange={setShowCreateUser}>
-//         <DialogContent className="max-w-5xl rounded-[2rem] border-slate-200 p-0 shadow-xl">
+//         <DialogContent className="max-h-[90vh] max-w-4xl overflow-y-auto rounded-[2rem] border-slate-200 p-0 shadow-xl">
 //           <div className="border-b border-slate-100 p-6">
 //             <DialogHeader>
-//               <DialogTitle className="flex items-center gap-3 text-xl font-bold text-slate-950">
-//                 <span className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-950 text-white">
-//                   <UserPlus className="h-5 w-5" />
-//                 </span>
-//                 Create New User
+//               <DialogTitle className="text-xl font-bold text-slate-950">
+//                 Create User
 //               </DialogTitle>
 //             </DialogHeader>
 //             <p className="mt-2 text-sm text-slate-500">
-//               Create a Firebase Auth account and save the user profile under
-//               this panel.
+//               The user's Role is used as the Budget Role for Budget Request
+//               approval workflow selection. Department remains profile
+//               information.
 //             </p>
 //           </div>
 
-//           <div className="max-h-[70vh] overflow-y-auto p-6">
-//             <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3">
-//               <div className="space-y-2">
-//                 <Label htmlFor="create-name">Full name *</Label>
-//                 <div className="relative">
-//                   <UserCog className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-//                   <Input
-//                     id="create-name"
-//                     placeholder="Enter full name"
-//                     value={newUser.displayName}
-//                     onChange={(e) =>
-//                       setNewUser({ ...newUser, displayName: e.target.value })
-//                     }
-//                     className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-11"
-//                   />
-//                 </div>
-//               </div>
+//           <div className="grid grid-cols-1 gap-4 p-6 md:grid-cols-2">
+//             <div className="space-y-2">
+//               <Label>Full Name *</Label>
+//               <Input
+//                 value={newUser.displayName}
+//                 onChange={(event) =>
+//                   setNewUser((previous) => ({
+//                     ...previous,
+//                     displayName: event.target.value,
+//                   }))
+//                 }
+//                 placeholder="Full name"
+//                 className="h-11 rounded-2xl"
+//               />
+//             </div>
 
-//               <div className="space-y-2">
-//                 <Label htmlFor="create-email">Email *</Label>
-//                 <div className="relative">
-//                   <Mail className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-//                   <Input
-//                     id="create-email"
-//                     type="email"
-//                     placeholder="user@example.com"
-//                     value={newUser.email}
-//                     onChange={(e) =>
-//                       setNewUser({ ...newUser, email: e.target.value })
-//                     }
-//                     className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-11"
-//                   />
-//                 </div>
-//               </div>
+//             <div className="space-y-2">
+//               <Label>Email *</Label>
+//               <Input
+//                 type="email"
+//                 value={newUser.email}
+//                 onChange={(event) =>
+//                   setNewUser((previous) => ({
+//                     ...previous,
+//                     email: event.target.value,
+//                   }))
+//                 }
+//                 placeholder="name@example.com"
+//                 className="h-11 rounded-2xl"
+//               />
+//             </div>
 
-//               <div className="space-y-2">
-//                 <Label htmlFor="create-role">Role *</Label>
-//                 <select
-//                   id="create-role"
-//                   className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700 outline-none transition focus:border-slate-300 focus:ring-2 focus:ring-slate-200"
-//                   value={newUser.role}
-//                   onChange={(e) =>
-//                     setNewUser((previous) => ({
-//                       ...previous,
-//                       role: e.target.value,
-//                     }))
-//                   }
-//                 >
-//                   <option value="">Select role</option>
-//                   {roles.map((role) => (
-//                     <option key={role.id} value={role.id}>
-//                       {role.name}
-//                     </option>
-//                   ))}
-//                 </select>
-//               </div>
-
-//               <div className="space-y-2">
-//                 <Label htmlFor="create-budget-visibility">
-//                   Budget Request Access
-//                 </Label>
-//                 <select
-//                   id="create-budget-visibility"
-//                   value={newUser.budgetRequestVisibility}
+//             <div className="space-y-2">
+//               <Label>Password *</Label>
+//               <div className="flex gap-2">
+//                 <Input
+//                   type={showPassword ? "text" : "password"}
+//                   value={newUser.password}
 //                   onChange={(event) =>
 //                     setNewUser((previous) => ({
 //                       ...previous,
-//                       budgetRequestVisibility: event.target
-//                         .value as BudgetRequestVisibility,
+//                       password: event.target.value,
 //                     }))
 //                   }
-//                   className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
+//                   placeholder="Password"
+//                   className="h-11 rounded-2xl"
+//                 />
+//                 <Button
+//                   type="button"
+//                   variant="outline"
+//                   onClick={() => setShowPassword((value) => !value)}
+//                   className="h-11 rounded-2xl"
 //                 >
-//                   <option value="role">Use role default</option>
-//                   <option value="all">View all requests</option>
-//                   <option value="assigned">Own + assigned approvals</option>
-//                   <option value="own">Own requests only</option>
-//                 </select>
+//                   {showPassword ? "Hide" : "Show"}
+//                 </Button>
 //               </div>
+//             </div>
 
-//               <div className="space-y-2">
-//                 <Label htmlFor="create-po-visibility">
-//                   Purchase Order Access
-//                 </Label>
-//                 <select
-//                   id="create-po-visibility"
-//                   value={newUser.purchaseOrderVisibility}
+//             <div className="space-y-2">
+//               <Label>Role *</Label>
+//               <select
+//                 value={newUser.role}
+//                 onChange={(event) =>
+//                   setNewUser((previous) => ({
+//                     ...previous,
+//                     role: event.target.value,
+//                   }))
+//                 }
+//                 className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
+//               >
+//                 <option value="">Select role</option>
+//                 {roles.map((role) => (
+//                   <option key={role.id} value={role.id}>
+//                     {role.name}
+//                   </option>
+//                 ))}
+//               </select>
+//               <p className="text-xs text-slate-400">
+//                 This Role is also the user's Budget Role. Budget Request
+//                 approval routing uses this Role and does not require a
+//                 Department assignment.
+//               </p>
+//             </div>
+
+//             <div className="space-y-2">
+//               <Label>Designation *</Label>
+//               <Input
+//                 value={newUser.designation}
+//                 onChange={(event) =>
+//                   setNewUser((previous) => ({
+//                     ...previous,
+//                     designation: event.target.value,
+//                   }))
+//                 }
+//                 placeholder="Designation"
+//                 className="h-11 rounded-2xl"
+//               />
+//             </div>
+
+//             <div className="space-y-2">
+//               <Label>Mobile *</Label>
+//               <div className="grid grid-cols-[110px_1fr] gap-2">
+//                 <Input
+//                   value={newUser.mobileCountryCode}
 //                   onChange={(event) =>
 //                     setNewUser((previous) => ({
 //                       ...previous,
-//                       purchaseOrderVisibility: event.target
-//                         .value as PurchaseOrderVisibility,
+//                       mobileCountryCode: event.target.value,
 //                     }))
 //                   }
-//                   className="h-11 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
-//                 >
-//                   <option value="own">Own / assigned POs</option>
-//                   <option value="all">View all POs</option>
-//                 </select>
+//                   placeholder="+92"
+//                   className="h-11 rounded-2xl"
+//                 />
+//                 <Input
+//                   value={newUser.mobileNo}
+//                   onChange={(event) =>
+//                     setNewUser((previous) => ({
+//                       ...previous,
+//                       mobileNo: event.target.value,
+//                     }))
+//                   }
+//                   placeholder="3001234567"
+//                   className="h-11 rounded-2xl"
+//                 />
 //               </div>
+//             </div>
 
-//               <div className="space-y-2">
-//                 <Label>Mobile Country Code *</Label>
-//                 <div className="relative">
-//                   <Smartphone className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-//                   <Input
-//                     placeholder="+92"
-//                     value={newUser.mobileCountryCode}
-//                     onChange={(e) =>
-//                       setNewUser({
-//                         ...newUser,
-//                         mobileCountryCode: e.target.value,
-//                       })
-//                     }
-//                     className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-11"
-//                   />
-//                 </div>
-//               </div>
+//             <div className="space-y-2">
+//               <Label>Region *</Label>
+//               <Input
+//                 value={newUser.region}
+//                 onChange={(event) =>
+//                   setNewUser((previous) => ({
+//                     ...previous,
+//                     region: event.target.value,
+//                   }))
+//                 }
+//                 placeholder="Region"
+//                 className="h-11 rounded-2xl"
+//               />
+//             </div>
 
-//               <div className="space-y-2">
-//                 <Label>Mobile No *</Label>
-//                 <div className="relative">
-//                   <Smartphone className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-//                   <Input
-//                     placeholder="3001234567"
-//                     value={newUser.mobileNo}
-//                     onChange={(e) =>
-//                       setNewUser({ ...newUser, mobileNo: e.target.value })
-//                     }
-//                     className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-11"
-//                   />
-//                 </div>
-//               </div>
+//             <div className="space-y-2">
+//               <Label>Reporting To</Label>
+//               <Input
+//                 value={newUser.reportingTo}
+//                 onChange={(event) =>
+//                   setNewUser((previous) => ({
+//                     ...previous,
+//                     reportingTo: event.target.value,
+//                   }))
+//                 }
+//                 placeholder="Manager / reporting person"
+//                 className="h-11 rounded-2xl"
+//               />
+//             </div>
 
-//               <div className="space-y-2">
-//                 <Label>Region *</Label>
-//                 <div className="relative">
-//                   <MapPin className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-//                   <Input
-//                     placeholder="Karachi / Lahore / Islamabad"
-//                     value={newUser.region}
-//                     onChange={(e) =>
-//                       setNewUser({ ...newUser, region: e.target.value })
-//                     }
-//                     className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-11"
-//                   />
-//                 </div>
-//               </div>
+//             <div className="space-y-2">
+//               <Label>Financial Limit</Label>
+//               <Input
+//                 type="number"
+//                 value={newUser.financialLimit}
+//                 onChange={(event) =>
+//                   setNewUser((previous) => ({
+//                     ...previous,
+//                     financialLimit: event.target.value,
+//                   }))
+//                 }
+//                 placeholder="0"
+//                 className="h-11 rounded-2xl"
+//               />
+//             </div>
 
-//               <div className="space-y-2">
-//                 <Label>Reporting to</Label>
-//                 <div className="relative">
-//                   <Users className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-//                   <Input
-//                     placeholder="Manager name / email"
-//                     value={newUser.reportingTo}
-//                     onChange={(e) =>
-//                       setNewUser({ ...newUser, reportingTo: e.target.value })
-//                     }
-//                     className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-11"
-//                   />
-//                 </div>
-//               </div>
+//             <div className="space-y-2">
+//               <Label>Budget Request Access</Label>
+//               <select
+//                 value={newUser.budgetRequestVisibility}
+//                 onChange={(event) =>
+//                   setNewUser((previous) => ({
+//                     ...previous,
+//                     budgetRequestVisibility: event.target
+//                       .value as BudgetRequestVisibility,
+//                   }))
+//                 }
+//                 className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
+//               >
+//                 <option value="role">Use role default</option>
+//                 <option value="all">View all requests</option>
+//                 <option value="assigned">Own + assigned approvals</option>
+//                 <option value="own">Own requests only</option>
+//               </select>
+//             </div>
 
-//               <div className="space-y-2">
-//                 <Label>Financial Limit</Label>
-//                 <div className="relative">
-//                   <WalletCards className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-//                   <Input
-//                     type="number"
-//                     placeholder="0"
-//                     value={newUser.financialLimit}
-//                     onChange={(e) =>
-//                       setNewUser({ ...newUser, financialLimit: e.target.value })
-//                     }
-//                     className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-11"
-//                   />
-//                 </div>
-//               </div>
-
-//               <div className="space-y-2">
-//                 <Label>Designation *</Label>
-//                 <div className="relative">
-//                   <BriefcaseBusiness className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-//                   <Input
-//                     placeholder="Sales Executive"
-//                     value={newUser.designation}
-//                     onChange={(e) =>
-//                       setNewUser({ ...newUser, designation: e.target.value })
-//                     }
-//                     className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-11"
-//                   />
-//                 </div>
-//               </div>
-
-//               <div className="space-y-2">
-//                 <Label>Department *</Label>
-//                 <div className="relative">
-//                   <Building2 className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
-//                   <Input
-//                     placeholder="Sales"
-//                     value={newUser.department}
-//                     onChange={(e) =>
-//                       setNewUser({ ...newUser, department: e.target.value })
-//                     }
-//                     className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-11"
-//                   />
-//                 </div>
-//               </div>
-
-//               <div className="space-y-2 md:col-span-2 xl:col-span-2">
-//                 <Label htmlFor="create-password">Password *</Label>
-//                 <div className="flex gap-2">
-//                   <Input
-//                     id="create-password"
-//                     type={showPassword ? "text" : "password"}
-//                     placeholder="min 6 characters"
-//                     value={newUser.password}
-//                     onChange={(e) =>
-//                       setNewUser({ ...newUser, password: e.target.value })
-//                     }
-//                     className="h-11 rounded-2xl border-slate-200 bg-slate-50"
-//                   />
-//                   <Button
-//                     type="button"
-//                     variant="outline"
-//                     onClick={() => setShowPassword((previous) => !previous)}
-//                     className="h-11 rounded-2xl border-slate-200 bg-white px-5"
-//                   >
-//                     {showPassword ? "Hide" : "Show"}
-//                   </Button>
-//                 </div>
-//                 <p className="text-xs text-slate-500">
-//                   Password can be shown only while creating. It won’t be stored
-//                   or retrievable later.
-//                 </p>
-//               </div>
+//             <div className="space-y-2">
+//               <Label>Purchase Order Access</Label>
+//               <select
+//                 value={newUser.purchaseOrderVisibility}
+//                 onChange={(event) =>
+//                   setNewUser((previous) => ({
+//                     ...previous,
+//                     purchaseOrderVisibility: event.target
+//                       .value as PurchaseOrderVisibility,
+//                   }))
+//                 }
+//                 className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none focus:ring-2 focus:ring-slate-200"
+//               >
+//                 <option value="own">Own / assigned POs</option>
+//                 <option value="all">View all POs</option>
+//               </select>
 //             </div>
 //           </div>
 
 //           <DialogFooter className="border-t border-slate-100 bg-slate-50 px-6 py-4">
 //             <Button
 //               variant="outline"
+//               disabled={creating}
 //               onClick={() => setShowCreateUser(false)}
 //               className="rounded-xl bg-white"
 //             >
 //               Cancel
 //             </Button>
 //             <Button
-//               onClick={handleCreateUser}
 //               disabled={creating}
-//               className="rounded-xl bg-slate-950 text-white hover:bg-slate-800 disabled:opacity-60"
+//               onClick={handleCreateUser}
+//               className="rounded-xl bg-slate-950"
 //             >
 //               {creating ? (
-//                 <>
-//                   <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-//                   Creating...
-//                 </>
+//                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
 //               ) : (
-//                 <>
-//                   <UserPlus className="mr-2 h-4 w-4" />
-//                   Create User
-//                 </>
+//                 <UserPlus className="mr-2 h-4 w-4" />
 //               )}
+//               {creating ? "Creating..." : "Create User"}
 //             </Button>
 //           </DialogFooter>
 //         </DialogContent>
@@ -3040,8 +3080,6 @@ const AVAILABLE_TABS = [
   { path: "/sales-management", label: "Sales Management", icon: "PieChart" },
   { path: "/travel/hotel", label: "Travel", icon: "PlaneTakeoff" },
   { path: "/invoice-estimate", label: "Invoice Estimates", icon: "ScrollText" },
-
-  { path: "/rtd-management", label: "RTD Management", icon: "FileText" },
   { path: "/usertravel", label: "Book Hotel", icon: "BedDouble" },
   { path: "/booking", label: "Bookings", icon: "Hotel" },
   { path: "/suppliers", label: "Suppliers", icon: "BookUser" },

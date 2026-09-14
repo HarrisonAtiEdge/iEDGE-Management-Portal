@@ -2166,6 +2166,7 @@ const PANEL_ID = "IEDGE-SYSTEM";
 
 const categoryOptions: string[] = [
   "Utility",
+  "Commission",
   "General",
   "Tuition Fees",
   "Payroll",
