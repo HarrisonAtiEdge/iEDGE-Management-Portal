@@ -101,7 +101,7 @@
 
 // const formatPrintAmount = (value: number): string => {
 //   return value.toLocaleString("en-US", {
-//     minimumFractionDigits: 2,
+//     minimumFractionDigits: 0,
 //     maximumFractionDigits: 2,
 //   });
 // };
@@ -110,407 +110,440 @@
 //   return value.replace(/\r\n?/g, "\n");
 // };
 
-// const formatDescriptionForPrint = (value: string): string => {
-//   const normalizedValue = normalizeDescriptionLineBreaks(value);
-
-//   if (!normalizedValue.trim()) {
-//     return '<span class="description-empty">-</span>';
-//   }
-
-//   return `<div class="description-text">${escapeHtml(normalizedValue)}</div>`;
-// };
-
 // const printRecord = (record: PrintableRecordData): boolean => {
-//   const printWindow = window.open("", "_blank", "width=1100,height=850");
+//   const printWindow = window.open(
+//     "",
+//     "_blank",
+//     "width=1100,height=850,scrollbars=yes,resizable=yes",
+//   );
 
 //   if (!printWindow) return false;
 
-//   const accountSource =
+//   const formatRecordDate = (value: string): string => {
+//     if (!value) return "-";
+
+//     try {
+//       const date = new Date(`${value}T00:00:00`);
+
+//       if (Number.isNaN(date.getTime())) return value;
+
+//       return date.toLocaleDateString("en-US", {
+//         year: "numeric",
+//         month: "short",
+//         day: "2-digit",
+//       });
+//     } catch {
+//       return value;
+//     }
+//   };
+
+//   const documentReference =
+//     record.chequeNumber?.trim() ||
+//     record.recordId?.slice(0, 10).toUpperCase() ||
+//     "DRAFT";
+
+//   const accountLocation = [record.branch, record.city]
+//     .filter(Boolean)
+//     .join(", ");
+
+//   const accountProvider =
 //     record.accountType === "online"
-//       ? record.platform || record.bank || "-"
-//       : record.bank || "-";
+//       ? record.platform || record.bank
+//       : record.bank;
 
-//   const branchOrRouting =
+//   const additionalAccountDetail =
 //     record.accountType === "online"
-//       ? record.routingNumber || "-"
-//       : record.branch || "-";
+//       ? record.routingNumber
+//         ? `Routing No: ${record.routingNumber}`
+//         : ""
+//       : accountLocation;
 
-//   const itemRows = record.items
-//     .map(
-//       (item, index) => `
-//         <tr>
-//           <td class="number">${index + 1}</td>
-//           <td>${escapeHtml(item.category || "-")}</td>
-//           <td>${escapeHtml(item.name || "-")}</td>
-//           <td><div class="description-content">${formatDescriptionForPrint(
-//             item.description
-//           )}</div></td>
-//           <td class="amount">${escapeHtml(formatPrintAmount(item.amount))}</td>
-//         </tr>`
-//     )
-//     .join("");
-
-//   const html = `<!doctype html>
-// <html lang="en">
-// <head>
-//   <meta charset="utf-8" />
-//   <meta name="viewport" content="width=device-width, initial-scale=1" />
-//   <title>Record ${escapeHtml(record.chequeNumber)}</title>
-//   <style>
-//     @page {
-//       size: A4;
-//       margin: 14mm;
-//     }
-
-//     * {
-//       box-sizing: border-box;
-//     }
-
-//     body {
-//       margin: 0;
-//       color: #172033;
-//       background: #ffffff;
-//       font-family: Arial, Helvetica, sans-serif;
-//       font-size: 12px;
-//       line-height: 1.45;
-//     }
-
-//     .document {
-//       width: 100%;
-//       margin: 0 auto;
-//     }
-
-//     .header {
-//       display: flex;
-//       align-items: flex-start;
-//       justify-content: space-between;
-//       gap: 24px;
-//       padding-bottom: 16px;
-//       border-bottom: 2px solid #172033;
-//     }
-
-//     .brand h1 {
-//       margin: 0;
-//       font-size: 24px;
-//       letter-spacing: 0.8px;
-//     }
-
-//     .brand p {
-//       margin: 5px 0 0;
-//       color: #667085;
-//       font-size: 11px;
-//     }
-
-//     .document-meta {
-//       min-width: 220px;
-//       text-align: right;
-//     }
-
-//     .document-meta .title {
-//       font-size: 17px;
-//       font-weight: 700;
-//     }
-
-//     .document-meta .line {
-//       margin-top: 4px;
-//       color: #475467;
-//     }
-
-//     .section {
-//       margin-top: 18px;
-//       break-inside: avoid;
-//     }
-
-//     .section-title {
-//       margin: 0 0 9px;
-//       padding: 7px 10px;
-//       border-left: 4px solid #172033;
-//       background: #f2f4f7;
-//       font-size: 12px;
-//       font-weight: 700;
-//       letter-spacing: 0.4px;
-//       text-transform: uppercase;
-//     }
-
-//     .details-grid {
-//       display: grid;
-//       grid-template-columns: repeat(2, minmax(0, 1fr));
-//       gap: 8px 24px;
-//     }
-
-//     .detail {
-//       display: grid;
-//       grid-template-columns: 125px minmax(0, 1fr);
-//       gap: 8px;
-//       padding: 6px 0;
-//       border-bottom: 1px solid #e4e7ec;
-//     }
-
-//     .detail .label {
-//       color: #667085;
-//       font-weight: 600;
-//     }
-
-//     .detail .value {
-//       overflow-wrap: anywhere;
-//       color: #101828;
-//       font-weight: 600;
-//     }
-
-//     table {
-//       width: 100%;
-//       border-collapse: collapse;
-//       table-layout: fixed;
-//     }
-
-//     thead {
-//       display: table-header-group;
-//     }
-
-//     tr {
-//       break-inside: avoid;
-//     }
-
-//     th,
-//     td {
-//       padding: 8px;
-//       border: 1px solid #d0d5dd;
-//       vertical-align: top;
-//       overflow-wrap: anywhere;
-//     }
-
-//     th {
-//       background: #f2f4f7;
-//       color: #344054;
-//       font-size: 10px;
-//       letter-spacing: 0.35px;
-//       text-align: left;
-//       text-transform: uppercase;
-//     }
-
-//     th:nth-child(1),
-//     td:nth-child(1) {
-//       width: 6%;
-//     }
-
-//     th:nth-child(2),
-//     td:nth-child(2) {
-//       width: 18%;
-//     }
-
-//     th:nth-child(3),
-//     td:nth-child(3) {
-//       width: 23%;
-//     }
-
-//     th:nth-child(4),
-//     td:nth-child(4) {
-//       width: 35%;
-//     }
-
-//     th:nth-child(5),
-//     td:nth-child(5) {
-//       width: 18%;
-//     }
-
-//     .number {
-//       text-align: center;
-//     }
-
-//     .amount {
-//       text-align: right;
-//       white-space: nowrap;
-//     }
-
-//     .description-content {
-//       color: #344054;
-//       line-height: 1.5;
-//     }
-
-//     .description-text {
-//       margin: 0;
-//       white-space: pre-wrap;
-//       overflow-wrap: anywhere;
-//     }
-
-//     .description-empty {
-//       color: #98a2b3;
-//     }
-
-//     .summary {
-//       width: 360px;
-//       margin-left: auto;
-//       border: 1px solid #d0d5dd;
-//     }
-
-//     .summary-row {
-//       display: flex;
-//       justify-content: space-between;
-//       gap: 18px;
-//       padding: 9px 12px;
-//       border-bottom: 1px solid #e4e7ec;
-//     }
-
-//     .summary-row:last-child {
-//       border-bottom: 0;
-//       background: #f2f4f7;
-//       font-size: 13px;
-//       font-weight: 700;
-//     }
-
-//     .summary-label {
-//       color: #475467;
-//     }
-
-//     .summary-value {
-//       font-weight: 700;
-//       white-space: nowrap;
-//     }
-
-//     .footer {
-//       margin-top: 24px;
-//       padding-top: 10px;
-//       border-top: 1px solid #d0d5dd;
-//       color: #667085;
-//       font-size: 10px;
-//       text-align: center;
-//     }
-
-//     @media print {
-//       .document {
-//         width: 100%;
-//       }
-//     }
-//   </style>
-// </head>
-// <body>
-//   <main class="document">
-//     <header class="header">
-//       <div class="brand">
-//         <h1>IEDGE</h1>
-//         <p>Official account, cheque and transaction record</p>
-//       </div>
-
-//       <div class="document-meta">
-//         <div class="title">Financial Record</div>
-//         <div class="line"><strong>Record ID:</strong> ${escapeHtml(
-//           record.recordId || "Not saved yet"
-//         )}</div>
-//         <div class="line"><strong>Date:</strong> ${escapeHtml(
-//           record.selectedDate
-//         )}</div>
-//       </div>
-//     </header>
-
-//     <section class="section">
-//       <h2 class="section-title">Record Information</h2>
-//       <div class="details-grid">
-//         <div class="detail">
-//           <span class="label">Cheque Number</span>
-//           <span class="value">${escapeHtml(record.chequeNumber)}</span>
-//         </div>
-//         <div class="detail">
-//           <span class="label">Statement Title</span>
-//           <span class="value">${escapeHtml(record.statementTitle || "-")}</span>
-//         </div>
-//         <div class="detail">
-//           <span class="label">Created By</span>
-//           <span class="value">${escapeHtml(record.createdByName)}</span>
-//         </div>
-//         <div class="detail">
-//           <span class="label">Account Type</span>
-//           <span class="value">${
-//             record.accountType === "cheque" ? "Cheque Account" : "Online Account"
-//           }</span>
-//         </div>
-//       </div>
-//     </section>
-
-//     <section class="section">
-//       <h2 class="section-title">Account Details</h2>
-//       <div class="details-grid">
-//         <div class="detail">
-//           <span class="label">Account Title</span>
-//           <span class="value">${escapeHtml(record.accountTitle || "-")}</span>
-//         </div>
-//         <div class="detail">
-//           <span class="label">Bank / Platform</span>
-//           <span class="value">${escapeHtml(accountSource)}</span>
-//         </div>
-//         <div class="detail">
-//           <span class="label">Account Number</span>
-//           <span class="value">${escapeHtml(record.accountNo || "-")}</span>
-//         </div>
-//         <div class="detail">
-//           <span class="label">Branch / Routing</span>
-//           <span class="value">${escapeHtml(branchOrRouting)}</span>
-//         </div>
-//       </div>
-//     </section>
-
-//     <section class="section">
-//       <h2 class="section-title">Record Items</h2>
-//       <table>
-//         <thead>
+//   const itemRows =
+//     record.items.length > 0
+//       ? record.items
+//           .map(
+//             (item, index) => `
+//               <tr>
+//                 <td class="serial-column">${index + 1}</td>
+//                 <td><span class="cell-primary">${escapeHtml(item.category || "-")}</span></td>
+//                 <td><span class="cell-primary">${escapeHtml(item.name || "-")}</span></td>
+//                 <td><div class="description-text">${escapeHtml(item.description || "-")}</div></td>
+//                 <td class="amount-column">${escapeHtml(formatPrintAmount(item.amount))}</td>
+//               </tr>
+//             `,
+//           )
+//           .join("")
+//       : `
 //           <tr>
-//             <th>#</th>
-//             <th>Category</th>
-//             <th>Name</th>
-//             <th>Description</th>
-//             <th class="amount">Amount</th>
+//             <td colspan="5" class="empty-row">
+//               No transaction items are available for this document.
+//             </td>
 //           </tr>
-//         </thead>
-//         <tbody>${itemRows}</tbody>
-//       </table>
-//     </section>
+//         `;
 
-//     <section class="section">
-//       <h2 class="section-title">Cheque Summary</h2>
-//       <div class="summary">
-//         <div class="summary-row">
-//           <span class="summary-label">Cheque Amount</span>
-//           <span class="summary-value">${escapeHtml(
-//             formatPrintAmount(record.chequeAmount)
-//           )}</span>
-//         </div>
-//         <div class="summary-row">
-//           <span class="summary-label">Total Item Amount</span>
-//           <span class="summary-value">${escapeHtml(
-//             formatPrintAmount(record.totalItemAmount)
-//           )}</span>
-//         </div>
-//         <div class="summary-row">
-//           <span class="summary-label">Remaining Balance</span>
-//           <span class="summary-value">${escapeHtml(
-//             formatPrintAmount(record.remainingBalance)
-//           )}</span>
-//         </div>
-//       </div>
-//     </section>
+//   const printDocument = `
+//     <!DOCTYPE html>
+//     <html lang="en">
+//       <head>
+//         <meta charset="UTF-8" />
+//         <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+//         <title>Payment Record ${escapeHtml(documentReference)}</title>
 
-//     <footer class="footer">
-//       Printed ${escapeHtml(new Date().toLocaleString("en-US"))}
-//     </footer>
-//   </main>
+//         <style>
+//           :root {
+//             --primary: #17375e;
+//             --primary-dark: #102a49;
+//             --accent: #d4a64a;
+//             --text: #172033;
+//             --muted: #667085;
+//             --border: #d9e0e8;
+//             --surface: #f6f8fb;
+//             --white: #ffffff;
+//           }
 
-//   <script>
-//     window.addEventListener("load", function () {
-//       window.setTimeout(function () {
-//         window.print();
-//       }, 200);
-//     });
+//           * { box-sizing: border-box; }
 
-//     window.addEventListener("afterprint", function () {
-//       window.close();
-//     });
-//   </script>
-// </body>
-// </html>`;
+//           html,
+//           body {
+//             margin: 0;
+//             padding: 0;
+//             background: var(--white);
+//             color: var(--text);
+//             font-family: Inter, "Segoe UI", Arial, Helvetica, sans-serif;
+//             font-size: 12px;
+//             line-height: 1.5;
+//             -webkit-print-color-adjust: exact;
+//             print-color-adjust: exact;
+//           }
+
+//           body { padding: 24px; }
+
+//           .document {
+//             width: 100%;
+//             max-width: 1000px;
+//             margin: 0 auto;
+//             overflow: hidden;
+//             border: 1px solid var(--border);
+//             background: var(--white);
+//             box-shadow: 0 16px 45px rgba(16, 42, 73, 0.1);
+//           }
+
+//           .top-accent {
+//             height: 6px;
+//             background: linear-gradient(90deg, var(--primary) 0%, var(--primary) 76%, var(--accent) 76%, var(--accent) 100%);
+//           }
+
+//           .document-header {
+//             display: flex;
+//             align-items: center;
+//             justify-content: space-between;
+//             gap: 24px;
+//             padding: 25px 38px;
+//             background: linear-gradient(135deg, var(--primary), var(--primary-dark));
+//             color: var(--white);
+//           }
+
+//           .brand-area { display: flex; align-items: center; gap: 13px; }
+//           .brand-mark {
+//             display: flex;
+//             width: 48px;
+//             height: 48px;
+//             align-items: center;
+//             justify-content: center;
+//             border: 1px solid rgba(255, 255, 255, 0.32);
+//             border-radius: 12px;
+//             background: rgba(255, 255, 255, 0.1);
+//             font-size: 18px;
+//             font-weight: 800;
+//           }
+
+//           .brand-name { margin: 0; font-size: 20px; font-weight: 700; }
+//           .brand-subtitle {
+//             margin: 2px 0 0;
+//             color: rgba(255, 255, 255, 0.72);
+//             font-size: 8px;
+//             font-weight: 600;
+//             letter-spacing: 0.14em;
+//             text-transform: uppercase;
+//           }
+
+//           .document-heading { text-align: right; }
+//           .document-type { margin: 0; font-size: 20px; font-weight: 700; }
+//           .reference-row { margin-top: 4px; color: rgba(255, 255, 255, 0.78); font-size: 9px; }
+//           .reference-value { margin-left: 4px; color: var(--white); font-weight: 700; }
+
+//           .document-body { padding: 25px 38px 34px; }
+
+//           .overview-grid {
+//             display: grid;
+//             grid-template-columns: repeat(2, minmax(0, 1fr));
+//             gap: 12px;
+//             margin-bottom: 22px;
+//           }
+
+//           .overview-card {
+//             padding: 14px 16px;
+//             border: 1px solid var(--border);
+//             border-radius: 10px;
+//             background: var(--surface);
+//           }
+
+//           .overview-label {
+//             margin-bottom: 4px;
+//             color: var(--muted);
+//             font-size: 8px;
+//             font-weight: 700;
+//             letter-spacing: 0.08em;
+//             text-transform: uppercase;
+//           }
+
+//           .overview-value {
+//             color: var(--text);
+//             font-size: 11px;
+//             font-weight: 700;
+//             overflow-wrap: anywhere;
+//           }
+
+//           .account-summary {
+//             display: grid;
+//             grid-template-columns: minmax(0, 1fr) 310px;
+//             gap: 50px;
+//             margin-bottom: 23px;
+//             padding: 0 2px 19px;
+//             border-bottom: 1px solid var(--border);
+//           }
+
+//           .compact-heading {
+//             margin-bottom: 3px;
+//             color: var(--primary-dark);
+//             font-size: 9px;
+//             font-weight: 800;
+//             letter-spacing: 0.08em;
+//             text-transform: uppercase;
+//           }
+
+//           .account-title { margin-bottom: 2px; font-size: 12px; font-weight: 750; }
+//           .account-line { color: #344054; font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
+//           .record-information { justify-self: end; width: 100%; max-width: 310px; }
+//           .record-title { margin-bottom: 4px; color: var(--primary-dark); font-size: 10px; font-weight: 800; text-transform: uppercase; }
+//           .record-line { display: flex; gap: 5px; color: #344054; font-size: 10px; line-height: 1.45; }
+//           .record-label { flex-shrink: 0; font-weight: 500; }
+//           .record-value { font-weight: 650; overflow-wrap: anywhere; }
+
+//           .section { margin-top: 22px; }
+//           .section-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+//           .section-number {
+//             display: flex;
+//             width: 25px;
+//             height: 25px;
+//             align-items: center;
+//             justify-content: center;
+//             border-radius: 7px;
+//             background: var(--primary);
+//             color: var(--white);
+//             font-size: 9px;
+//             font-weight: 700;
+//           }
+
+//           .section-title { margin: 0; color: var(--primary-dark); font-size: 14px; font-weight: 700; }
+//           .section-line { height: 1px; flex: 1; background: var(--border); }
+//           .table-container { overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
+//           table { width: 100%; border-collapse: collapse; table-layout: fixed; }
+//           thead { background: var(--primary); color: var(--white); }
+//           th {
+//             padding: 10px 12px;
+//             font-size: 8px;
+//             font-weight: 700;
+//             letter-spacing: 0.09em;
+//             text-align: left;
+//             text-transform: uppercase;
+//           }
+
+//           td {
+//             padding: 11px 12px;
+//             border-bottom: 1px solid var(--border);
+//             vertical-align: top;
+//             overflow-wrap: anywhere;
+//           }
+
+//           tbody tr:nth-child(even) { background: var(--surface); }
+//           tbody tr:last-child td { border-bottom: none; }
+//           .serial-column { width: 45px; color: var(--muted); text-align: center; }
+//           thead .serial-column { color: var(--white); }
+//           .amount-column { width: 120px; color: var(--primary-dark); font-weight: 700; text-align: right; white-space: nowrap; }
+//           .cell-primary { font-weight: 650; }
+//           .description-text {
+//             display: block;
+//             color: #475467;
+//             line-height: 1.65;
+//             white-space: pre-wrap;
+//             overflow-wrap: anywhere;
+//           }
+
+//           .empty-row { padding: 25px; color: var(--muted); text-align: center; }
+//           .document-footer {
+//             display: flex;
+//             align-items: center;
+//             justify-content: space-between;
+//             gap: 16px;
+//             margin: 0 38px;
+//             padding: 15px 0 20px;
+//             border-top: 1px solid var(--border);
+//             color: var(--muted);
+//             font-size: 8px;
+//           }
+
+//           .footer-brand { color: var(--primary); font-weight: 700; letter-spacing: 0.05em; }
+//           .confidential-badge {
+//             display: inline-flex;
+//             padding: 3px 8px;
+//             border: 1px solid var(--border);
+//             border-radius: 999px;
+//             font-size: 7px;
+//             font-weight: 700;
+//             letter-spacing: 0.08em;
+//             text-transform: uppercase;
+//           }
+
+//           @page { size: A4; margin: 10mm; }
+
+//           @media print {
+//             body { padding: 0; }
+//             .document { max-width: none; border: none; box-shadow: none; }
+//             .document-header,
+//             .overview-card,
+//             .account-summary,
+//             .table-container,
+//             tr { break-inside: avoid; }
+//             thead { display: table-header-group; }
+//           }
+//         </style>
+//       </head>
+
+//       <body>
+//         <main class="document">
+//           <div class="top-accent"></div>
+
+//           <header class="document-header">
+//             <div class="brand-area">
+//               <div class="brand-mark">IE</div>
+//               <div>
+//                 <h1 class="brand-name">IEDGE SYSTEM</h1>
+//                 <p class="brand-subtitle">Financial Records Management</p>
+//               </div>
+//             </div>
+
+//             <div class="document-heading">
+//               <h2 class="document-type">Payment Record</h2>
+//               <div class="reference-row">
+//                 Reference:
+//                 <span class="reference-value">${escapeHtml(documentReference)}</span>
+//               </div>
+//             </div>
+//           </header>
+
+//           <div class="document-body">
+//             <div class="overview-grid">
+//               <div class="overview-card">
+//                 <div class="overview-label">Statement Title</div>
+//                 <div class="overview-value">${escapeHtml(record.statementTitle || "-")}</div>
+//               </div>
+
+//               <div class="overview-card">
+//                 <div class="overview-label">Record Date</div>
+//                 <div class="overview-value">${escapeHtml(formatRecordDate(record.selectedDate))}</div>
+//               </div>
+
+//               <div class="overview-card">
+//                 <div class="overview-label">Created By</div>
+//                 <div class="overview-value">${escapeHtml(record.createdByName || "Unknown User")}</div>
+//               </div>
+
+//               <div class="overview-card">
+//                 <div class="overview-label">Status</div>
+//                 <div class="overview-value">Active</div>
+//               </div>
+//             </div>
+
+//             <section class="account-summary">
+//               <div>
+//                 <div class="compact-heading">Account Details</div>
+//                 <div class="account-title">${escapeHtml(record.accountTitle || "-")}</div>
+//                 ${accountProvider ? `<div class="account-line">${escapeHtml(accountProvider)}</div>` : ""}
+//                 ${record.accountNo ? `<div class="account-line">Account No: ${escapeHtml(record.accountNo)}</div>` : ""}
+//                 ${additionalAccountDetail ? `<div class="account-line">${escapeHtml(additionalAccountDetail)}</div>` : ""}
+//               </div>
+
+//               <div class="record-information">
+//                 <div class="record-title">Payment Information</div>
+//                 <div class="record-line"><span class="record-label">Account Type:</span><span class="record-value">${escapeHtml(record.accountType.toUpperCase())}</span></div>
+//                 <div class="record-line"><span class="record-label">Cheque Number:</span><span class="record-value">${escapeHtml(record.chequeNumber || "-")}</span></div>
+//                 <div class="record-line"><span class="record-label">Cheque Amount:</span><span class="record-value">${escapeHtml(formatPrintAmount(record.chequeAmount))}</span></div>
+//                 <div class="record-line"><span class="record-label">Item Total:</span><span class="record-value">${escapeHtml(formatPrintAmount(record.totalItemAmount))}</span></div>
+//                 <div class="record-line"><span class="record-label">Remaining:</span><span class="record-value">${escapeHtml(formatPrintAmount(record.remainingBalance))}</span></div>
+//               </div>
+//             </section>
+
+//             <section class="section">
+//               <div class="section-heading">
+//                 <span class="section-number">01</span>
+//                 <h3 class="section-title">Transaction Items</h3>
+//                 <div class="section-line"></div>
+//               </div>
+
+//               <div class="table-container">
+//                 <table>
+//                   <colgroup>
+//                     <col style="width: 45px" />
+//                     <col style="width: 18%" />
+//                     <col style="width: 22%" />
+//                     <col />
+//                     <col style="width: 120px" />
+//                   </colgroup>
+//                   <thead>
+//                     <tr>
+//                       <th class="serial-column">No.</th>
+//                       <th>Category</th>
+//                       <th>Name</th>
+//                       <th>Description</th>
+//                       <th style="text-align: right">Amount</th>
+//                     </tr>
+//                   </thead>
+//                   <tbody>${itemRows}</tbody>
+//                 </table>
+//               </div>
+//             </section>
+//           </div>
+
+//           <footer class="document-footer">
+//             <span class="footer-brand">IEDGE SYSTEM · OFFICIAL PAYMENT RECORD</span>
+//             <span>Printed ${escapeHtml(
+//               new Date().toLocaleString("en-US", {
+//                 year: "numeric",
+//                 month: "short",
+//                 day: "2-digit",
+//                 hour: "2-digit",
+//                 minute: "2-digit",
+//               }),
+//             )}</span>
+//             <span class="confidential-badge">Internal Document</span>
+//           </footer>
+//         </main>
+//       </body>
+//     </html>
+//   `;
 
 //   printWindow.document.open();
-//   printWindow.document.write(html);
+//   printWindow.document.write(printDocument);
 //   printWindow.document.close();
-//   printWindow.focus();
+
+//   printWindow.onload = () => {
+//     printWindow.focus();
+
+//     window.setTimeout(() => {
+//       printWindow.print();
+//     }, 250);
+//   };
 
 //   return true;
 // };
@@ -519,6 +552,7 @@
 
 // const categoryOptions: string[] = [
 //   "Utility",
+//   "Commission",
 //   "General",
 //   "Tuition Fees",
 //   "Payroll",
@@ -526,6 +560,21 @@
 //   "Accommodation",
 //   "Hotel",
 //   "Ticketing",
+//   "Office Expense",
+//   "Rent",
+//   "Conveyance",
+//   "Insurance",
+//   "Repair & Maintenance",
+//   "Stationery & Printing",
+//   "Office Equipment",
+//   "Owners Drawing",
+//   "Fuel",
+//   "Licence",
+//   "Medical",
+//   "Credit Card",
+//   "RTD",
+//   "Tax",
+//   "Expense",
 // ];
 
 // const emptyItem: RecordItem = {
@@ -668,7 +717,9 @@
 //     ...getStringListFromValue(source?.latestPaymentRelease?.paymentRef),
 //     ...getStringListFromValue(source?.latestPaymentRelease?.refNo),
 //     ...getStringListFromValue(source?.latestPaymentRelease?.referenceNo),
-//     ...getStringListFromValue(source?.latestPaymentRelease?.transactionReference),
+//     ...getStringListFromValue(
+//       source?.latestPaymentRelease?.transactionReference,
+//     ),
 //     ...getStringListFromValue(source?.latestPaymentRelease?.chequeNumber),
 //     ...getStringListFromValue(source?.latestPaymentRelease?.chequeNumbers),
 //     ...getStringListFromValue(source?.latestPaymentRelease?.chequeNo),
@@ -685,7 +736,7 @@
 //     : [];
 
 //   return uniqueStringList(
-//     history.flatMap((entry: any) => getChequeNumbersFromSource(entry))
+//     history.flatMap((entry: any) => getChequeNumbersFromSource(entry)),
 //   );
 // };
 
@@ -712,6 +763,8 @@
 //     useState<string>("");
 //   const [lastSavedRecord, setLastSavedRecord] =
 //     useState<PrintableRecordData | null>(null);
+//   const [isCurrentRecordSaved, setIsCurrentRecordSaved] =
+//     useState<boolean>(false);
 
 //   const getErrorMessage = (error: unknown): string => {
 //     if (error instanceof Error) return error.message;
@@ -745,7 +798,7 @@
 //               city: data.city || "",
 //               isActive: data.isActive,
 //             };
-//           }
+//           },
 //         );
 
 //         const onlineAccountsRaw: RawAccountOption[] = onlineSnapshot.docs.map(
@@ -763,7 +816,7 @@
 //               routingNumber: data.routingNumber || "",
 //               isActive: data.isActive,
 //             };
-//           }
+//           },
 //         );
 
 //         const activeChequeAccounts: AccountOption[] = chequeAccountsRaw
@@ -838,7 +891,7 @@
 //   };
 
 //   const chequeNumberAlreadyExists = async (
-//     chequeNumberValue: string
+//     chequeNumberValue: string,
 //   ): Promise<boolean> => {
 //     const targetChequeNumber = normalizeChequeNumber(chequeNumberValue);
 
@@ -855,8 +908,8 @@
 
 //       const snapshots = await Promise.all(
 //         accountStatementSourceCollections.map((collectionName) =>
-//           getDocs(getPanelCollection(collectionName))
-//         )
+//           getDocs(getPanelCollection(collectionName)),
+//         ),
 //       );
 
 //       return snapshots.some((snapshot) =>
@@ -870,21 +923,24 @@
 
 //           return chequeNumbers.some(
 //             (existingChequeNumber) =>
-//               normalizeChequeNumber(existingChequeNumber) === targetChequeNumber
+//               normalizeChequeNumber(existingChequeNumber) ===
+//               targetChequeNumber,
 //           );
-//         })
+//         }),
 //       );
 //     } catch (error) {
 //       console.warn(
 //         "Failed to check cheque number from Account Statement records:",
-//         error
+//         error,
 //       );
 
 //       return false;
 //     }
 //   };
 
-//   const checkChequeNumberDuplicate = async (value: string): Promise<boolean> => {
+//   const checkChequeNumberDuplicate = async (
+//     value: string,
+//   ): Promise<boolean> => {
 //     const cleanValue = value.trim();
 
 //     if (!cleanValue) {
@@ -905,22 +961,26 @@
 
 //   const handleChequeNumberChange = (value: string) => {
 //     setChequeNumber(value);
+//     setIsCurrentRecordSaved(false);
 //     setSubmitError("");
 //     setDuplicateChequeWarning("");
 //   };
 
 //   const handleStatementTitleChange = (value: string) => {
 //     setStatementTitle(value);
+//     setIsCurrentRecordSaved(false);
 //     setSubmitError("");
 //   };
 
 //   const handleDateChange = (value: string) => {
 //     setSelectedDate(value);
+//     setIsCurrentRecordSaved(false);
 //     setSubmitError("");
 //   };
 
 //   const handleChequeAmountChange = (value: string) => {
 //     setChequeAmount(sanitizeAmount(value));
+//     setIsCurrentRecordSaved(false);
 //     setSubmitError("");
 //   };
 
@@ -933,11 +993,13 @@
 //     };
 
 //     setItems(updatedItems);
+//     setIsCurrentRecordSaved(false);
 //     setSubmitError("");
 //   };
 
 //   const handleAddItem = () => {
 //     setItems((prevItems) => [...prevItems, { ...emptyItem }]);
+//     setIsCurrentRecordSaved(false);
 //     setSubmitError("");
 //   };
 
@@ -946,18 +1008,8 @@
 
 //     const updatedItems = items.filter((_, itemIndex) => itemIndex !== index);
 //     setItems(updatedItems);
+//     setIsCurrentRecordSaved(false);
 //     setSubmitError("");
-//   };
-
-//   const resetForm = () => {
-//     setSelectedAccountKey("");
-//     setChequeNumber("");
-//     setStatementTitle("");
-//     setSelectedDate(getTodayDate());
-//     setChequeAmount("");
-//     setItems([{ ...emptyItem }]);
-//     setSubmitError("");
-//     setDuplicateChequeWarning("");
 //   };
 
 //   const validateForm = (): string => {
@@ -1054,8 +1106,8 @@
 //             item.category ||
 //             item.amount ||
 //             item.name.trim() ||
-//             item.description.trim()
-//         )
+//             item.description.trim(),
+//         ),
 //     );
 
 //     if (hasCurrentRecordData) {
@@ -1218,10 +1270,10 @@
 //         title: isDuplicateChequeNumber ? "Saved with warning" : "Success",
 //         description: isDuplicateChequeNumber
 //           ? "This cheque number already exists in Account Statement records, but the record was saved successfully."
-//           : "Record added successfully",
+//           : "Record added successfully. The record remains open and can now be printed.",
 //       });
 
-//       resetForm();
+//       setIsCurrentRecordSaved(true);
 //     } catch (error) {
 //       console.error("Failed to add record:", error);
 
@@ -1252,6 +1304,7 @@
 //                   value={selectedAccountKey}
 //                   onValueChange={(value: string) => {
 //                     setSelectedAccountKey(value);
+//                     setIsCurrentRecordSaved(false);
 //                     setSubmitError("");
 //                   }}
 //                   disabled={accountsLoading}
@@ -1485,7 +1538,6 @@
 //                       Line breaks and blank paragraphs are preserved when the
 //                       record is saved and printed.
 //                     </p>
-
 //                   </div>
 //                 </div>
 //               </div>
@@ -1592,7 +1644,12 @@
 
 //               <Button
 //                 type="submit"
-//                 disabled={loading || isExceeded || accounts.length === 0}
+//                 disabled={
+//                   loading ||
+//                   isExceeded ||
+//                   accounts.length === 0 ||
+//                   isCurrentRecordSaved
+//                 }
 //                 data-testid="button-save-record"
 //               >
 //                 {loading ? (
@@ -1600,6 +1657,8 @@
 //                     <i className="fas fa-spinner fa-spin mr-2"></i>
 //                     Saving...
 //                   </>
+//                 ) : isCurrentRecordSaved ? (
+//                   "Saved"
 //                 ) : (
 //                   "Save Record"
 //                 )}
@@ -1634,6 +1693,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Combobox } from "@/components/ui/combobox";
 import { useToast } from "@/hooks/use-toast";
 import { useLocation } from "wouter";
 
@@ -1715,7 +1775,7 @@ const escapeHtml = (value: unknown): string => {
 
 const formatPrintAmount = (value: number): string => {
   return value.toLocaleString("en-US", {
-    minimumFractionDigits: 0,
+    minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   });
 };
@@ -1724,472 +1784,414 @@ const normalizeDescriptionLineBreaks = (value: string): string => {
   return value.replace(/\r\n?/g, "\n");
 };
 
+const formatDescriptionForPrint = (value: string): string => {
+  const normalizedValue = normalizeDescriptionLineBreaks(value);
+
+  if (!normalizedValue.trim()) {
+    return '<span class="description-empty">-</span>';
+  }
+
+  return `<div class="description-text">${escapeHtml(normalizedValue)}</div>`;
+};
+
 const printRecord = (record: PrintableRecordData): boolean => {
-  const printWindow = window.open(
-    "",
-    "_blank",
-    "width=1100,height=850,scrollbars=yes,resizable=yes",
-  );
+  const printWindow = window.open("", "_blank", "width=1100,height=850");
 
   if (!printWindow) return false;
 
-  const formatRecordDate = (value: string): string => {
-    if (!value) return "-";
+  const accountSource =
+    record.accountType === "online"
+      ? record.platform || record.bank || "-"
+      : record.bank || "-";
 
-    try {
-      const date = new Date(`${value}T00:00:00`);
+  const branchOrRouting =
+    record.accountType === "online"
+      ? record.routingNumber || "-"
+      : record.branch || "-";
 
-      if (Number.isNaN(date.getTime())) return value;
+  const itemRows = record.items
+    .map(
+      (item, index) => `
+        <tr>
+          <td class="number">${index + 1}</td>
+          <td>${escapeHtml(item.category || "-")}</td>
+          <td>${escapeHtml(item.name || "-")}</td>
+          <td><div class="description-content">${formatDescriptionForPrint(
+            item.description,
+          )}</div></td>
+          <td class="amount">${escapeHtml(formatPrintAmount(item.amount))}</td>
+        </tr>`,
+    )
+    .join("");
 
-      return date.toLocaleDateString("en-US", {
-        year: "numeric",
-        month: "short",
-        day: "2-digit",
-      });
-    } catch {
-      return value;
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Record ${escapeHtml(record.chequeNumber)}</title>
+  <style>
+    @page {
+      size: A4;
+      margin: 14mm;
     }
-  };
 
-  const documentReference =
-    record.chequeNumber?.trim() ||
-    record.recordId?.slice(0, 10).toUpperCase() ||
-    "DRAFT";
+    * {
+      box-sizing: border-box;
+    }
 
-  const accountLocation = [record.branch, record.city]
-    .filter(Boolean)
-    .join(", ");
+    body {
+      margin: 0;
+      color: #172033;
+      background: #ffffff;
+      font-family: Arial, Helvetica, sans-serif;
+      font-size: 12px;
+      line-height: 1.45;
+    }
 
-  const accountProvider =
-    record.accountType === "online"
-      ? record.platform || record.bank
-      : record.bank;
+    .document {
+      width: 100%;
+      margin: 0 auto;
+    }
 
-  const additionalAccountDetail =
-    record.accountType === "online"
-      ? record.routingNumber
-        ? `Routing No: ${record.routingNumber}`
-        : ""
-      : accountLocation;
+    .header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 24px;
+      padding-bottom: 16px;
+      border-bottom: 2px solid #172033;
+    }
 
-  const itemRows =
-    record.items.length > 0
-      ? record.items
-          .map(
-            (item, index) => `
-              <tr>
-                <td class="serial-column">${index + 1}</td>
-                <td><span class="cell-primary">${escapeHtml(item.category || "-")}</span></td>
-                <td><span class="cell-primary">${escapeHtml(item.name || "-")}</span></td>
-                <td><div class="description-text">${escapeHtml(item.description || "-")}</div></td>
-                <td class="amount-column">${escapeHtml(formatPrintAmount(item.amount))}</td>
-              </tr>
-            `,
-          )
-          .join("")
-      : `
+    .brand h1 {
+      margin: 0;
+      font-size: 24px;
+      letter-spacing: 0.8px;
+    }
+
+    .brand p {
+      margin: 5px 0 0;
+      color: #667085;
+      font-size: 11px;
+    }
+
+    .document-meta {
+      min-width: 220px;
+      text-align: right;
+    }
+
+    .document-meta .title {
+      font-size: 17px;
+      font-weight: 700;
+    }
+
+    .document-meta .line {
+      margin-top: 4px;
+      color: #475467;
+    }
+
+    .section {
+      margin-top: 18px;
+      break-inside: avoid;
+    }
+
+    .section-title {
+      margin: 0 0 9px;
+      padding: 7px 10px;
+      border-left: 4px solid #172033;
+      background: #f2f4f7;
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: 0.4px;
+      text-transform: uppercase;
+    }
+
+    .details-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px 24px;
+    }
+
+    .detail {
+      display: grid;
+      grid-template-columns: 125px minmax(0, 1fr);
+      gap: 8px;
+      padding: 6px 0;
+      border-bottom: 1px solid #e4e7ec;
+    }
+
+    .detail .label {
+      color: #667085;
+      font-weight: 600;
+    }
+
+    .detail .value {
+      overflow-wrap: anywhere;
+      color: #101828;
+      font-weight: 600;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+    }
+
+    thead {
+      display: table-header-group;
+    }
+
+    tr {
+      break-inside: avoid;
+    }
+
+    th,
+    td {
+      padding: 8px;
+      border: 1px solid #d0d5dd;
+      vertical-align: top;
+      overflow-wrap: anywhere;
+    }
+
+    th {
+      background: #f2f4f7;
+      color: #344054;
+      font-size: 10px;
+      letter-spacing: 0.35px;
+      text-align: left;
+      text-transform: uppercase;
+    }
+
+    th:nth-child(1),
+    td:nth-child(1) {
+      width: 6%;
+    }
+
+    th:nth-child(2),
+    td:nth-child(2) {
+      width: 18%;
+    }
+
+    th:nth-child(3),
+    td:nth-child(3) {
+      width: 23%;
+    }
+
+    th:nth-child(4),
+    td:nth-child(4) {
+      width: 35%;
+    }
+
+    th:nth-child(5),
+    td:nth-child(5) {
+      width: 18%;
+    }
+
+    .number {
+      text-align: center;
+    }
+
+    .amount {
+      text-align: right;
+      white-space: nowrap;
+    }
+
+    .description-content {
+      color: #344054;
+      line-height: 1.5;
+    }
+
+    .description-text {
+      margin: 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .description-empty {
+      color: #98a2b3;
+    }
+
+    .summary {
+      width: 360px;
+      margin-left: auto;
+      border: 1px solid #d0d5dd;
+    }
+
+    .summary-row {
+      display: flex;
+      justify-content: space-between;
+      gap: 18px;
+      padding: 9px 12px;
+      border-bottom: 1px solid #e4e7ec;
+    }
+
+    .summary-row:last-child {
+      border-bottom: 0;
+      background: #f2f4f7;
+      font-size: 13px;
+      font-weight: 700;
+    }
+
+    .summary-label {
+      color: #475467;
+    }
+
+    .summary-value {
+      font-weight: 700;
+      white-space: nowrap;
+    }
+
+    .footer {
+      margin-top: 24px;
+      padding-top: 10px;
+      border-top: 1px solid #d0d5dd;
+      color: #667085;
+      font-size: 10px;
+      text-align: center;
+    }
+
+    @media print {
+      .document {
+        width: 100%;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="document">
+    <header class="header">
+      <div class="brand">
+        <h1>IEDGE</h1>
+        <p>Official account, cheque and transaction record</p>
+      </div>
+
+      <div class="document-meta">
+        <div class="title">Financial Record</div>
+        <div class="line"><strong>Record ID:</strong> ${escapeHtml(
+          record.recordId || "Not saved yet",
+        )}</div>
+        <div class="line"><strong>Date:</strong> ${escapeHtml(
+          record.selectedDate,
+        )}</div>
+      </div>
+    </header>
+
+    <section class="section">
+      <h2 class="section-title">Record Information</h2>
+      <div class="details-grid">
+        <div class="detail">
+          <span class="label">Cheque Number</span>
+          <span class="value">${escapeHtml(record.chequeNumber)}</span>
+        </div>
+        <div class="detail">
+          <span class="label">Statement Title</span>
+          <span class="value">${escapeHtml(record.statementTitle || "-")}</span>
+        </div>
+        <div class="detail">
+          <span class="label">Created By</span>
+          <span class="value">${escapeHtml(record.createdByName)}</span>
+        </div>
+        <div class="detail">
+          <span class="label">Account Type</span>
+          <span class="value">${
+            record.accountType === "cheque"
+              ? "Cheque Account"
+              : "Online Account"
+          }</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">Account Details</h2>
+      <div class="details-grid">
+        <div class="detail">
+          <span class="label">Account Title</span>
+          <span class="value">${escapeHtml(record.accountTitle || "-")}</span>
+        </div>
+        <div class="detail">
+          <span class="label">Bank / Platform</span>
+          <span class="value">${escapeHtml(accountSource)}</span>
+        </div>
+        <div class="detail">
+          <span class="label">Account Number</span>
+          <span class="value">${escapeHtml(record.accountNo || "-")}</span>
+        </div>
+        <div class="detail">
+          <span class="label">Branch / Routing</span>
+          <span class="value">${escapeHtml(branchOrRouting)}</span>
+        </div>
+      </div>
+    </section>
+
+    <section class="section">
+      <h2 class="section-title">Record Items</h2>
+      <table>
+        <thead>
           <tr>
-            <td colspan="5" class="empty-row">
-              No transaction items are available for this document.
-            </td>
+            <th>#</th>
+            <th>Category</th>
+            <th>Name</th>
+            <th>Description</th>
+            <th class="amount">Amount</th>
           </tr>
-        `;
+        </thead>
+        <tbody>${itemRows}</tbody>
+      </table>
+    </section>
 
-  const printDocument = `
-    <!DOCTYPE html>
-    <html lang="en">
-      <head>
-        <meta charset="UTF-8" />
-        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-        <title>Payment Record ${escapeHtml(documentReference)}</title>
+    <section class="section">
+      <h2 class="section-title">Cheque Summary</h2>
+      <div class="summary">
+        <div class="summary-row">
+          <span class="summary-label">Cheque Amount</span>
+          <span class="summary-value">${escapeHtml(
+            formatPrintAmount(record.chequeAmount),
+          )}</span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">Total Item Amount</span>
+          <span class="summary-value">${escapeHtml(
+            formatPrintAmount(record.totalItemAmount),
+          )}</span>
+        </div>
+        <div class="summary-row">
+          <span class="summary-label">Remaining Balance</span>
+          <span class="summary-value">${escapeHtml(
+            formatPrintAmount(record.remainingBalance),
+          )}</span>
+        </div>
+      </div>
+    </section>
 
-        <style>
-          :root {
-            --primary: #17375e;
-            --primary-dark: #102a49;
-            --accent: #d4a64a;
-            --text: #172033;
-            --muted: #667085;
-            --border: #d9e0e8;
-            --surface: #f6f8fb;
-            --white: #ffffff;
-          }
+    <footer class="footer">
+      Printed ${escapeHtml(new Date().toLocaleString("en-US"))}
+    </footer>
+  </main>
 
-          * { box-sizing: border-box; }
+  <script>
+    window.addEventListener("load", function () {
+      window.setTimeout(function () {
+        window.print();
+      }, 200);
+    });
 
-          html,
-          body {
-            margin: 0;
-            padding: 0;
-            background: var(--white);
-            color: var(--text);
-            font-family: Inter, "Segoe UI", Arial, Helvetica, sans-serif;
-            font-size: 12px;
-            line-height: 1.5;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-          }
-
-          body { padding: 24px; }
-
-          .document {
-            width: 100%;
-            max-width: 1000px;
-            margin: 0 auto;
-            overflow: hidden;
-            border: 1px solid var(--border);
-            background: var(--white);
-            box-shadow: 0 16px 45px rgba(16, 42, 73, 0.1);
-          }
-
-          .top-accent {
-            height: 6px;
-            background: linear-gradient(90deg, var(--primary) 0%, var(--primary) 76%, var(--accent) 76%, var(--accent) 100%);
-          }
-
-          .document-header {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 24px;
-            padding: 25px 38px;
-            background: linear-gradient(135deg, var(--primary), var(--primary-dark));
-            color: var(--white);
-          }
-
-          .brand-area { display: flex; align-items: center; gap: 13px; }
-          .brand-mark {
-            display: flex;
-            width: 48px;
-            height: 48px;
-            align-items: center;
-            justify-content: center;
-            border: 1px solid rgba(255, 255, 255, 0.32);
-            border-radius: 12px;
-            background: rgba(255, 255, 255, 0.1);
-            font-size: 18px;
-            font-weight: 800;
-          }
-
-          .brand-name { margin: 0; font-size: 20px; font-weight: 700; }
-          .brand-subtitle {
-            margin: 2px 0 0;
-            color: rgba(255, 255, 255, 0.72);
-            font-size: 8px;
-            font-weight: 600;
-            letter-spacing: 0.14em;
-            text-transform: uppercase;
-          }
-
-          .document-heading { text-align: right; }
-          .document-type { margin: 0; font-size: 20px; font-weight: 700; }
-          .reference-row { margin-top: 4px; color: rgba(255, 255, 255, 0.78); font-size: 9px; }
-          .reference-value { margin-left: 4px; color: var(--white); font-weight: 700; }
-
-          .document-body { padding: 25px 38px 34px; }
-
-          .overview-grid {
-            display: grid;
-            grid-template-columns: repeat(2, minmax(0, 1fr));
-            gap: 12px;
-            margin-bottom: 22px;
-          }
-
-          .overview-card {
-            padding: 14px 16px;
-            border: 1px solid var(--border);
-            border-radius: 10px;
-            background: var(--surface);
-          }
-
-          .overview-label {
-            margin-bottom: 4px;
-            color: var(--muted);
-            font-size: 8px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-          }
-
-          .overview-value {
-            color: var(--text);
-            font-size: 11px;
-            font-weight: 700;
-            overflow-wrap: anywhere;
-          }
-
-          .account-summary {
-            display: grid;
-            grid-template-columns: minmax(0, 1fr) 310px;
-            gap: 50px;
-            margin-bottom: 23px;
-            padding: 0 2px 19px;
-            border-bottom: 1px solid var(--border);
-          }
-
-          .compact-heading {
-            margin-bottom: 3px;
-            color: var(--primary-dark);
-            font-size: 9px;
-            font-weight: 800;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-          }
-
-          .account-title { margin-bottom: 2px; font-size: 12px; font-weight: 750; }
-          .account-line { color: #344054; font-size: 10px; line-height: 1.45; overflow-wrap: anywhere; }
-          .record-information { justify-self: end; width: 100%; max-width: 310px; }
-          .record-title { margin-bottom: 4px; color: var(--primary-dark); font-size: 10px; font-weight: 800; text-transform: uppercase; }
-          .record-line { display: flex; gap: 5px; color: #344054; font-size: 10px; line-height: 1.45; }
-          .record-label { flex-shrink: 0; font-weight: 500; }
-          .record-value { font-weight: 650; overflow-wrap: anywhere; }
-
-          .section { margin-top: 22px; }
-          .section-heading { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
-          .section-number {
-            display: flex;
-            width: 25px;
-            height: 25px;
-            align-items: center;
-            justify-content: center;
-            border-radius: 7px;
-            background: var(--primary);
-            color: var(--white);
-            font-size: 9px;
-            font-weight: 700;
-          }
-
-          .section-title { margin: 0; color: var(--primary-dark); font-size: 14px; font-weight: 700; }
-          .section-line { height: 1px; flex: 1; background: var(--border); }
-          .table-container { overflow: hidden; border: 1px solid var(--border); border-radius: 10px; }
-          table { width: 100%; border-collapse: collapse; table-layout: fixed; }
-          thead { background: var(--primary); color: var(--white); }
-          th {
-            padding: 10px 12px;
-            font-size: 8px;
-            font-weight: 700;
-            letter-spacing: 0.09em;
-            text-align: left;
-            text-transform: uppercase;
-          }
-
-          td {
-            padding: 11px 12px;
-            border-bottom: 1px solid var(--border);
-            vertical-align: top;
-            overflow-wrap: anywhere;
-          }
-
-          tbody tr:nth-child(even) { background: var(--surface); }
-          tbody tr:last-child td { border-bottom: none; }
-          .serial-column { width: 45px; color: var(--muted); text-align: center; }
-          thead .serial-column { color: var(--white); }
-          .amount-column { width: 120px; color: var(--primary-dark); font-weight: 700; text-align: right; white-space: nowrap; }
-          .cell-primary { font-weight: 650; }
-          .description-text {
-            display: block;
-            color: #475467;
-            line-height: 1.65;
-            white-space: pre-wrap;
-            overflow-wrap: anywhere;
-          }
-
-          .empty-row { padding: 25px; color: var(--muted); text-align: center; }
-          .document-footer {
-            display: flex;
-            align-items: center;
-            justify-content: space-between;
-            gap: 16px;
-            margin: 0 38px;
-            padding: 15px 0 20px;
-            border-top: 1px solid var(--border);
-            color: var(--muted);
-            font-size: 8px;
-          }
-
-          .footer-brand { color: var(--primary); font-weight: 700; letter-spacing: 0.05em; }
-          .confidential-badge {
-            display: inline-flex;
-            padding: 3px 8px;
-            border: 1px solid var(--border);
-            border-radius: 999px;
-            font-size: 7px;
-            font-weight: 700;
-            letter-spacing: 0.08em;
-            text-transform: uppercase;
-          }
-
-          @page { size: A4; margin: 10mm; }
-
-          @media print {
-            body { padding: 0; }
-            .document { max-width: none; border: none; box-shadow: none; }
-            .document-header,
-            .overview-card,
-            .account-summary,
-            .table-container,
-            tr { break-inside: avoid; }
-            thead { display: table-header-group; }
-          }
-        </style>
-      </head>
-
-      <body>
-        <main class="document">
-          <div class="top-accent"></div>
-
-          <header class="document-header">
-            <div class="brand-area">
-              <div class="brand-mark">IE</div>
-              <div>
-                <h1 class="brand-name">IEDGE SYSTEM</h1>
-                <p class="brand-subtitle">Financial Records Management</p>
-              </div>
-            </div>
-
-            <div class="document-heading">
-              <h2 class="document-type">Payment Record</h2>
-              <div class="reference-row">
-                Reference:
-                <span class="reference-value">${escapeHtml(documentReference)}</span>
-              </div>
-            </div>
-          </header>
-
-          <div class="document-body">
-            <div class="overview-grid">
-              <div class="overview-card">
-                <div class="overview-label">Statement Title</div>
-                <div class="overview-value">${escapeHtml(record.statementTitle || "-")}</div>
-              </div>
-
-              <div class="overview-card">
-                <div class="overview-label">Record Date</div>
-                <div class="overview-value">${escapeHtml(formatRecordDate(record.selectedDate))}</div>
-              </div>
-
-              <div class="overview-card">
-                <div class="overview-label">Created By</div>
-                <div class="overview-value">${escapeHtml(record.createdByName || "Unknown User")}</div>
-              </div>
-
-              <div class="overview-card">
-                <div class="overview-label">Status</div>
-                <div class="overview-value">Active</div>
-              </div>
-            </div>
-
-            <section class="account-summary">
-              <div>
-                <div class="compact-heading">Account Details</div>
-                <div class="account-title">${escapeHtml(record.accountTitle || "-")}</div>
-                ${accountProvider ? `<div class="account-line">${escapeHtml(accountProvider)}</div>` : ""}
-                ${record.accountNo ? `<div class="account-line">Account No: ${escapeHtml(record.accountNo)}</div>` : ""}
-                ${additionalAccountDetail ? `<div class="account-line">${escapeHtml(additionalAccountDetail)}</div>` : ""}
-              </div>
-
-              <div class="record-information">
-                <div class="record-title">Payment Information</div>
-                <div class="record-line"><span class="record-label">Account Type:</span><span class="record-value">${escapeHtml(record.accountType.toUpperCase())}</span></div>
-                <div class="record-line"><span class="record-label">Cheque Number:</span><span class="record-value">${escapeHtml(record.chequeNumber || "-")}</span></div>
-                <div class="record-line"><span class="record-label">Cheque Amount:</span><span class="record-value">${escapeHtml(formatPrintAmount(record.chequeAmount))}</span></div>
-                <div class="record-line"><span class="record-label">Item Total:</span><span class="record-value">${escapeHtml(formatPrintAmount(record.totalItemAmount))}</span></div>
-                <div class="record-line"><span class="record-label">Remaining:</span><span class="record-value">${escapeHtml(formatPrintAmount(record.remainingBalance))}</span></div>
-              </div>
-            </section>
-
-            <section class="section">
-              <div class="section-heading">
-                <span class="section-number">01</span>
-                <h3 class="section-title">Transaction Items</h3>
-                <div class="section-line"></div>
-              </div>
-
-              <div class="table-container">
-                <table>
-                  <colgroup>
-                    <col style="width: 45px" />
-                    <col style="width: 18%" />
-                    <col style="width: 22%" />
-                    <col />
-                    <col style="width: 120px" />
-                  </colgroup>
-                  <thead>
-                    <tr>
-                      <th class="serial-column">No.</th>
-                      <th>Category</th>
-                      <th>Name</th>
-                      <th>Description</th>
-                      <th style="text-align: right">Amount</th>
-                    </tr>
-                  </thead>
-                  <tbody>${itemRows}</tbody>
-                </table>
-              </div>
-            </section>
-          </div>
-
-          <footer class="document-footer">
-            <span class="footer-brand">IEDGE SYSTEM · OFFICIAL PAYMENT RECORD</span>
-            <span>Printed ${escapeHtml(
-              new Date().toLocaleString("en-US", {
-                year: "numeric",
-                month: "short",
-                day: "2-digit",
-                hour: "2-digit",
-                minute: "2-digit",
-              }),
-            )}</span>
-            <span class="confidential-badge">Internal Document</span>
-          </footer>
-        </main>
-      </body>
-    </html>
-  `;
+    window.addEventListener("afterprint", function () {
+      window.close();
+    });
+  </script>
+</body>
+</html>`;
 
   printWindow.document.open();
-  printWindow.document.write(printDocument);
+  printWindow.document.write(html);
   printWindow.document.close();
-
-  printWindow.onload = () => {
-    printWindow.focus();
-
-    window.setTimeout(() => {
-      printWindow.print();
-    }, 250);
-  };
+  printWindow.focus();
 
   return true;
 };
 
 const PANEL_ID = "IEDGE-SYSTEM";
-
-const categoryOptions: string[] = [
-  "Utility",
-  "Commission",
-  "General",
-  "Tuition Fees",
-  "Payroll",
-  "Travel",
-  "Accommodation",
-  "Hotel",
-  "Ticketing",
-  "Office Expense",
-  "Rent",
-  "Conveyance",
-  "Insurance",
-  "Repair & Maintenance",
-  "Stationery & Printing",
-  "Office Equipment",
-  "Owners Drawing",
-  "Fuel",
-  "Licence",
-  "Medical",
-  "Credit Card",
-  "RTD",
-  "Tax",
-  "Expense",
-];
 
 const emptyItem: RecordItem = {
   category: "",
@@ -2365,6 +2367,9 @@ export default function Record() {
   const [accountsLoading, setAccountsLoading] = useState<boolean>(true);
   const [selectedAccountKey, setSelectedAccountKey] = useState<string>("");
 
+  const [categoryOptions, setCategoryOptions] = useState<string[]>([]);
+  const [categoriesLoading, setCategoriesLoading] = useState<boolean>(true);
+
   const [chequeNumber, setChequeNumber] = useState<string>("");
   const [statementTitle, setStatementTitle] = useState<string>("");
   const [selectedDate, setSelectedDate] = useState<string>(todayDate);
@@ -2377,8 +2382,6 @@ export default function Record() {
     useState<string>("");
   const [lastSavedRecord, setLastSavedRecord] =
     useState<PrintableRecordData | null>(null);
-  const [isCurrentRecordSaved, setIsCurrentRecordSaved] =
-    useState<boolean>(false);
 
   const getErrorMessage = (error: unknown): string => {
     if (error instanceof Error) return error.message;
@@ -2465,6 +2468,46 @@ export default function Record() {
     }
 
     fetchAccounts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [toast]);
+
+  useEffect(() => {
+    let isMounted = true;
+
+    async function fetchCategories() {
+      try {
+        setCategoriesLoading(true);
+
+        const snapshot = await getDocs(getPanelCollection("recordCategories"));
+
+        const fetchedCategories = snapshot.docs
+          .map((docSnapshot) => (docSnapshot.data().name as string) || "")
+          .filter(Boolean)
+          .sort((a, b) => a.localeCompare(b));
+
+        if (isMounted) {
+          setCategoryOptions(fetchedCategories);
+        }
+      } catch (error) {
+        console.error("Failed to fetch record categories:", error);
+
+        toast({
+          title: "Error",
+          description:
+            getErrorMessage(error) || "Failed to fetch record categories",
+          variant: "destructive",
+        });
+      } finally {
+        if (isMounted) {
+          setCategoriesLoading(false);
+        }
+      }
+    }
+
+    fetchCategories();
 
     return () => {
       isMounted = false;
@@ -2575,26 +2618,22 @@ export default function Record() {
 
   const handleChequeNumberChange = (value: string) => {
     setChequeNumber(value);
-    setIsCurrentRecordSaved(false);
     setSubmitError("");
     setDuplicateChequeWarning("");
   };
 
   const handleStatementTitleChange = (value: string) => {
     setStatementTitle(value);
-    setIsCurrentRecordSaved(false);
     setSubmitError("");
   };
 
   const handleDateChange = (value: string) => {
     setSelectedDate(value);
-    setIsCurrentRecordSaved(false);
     setSubmitError("");
   };
 
   const handleChequeAmountChange = (value: string) => {
     setChequeAmount(sanitizeAmount(value));
-    setIsCurrentRecordSaved(false);
     setSubmitError("");
   };
 
@@ -2607,13 +2646,11 @@ export default function Record() {
     };
 
     setItems(updatedItems);
-    setIsCurrentRecordSaved(false);
     setSubmitError("");
   };
 
   const handleAddItem = () => {
     setItems((prevItems) => [...prevItems, { ...emptyItem }]);
-    setIsCurrentRecordSaved(false);
     setSubmitError("");
   };
 
@@ -2622,8 +2659,18 @@ export default function Record() {
 
     const updatedItems = items.filter((_, itemIndex) => itemIndex !== index);
     setItems(updatedItems);
-    setIsCurrentRecordSaved(false);
     setSubmitError("");
+  };
+
+  const resetForm = () => {
+    setSelectedAccountKey("");
+    setChequeNumber("");
+    setStatementTitle("");
+    setSelectedDate(getTodayDate());
+    setChequeAmount("");
+    setItems([{ ...emptyItem }]);
+    setSubmitError("");
+    setDuplicateChequeWarning("");
   };
 
   const validateForm = (): string => {
@@ -2884,10 +2931,10 @@ export default function Record() {
         title: isDuplicateChequeNumber ? "Saved with warning" : "Success",
         description: isDuplicateChequeNumber
           ? "This cheque number already exists in Account Statement records, but the record was saved successfully."
-          : "Record added successfully. The record remains open and can now be printed.",
+          : "Record added successfully",
       });
 
-      setIsCurrentRecordSaved(true);
+      resetForm();
     } catch (error) {
       console.error("Failed to add record:", error);
 
@@ -2918,7 +2965,6 @@ export default function Record() {
                   value={selectedAccountKey}
                   onValueChange={(value: string) => {
                     setSelectedAccountKey(value);
-                    setIsCurrentRecordSaved(false);
                     setSubmitError("");
                   }}
                   disabled={accountsLoading}
@@ -3083,24 +3129,29 @@ export default function Record() {
                   <div>
                     <Label>Category *</Label>
 
-                    <Select
+                    <Combobox
+                      options={categoryOptions}
                       value={item.category}
-                      onValueChange={(value: string) =>
+                      onChange={(value: string) =>
                         handleItemChange(index, "category", value)
                       }
-                    >
-                      <SelectTrigger data-testid={`select-category-${index}`}>
-                        <SelectValue placeholder="Select category" />
-                      </SelectTrigger>
+                      disabled={categoriesLoading}
+                      placeholder={
+                        categoriesLoading
+                          ? "Loading categories..."
+                          : "Select category"
+                      }
+                      searchPlaceholder="Search categories..."
+                      emptyText="No category found."
+                      data-testid={`select-category-${index}`}
+                    />
 
-                      <SelectContent>
-                        {categoryOptions.map((category) => (
-                          <SelectItem key={category} value={category}>
-                            {category}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                    {!categoriesLoading && categoryOptions.length === 0 && (
+                      <p className="mt-2 text-sm text-destructive">
+                        No categories found. Please add one in Settings → Record
+                        Categories.
+                      </p>
+                    )}
                   </div>
 
                   <div>
@@ -3258,12 +3309,7 @@ export default function Record() {
 
               <Button
                 type="submit"
-                disabled={
-                  loading ||
-                  isExceeded ||
-                  accounts.length === 0 ||
-                  isCurrentRecordSaved
-                }
+                disabled={loading || isExceeded || accounts.length === 0}
                 data-testid="button-save-record"
               >
                 {loading ? (
@@ -3271,8 +3317,6 @@ export default function Record() {
                     <i className="fas fa-spinner fa-spin mr-2"></i>
                     Saving...
                   </>
-                ) : isCurrentRecordSaved ? (
-                  "Saved"
                 ) : (
                   "Save Record"
                 )}

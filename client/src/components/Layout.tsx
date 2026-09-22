@@ -658,6 +658,7 @@
 //   { path: "/project", label: "Projects", icon: "BarChart3" },
 //   { path: "/task-calendar", label: "Tasks", icon: "CalendarCheck" },
 //   { path: "/estimate", label: "Estimate", icon: "Scroll" },
+//   { path: "/rtd-management", label: "RTD Management", icon: "FileText" },
 //   { path: "/invoice-estimate", label: "Invoice ", icon: "ScrollText" },
 //   { path: "/sales-management", label: "Pipeline Management", icon: "PieChart" },
 //   { path: "/users", label: "User Management", icon: "UserRound" },
@@ -779,6 +780,37 @@
 //   }
 
 //   return [FINANCE_DROPDOWN, ...filteredItems];
+// }
+
+// function ensureRTDManagementTab(items: SidebarItem[]): SidebarItem[] {
+//   const safeItems = Array.isArray(items) ? items : [];
+
+//   const alreadyExists = safeItems.some(
+//     (item) => item.path === "/rtd-management",
+//   );
+
+//   if (alreadyExists) {
+//     return safeItems;
+//   }
+
+//   const estimateIndex = safeItems.findIndex(
+//     (item) => item.path === "/estimate",
+//   );
+
+//   const updated = [...safeItems];
+//   const rtdItem: SidebarItem = {
+//     path: "/rtd-management",
+//     label: "RTD Management",
+//     icon: "FileText",
+//   };
+
+//   if (estimateIndex >= 0) {
+//     updated.splice(estimateIndex + 1, 0, rtdItem);
+//     return updated;
+//   }
+
+//   updated.push(rtdItem);
+//   return updated;
 // }
 
 // export default function Layout({ children }: { children: React.ReactNode }) {
@@ -921,6 +953,10 @@
 
 //             if (userRole === "finance") {
 //               finalItems = ensureFinanceDropdown(finalItems);
+//             }
+
+//             if (userRole === "main_admin") {
+//               finalItems = ensureRTDManagementTab(finalItems);
 //             }
 
 //             setSidebarItems(finalItems);
@@ -1917,6 +1953,7 @@ import {
   Search,
   X,
   ExternalLink,
+  TrendingUp,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { NotificationBell } from "@/components/NotificationBell";
@@ -2458,6 +2495,7 @@ const LUCIDE_ICONS: Record<string, LucideIcon> = {
   BookUser,
   CalendarCheck,
   ReceiptText,
+  TrendingUp,
 };
 
 // ✅ Backward compatibility for old FontAwesome names
@@ -2526,6 +2564,7 @@ const TRAVEL_DROPDOWN: SidebarItem = {
 // ✅ Main admin fallback tabs
 const AVAILABLE_TABS: SidebarItem[] = [
   { path: "/dashboard", label: "Dashboard", icon: "LayoutDashboard" },
+  { path: "/reports", label: "Reports", icon: "TrendingUp" },
   { path: "/sales-dashboard", label: "Sales Dashboard", icon: "LineChart" },
   { path: "/project", label: "Projects", icon: "BarChart3" },
   { path: "/task-calendar", label: "Tasks", icon: "CalendarCheck" },
@@ -2685,6 +2724,35 @@ function ensureRTDManagementTab(items: SidebarItem[]): SidebarItem[] {
   return updated;
 }
 
+function ensureReportsTab(items: SidebarItem[]): SidebarItem[] {
+  const safeItems = Array.isArray(items) ? items : [];
+
+  const alreadyExists = safeItems.some((item) => item.path === "/reports");
+
+  if (alreadyExists) {
+    return safeItems;
+  }
+
+  const dashboardIndex = safeItems.findIndex(
+    (item) => item.path === "/dashboard",
+  );
+
+  const reportsItem: SidebarItem = {
+    path: "/reports",
+    label: "Reports",
+    icon: "TrendingUp",
+  };
+
+  const updated = [...safeItems];
+
+  if (dashboardIndex >= 0) {
+    updated.splice(dashboardIndex + 1, 0, reportsItem);
+    return updated;
+  }
+
+  return [reportsItem, ...updated];
+}
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
@@ -2829,6 +2897,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
             if (userRole === "main_admin") {
               finalItems = ensureRTDManagementTab(finalItems);
+            }
+
+            // Reports shows company-wide profit figures, so it's limited to
+            // the same roles that already see financial data (Finance
+            // dropdown / RTD).
+            if (
+              userRole === "admin" ||
+              userRole === "main_admin" ||
+              userRole === "finance"
+            ) {
+              finalItems = ensureReportsTab(finalItems);
             }
 
             setSidebarItems(finalItems);
