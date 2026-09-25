@@ -1,10 +1,4 @@
-// import React, {
-//   FormEvent,
-//   useEffect,
-//   useMemo,
-//   useRef,
-//   useState,
-// } from "react";
+// import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 // import { auth, db } from "@/lib/firebase";
 
@@ -104,13 +98,18 @@
 //   sourceEstimateId?: string;
 //   sourceEstimateNo?: string;
 //   rtdRecordIds?: string[];
+//   status?: string;
 //   createdBy?: string;
 //   createdByEmail?: string;
 //   createdAt?: any;
 // };
 
 // const toNumber = (value: any) => {
-//   const parsed = Number(String(value ?? "").replace(/,/g, "").trim());
+//   const parsed = Number(
+//     String(value ?? "")
+//       .replace(/,/g, "")
+//       .trim(),
+//   );
 //   return Number.isFinite(parsed) ? parsed : 0;
 // };
 
@@ -129,14 +128,34 @@
 //   return Number.isFinite(parsed) ? parsed : 0;
 // };
 
+// const getDaysSince = (value: any) => {
+//   const ms = getTime(value);
+//   if (!ms) return null;
+
+//   return Math.max(0, Math.floor((Date.now() - ms) / 86400000));
+// };
+
+// const INVOICE_STATUS_OPTIONS = ["Unpaid", "Partially Paid", "Paid"];
+
+// const getInvoiceStatusPillClass = (status: string) => {
+//   switch (String(status || "").toLowerCase()) {
+//     case "paid":
+//       return "border-emerald-200 bg-emerald-50 text-emerald-700";
+//     case "partially paid":
+//       return "border-amber-200 bg-amber-50 text-amber-700";
+//     default:
+//       return "border-red-200 bg-red-50 text-red-700";
+//   }
+// };
+
 // const normalizeClient = (value: unknown) =>
-//   String(value || "").trim().toLowerCase();
+//   String(value || "")
+//     .trim()
+//     .toLowerCase();
 
 // const uniqueStrings = (values: Array<string | undefined>) =>
 //   Array.from(
-//     new Set(
-//       values.map((value) => String(value || "").trim()).filter(Boolean),
-//     ),
+//     new Set(values.map((value) => String(value || "").trim()).filter(Boolean)),
 //   );
 
 // const makeRowId = () =>
@@ -192,9 +211,7 @@
 //   const [error, setError] = useState("");
 //   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
-//   const [openServiceRowId, setOpenServiceRowId] = useState<string | null>(
-//     null,
-//   );
+//   const [openServiceRowId, setOpenServiceRowId] = useState<string | null>(null);
 //   const serviceDropdownRef = useRef<HTMLDivElement | null>(null);
 
 //   const [loggedInUser, setLoggedInUser] = useState<{
@@ -213,9 +230,7 @@
 //   const [isListDrawerOpen, setIsListDrawerOpen] = useState(false);
 //   const [selectedListInvoice, setSelectedListInvoice] =
 //     useState<RTDInvoiceRecord | null>(null);
-//   const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(
-//     null,
-//   );
+//   const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(null);
 //   const [downloadLoadingId, setDownloadLoadingId] = useState<string | null>(
 //     null,
 //   );
@@ -592,11 +607,7 @@
 //   );
 
 //   const subtotal = useMemo(
-//     () =>
-//       calculatedServices.reduce(
-//         (sum, service) => sum + service.amount,
-//         0,
-//       ),
+//     () => calculatedServices.reduce((sum, service) => sum + service.amount, 0),
 //     [calculatedServices],
 //   );
 
@@ -647,8 +658,9 @@
 //     termsConditionText: string;
 //     createdBy: string;
 //   }) => {
-//     const heading =
-//       String(args.invoiceHeading || INVOICE_HEADINGS[0]).toUpperCase();
+//     const heading = String(
+//       args.invoiceHeading || INVOICE_HEADINGS[0],
+//     ).toUpperCase();
 
 //     return {
 //       estimateNo: args.invoiceNo,
@@ -749,6 +761,20 @@
 //     }
 //   };
 
+//   const handleUpdateInvoiceStatus = async (
+//     invoice: RTDInvoiceRecord,
+//     status: string,
+//   ) => {
+//     try {
+//       await updateDoc(doc(db, "Panels", PANEL_ID, "rtdInvoices", invoice.id), {
+//         status,
+//         updatedAt: serverTimestamp(),
+//       });
+//     } catch (statusError) {
+//       console.error("Failed to update RTD Invoice status:", statusError);
+//     }
+//   };
+
 //   const handleDownloadInvoice = async (invoice: RTDInvoiceRecord) => {
 //     try {
 //       setDownloadLoadingId(invoice.id);
@@ -797,7 +823,9 @@
 //     setEditId(invoice.id);
 //     setInvoiceNo(invoice.invoiceNo || "");
 //     setInvoiceHeading(invoice.invoiceHeading || INVOICE_HEADINGS[0]);
-//     setInvoiceDate(invoice.invoiceDate || new Date().toISOString().slice(0, 10));
+//     setInvoiceDate(
+//       invoice.invoiceDate || new Date().toISOString().slice(0, 10),
+//     );
 //     setDueDate(invoice.dueDate || "");
 //     setClient(invoice.client || "");
 //     setClientAddress(invoice.clientAddress || "");
@@ -984,6 +1012,7 @@
 //           transaction.set(invoiceRef, {
 //             ...invoicePayload,
 //             invoiceNo: generatedInvoiceNo,
+//             status: "Unpaid",
 //             createdBy: currentUser?.uid || "",
 //             createdByEmail: currentUser?.email || "",
 //             createdAt: serverTimestamp(),
@@ -1107,8 +1136,7 @@
 //         <div className="flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-800">
 //           <span>
 //             Creating this Invoice from RTD Estimate{" "}
-//             <strong>{sourceEstimateNo}</strong>. Every field below is
-//             editable.
+//             <strong>{sourceEstimateNo}</strong>. Every field below is editable.
 //           </span>
 //           <Button
 //             type="button"
@@ -1284,9 +1312,9 @@
 //               Service Detail
 //             </h2>
 //             <p className="text-sm text-gray-500">
-//               Enter each line item directly. Tick "Cals" to show and
-//               require a Unit and Unit Cost for a row — leave it off for a
-//               description-only line.
+//               Enter each line item directly. Tick "Cals" to show and require a
+//               Unit and Unit Cost for a row — leave it off for a description-only
+//               line.
 //             </p>
 //           </div>
 
@@ -1626,7 +1654,9 @@
 //                 <textarea
 //                   rows={7}
 //                   value={termsConditionText}
-//                   onChange={(event) => setTermsConditionText(event.target.value)}
+//                   onChange={(event) =>
+//                     setTermsConditionText(event.target.value)
+//                   }
 //                   className={withValidity(
 //                     "w-full rounded-lg border border-gray-300 bg-gray-50 p-2 text-sm leading-6 text-gray-700 outline-none transition focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
 //                     !termsConditionText.trim(),
@@ -1673,7 +1703,7 @@
 //         </div>
 
 //         <div className="overflow-x-auto">
-//           <table className="w-full min-w-[1250px] text-sm">
+//           <table className="w-full min-w-[1550px] text-sm">
 //             <thead>
 //               <tr className="border-b bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
 //                 <th className="px-5 py-4 text-left">Invoice</th>
@@ -1682,74 +1712,123 @@
 //                 <th className="px-5 py-4 text-left">Client</th>
 //                 <th className="px-5 py-4 text-left">Estimate Ref</th>
 //                 <th className="px-5 py-4 text-right">Total</th>
+//                 <th className="px-5 py-4 text-left">PO</th>
+//                 <th className="px-5 py-4 text-center">Days</th>
+//                 <th className="px-5 py-4 text-left">Status</th>
 //                 <th className="px-5 py-4 text-center">Actions</th>
 //               </tr>
 //             </thead>
 
 //             <tbody className="divide-y divide-gray-100">
-//               {invoices.map((invoice) => (
-//                 <tr key={invoice.id} className="hover:bg-gray-50">
-//                   <td className="px-5 py-4 font-bold">
-//                     {invoice.invoiceNo || "-"}
-//                   </td>
-//                   <td className="px-5 py-4">
-//                     {invoice.invoiceHeading || "-"}
-//                   </td>
-//                   <td className="px-5 py-4">
-//                     {invoice.subjectPurpose || "-"}
-//                   </td>
-//                   <td className="px-5 py-4">{invoice.client || "-"}</td>
-//                   <td className="px-5 py-4">
-//                     {invoice.sourceEstimateNo || "-"}
-//                   </td>
-//                   <td className="px-5 py-4 text-right font-bold">
-//                     Rs. {formatMoney(invoice.total)}
-//                   </td>
-//                   <td className="px-5 py-4">
-//                     <div className="flex items-center justify-center gap-1">
-//                       <button
-//                         type="button"
-//                         onClick={() => handleEditInvoice(invoice)}
-//                         className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-//                         title="Edit"
+//               {invoices.map((invoice) => {
+//                 const poNumber = String(invoice.poNumber || "").trim();
+//                 const noPo = !poNumber;
+//                 const daysSinceCreated = getDaysSince(invoice.createdAt);
+//                 const status = invoice.status || "Unpaid";
+//                 const overdueUnpaid =
+//                   daysSinceCreated !== null &&
+//                   daysSinceCreated >= 30 &&
+//                   status.toLowerCase() !== "paid";
+//                 const flagged = noPo || overdueUnpaid;
+
+//                 return (
+//                   <tr
+//                     key={invoice.id}
+//                     className={
+//                       flagged
+//                         ? "bg-red-50/70 hover:bg-red-100"
+//                         : "hover:bg-gray-50"
+//                     }
+//                   >
+//                     <td className="px-5 py-4 font-bold">
+//                       {invoice.invoiceNo || "-"}
+//                     </td>
+//                     <td className="px-5 py-4">
+//                       {invoice.invoiceHeading || "-"}
+//                     </td>
+//                     <td className="px-5 py-4">
+//                       {invoice.subjectPurpose || "-"}
+//                     </td>
+//                     <td className="px-5 py-4">{invoice.client || "-"}</td>
+//                     <td className="px-5 py-4">
+//                       {invoice.sourceEstimateNo || "-"}
+//                     </td>
+//                     <td className="px-5 py-4 text-right font-bold">
+//                       Rs. {formatMoney(invoice.total)}
+//                     </td>
+//                     <td className="px-5 py-4">
+//                       {noPo ? (
+//                         <span className="font-semibold text-red-600">
+//                           No PO
+//                         </span>
+//                       ) : (
+//                         poNumber
+//                       )}
+//                     </td>
+//                     <td className="px-5 py-4 text-center">
+//                       {daysSinceCreated === null ? "-" : daysSinceCreated}
+//                     </td>
+//                     <td className="px-5 py-4">
+//                       <select
+//                         value={status}
+//                         onChange={(event) =>
+//                           handleUpdateInvoiceStatus(invoice, event.target.value)
+//                         }
+//                         className={`rounded-full border px-2.5 py-1 text-xs font-bold outline-none ${getInvoiceStatusPillClass(status)}`}
 //                       >
-//                         <Pencil className="h-4 w-4" />
-//                       </button>
-//                       <button
-//                         type="button"
-//                         onClick={() => handlePreviewInvoice(invoice)}
-//                         disabled={previewLoadingId === invoice.id}
-//                         className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
-//                         title="Preview"
-//                       >
-//                         {previewLoadingId === invoice.id ? (
-//                           <Loader2 className="h-4 w-4 animate-spin" />
-//                         ) : (
-//                           <Eye className="h-4 w-4" />
-//                         )}
-//                       </button>
-//                       <button
-//                         type="button"
-//                         onClick={() => handleDownloadInvoice(invoice)}
-//                         disabled={downloadLoadingId === invoice.id}
-//                         className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
-//                         title="Download"
-//                       >
-//                         {downloadLoadingId === invoice.id ? (
-//                           <Loader2 className="h-4 w-4 animate-spin" />
-//                         ) : (
-//                           <Download className="h-4 w-4" />
-//                         )}
-//                       </button>
-//                     </div>
-//                   </td>
-//                 </tr>
-//               ))}
+//                         {INVOICE_STATUS_OPTIONS.map((option) => (
+//                           <option key={option} value={option}>
+//                             {option}
+//                           </option>
+//                         ))}
+//                       </select>
+//                     </td>
+//                     <td className="px-5 py-4">
+//                       <div className="flex items-center justify-center gap-1">
+//                         <button
+//                           type="button"
+//                           onClick={() => handleEditInvoice(invoice)}
+//                           className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+//                           title="Edit"
+//                         >
+//                           <Pencil className="h-4 w-4" />
+//                         </button>
+//                         <button
+//                           type="button"
+//                           onClick={() => handlePreviewInvoice(invoice)}
+//                           disabled={previewLoadingId === invoice.id}
+//                           className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
+//                           title="Preview"
+//                         >
+//                           {previewLoadingId === invoice.id ? (
+//                             <Loader2 className="h-4 w-4 animate-spin" />
+//                           ) : (
+//                             <Eye className="h-4 w-4" />
+//                           )}
+//                         </button>
+//                         <button
+//                           type="button"
+//                           onClick={() => handleDownloadInvoice(invoice)}
+//                           disabled={downloadLoadingId === invoice.id}
+//                           className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
+//                           title="Download"
+//                         >
+//                           {downloadLoadingId === invoice.id ? (
+//                             <Loader2 className="h-4 w-4 animate-spin" />
+//                           ) : (
+//                             <Download className="h-4 w-4" />
+//                           )}
+//                         </button>
+//                       </div>
+//                     </td>
+//                   </tr>
+//                 );
+//               })}
 
 //               {invoices.length === 0 ? (
 //                 <tr>
 //                   <td
-//                     colSpan={7}
+//                     colSpan={10}
 //                     className="px-5 py-12 text-center text-gray-500"
 //                   >
 //                     No RTD Invoices found.
@@ -1940,7 +2019,15 @@
 //   );
 // }
 
-import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
+import React, {
+  FormEvent,
+  Suspense,
+  lazy,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 
 import { auth, db } from "@/lib/firebase";
 
@@ -1964,9 +2051,11 @@ import {
   Pencil,
   Save,
   Trash2,
+  Wallet,
   X,
 } from "lucide-react";
 import { buildEstimatePdfBlob } from "@/lib/estimatePdf";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import type { Estimate } from "../../types";
 import {
   COMPANY_LIST,
@@ -1974,6 +2063,15 @@ import {
   RTDEstimateRecord,
   SavedServiceRow,
 } from "./RTDEstimate";
+
+// Reuses the same Receive Payment flow (and DB writes) the main
+// Estimate/Invoice module uses, instead of duplicating that logic here.
+// Loaded on demand — it pulls in xlsx/jsPDF for its export buttons — so
+// opening the RTD Invoice tab doesn't pay for it until someone actually
+// clicks the wallet icon.
+const ReceivePaymentModal = lazy(
+  () => import("@/components/EstimateInvoice/ReceivePaymentModal"),
+);
 
 const INVOICE_HEADINGS = ["Sales Tax Invoice", "Performa Invoice", "Invoice"];
 
@@ -2077,8 +2175,6 @@ const getDaysSince = (value: any) => {
   return Math.max(0, Math.floor((Date.now() - ms) / 86400000));
 };
 
-const INVOICE_STATUS_OPTIONS = ["Unpaid", "Partially Paid", "Paid"];
-
 const getInvoiceStatusPillClass = (status: string) => {
   switch (String(status || "").toLowerCase()) {
     case "paid":
@@ -2174,6 +2270,9 @@ export default function RTDInvoice({
     useState<RTDInvoiceRecord | null>(null);
   const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(null);
   const [downloadLoadingId, setDownloadLoadingId] = useState<string | null>(
+    null,
+  );
+  const [paymentInvoice, setPaymentInvoice] = useState<RTDInvoiceRecord | null>(
     null,
   );
 
@@ -2700,20 +2799,6 @@ export default function RTDInvoice({
       console.error("Failed to build RTD Invoice preview:", previewError);
     } finally {
       setPreviewLoadingId(null);
-    }
-  };
-
-  const handleUpdateInvoiceStatus = async (
-    invoice: RTDInvoiceRecord,
-    status: string,
-  ) => {
-    try {
-      await updateDoc(doc(db, "Panels", PANEL_ID, "rtdInvoices", invoice.id), {
-        status,
-        updatedAt: serverTimestamp(),
-      });
-    } catch (statusError) {
-      console.error("Failed to update RTD Invoice status:", statusError);
     }
   };
 
@@ -3364,18 +3449,15 @@ export default function RTDInvoice({
                       </td>
 
                       <td className="px-4 py-3">
-                        <AutoGrowTextarea
+                        <RichTextEditor
                           className={fieldClass}
                           minHeight={40}
                           value={service.description}
-                          onChange={(event) =>
-                            updateService(
-                              service.rowId,
-                              "description",
-                              event.target.value,
-                            )
+                          onChange={(html) =>
+                            updateService(service.rowId, "description", html)
                           }
                           placeholder="Description"
+                          data-testid={`textarea-service-description-${service.rowId}`}
                         />
                       </td>
 
@@ -3711,22 +3793,22 @@ export default function RTDInvoice({
                       {daysSinceCreated === null ? "-" : daysSinceCreated}
                     </td>
                     <td className="px-5 py-4">
-                      <select
-                        value={status}
-                        onChange={(event) =>
-                          handleUpdateInvoiceStatus(invoice, event.target.value)
-                        }
-                        className={`rounded-full border px-2.5 py-1 text-xs font-bold outline-none ${getInvoiceStatusPillClass(status)}`}
+                      <span
+                        className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${getInvoiceStatusPillClass(status)}`}
                       >
-                        {INVOICE_STATUS_OPTIONS.map((option) => (
-                          <option key={option} value={option}>
-                            {option}
-                          </option>
-                        ))}
-                      </select>
+                        {status}
+                      </span>
                     </td>
                     <td className="px-5 py-4">
                       <div className="flex items-center justify-center gap-1">
+                        <button
+                          type="button"
+                          onClick={() => setPaymentInvoice(invoice)}
+                          className="rounded-lg p-2 text-gray-500 hover:bg-emerald-50 hover:text-emerald-700"
+                          title="Receive Payment"
+                        >
+                          <Wallet className="h-4 w-4" />
+                        </button>
                         <button
                           type="button"
                           onClick={() => handleEditInvoice(invoice)}
@@ -3873,6 +3955,22 @@ export default function RTDInvoice({
             </div>
           </div>
         </div>
+      ) : null}
+
+      {paymentInvoice ? (
+        <Suspense
+          fallback={
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/50">
+              <Loader2 className="h-8 w-8 animate-spin text-white" />
+            </div>
+          }
+        >
+          <ReceivePaymentModal
+            invoice={paymentInvoice}
+            invoiceCollection="rtdInvoices"
+            onClose={() => setPaymentInvoice(null)}
+          />
+        </Suspense>
       ) : null}
     </div>
   );

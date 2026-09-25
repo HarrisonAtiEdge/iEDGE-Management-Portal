@@ -1,10 +1,4 @@
-// import React, {
-//   FormEvent,
-//   useEffect,
-//   useMemo,
-//   useRef,
-//   useState,
-// } from "react";
+// import React, { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 // import { auth, db } from "@/lib/firebase";
 
@@ -184,7 +178,11 @@
 // };
 
 // const toNumber = (value: any) => {
-//   const parsed = Number(String(value ?? "").replace(/,/g, "").trim());
+//   const parsed = Number(
+//     String(value ?? "")
+//       .replace(/,/g, "")
+//       .trim(),
+//   );
 //   return Number.isFinite(parsed) ? parsed : 0;
 // };
 
@@ -203,14 +201,21 @@
 //   return Number.isFinite(parsed) ? parsed : 0;
 // };
 
+// const getDaysSince = (value: any) => {
+//   const ms = getTime(value);
+//   if (!ms) return null;
+
+//   return Math.max(0, Math.floor((Date.now() - ms) / 86400000));
+// };
+
 // const normalizeClient = (value: unknown) =>
-//   String(value || "").trim().toLowerCase();
+//   String(value || "")
+//     .trim()
+//     .toLowerCase();
 
 // const uniqueStrings = (values: Array<string | undefined>) =>
 //   Array.from(
-//     new Set(
-//       values.map((value) => String(value || "").trim()).filter(Boolean),
-//     ),
+//     new Set(values.map((value) => String(value || "").trim()).filter(Boolean)),
 //   );
 
 // const makeRowId = () =>
@@ -307,9 +312,7 @@
 //   const [error, setError] = useState("");
 //   const [attemptedSubmit, setAttemptedSubmit] = useState(false);
 
-//   const [openServiceRowId, setOpenServiceRowId] = useState<string | null>(
-//     null,
-//   );
+//   const [openServiceRowId, setOpenServiceRowId] = useState<string | null>(null);
 //   const serviceDropdownRef = useRef<HTMLDivElement | null>(null);
 
 //   const [loggedInUser, setLoggedInUser] = useState<{
@@ -328,9 +331,7 @@
 //   const [isListDrawerOpen, setIsListDrawerOpen] = useState(false);
 //   const [selectedListEstimate, setSelectedListEstimate] =
 //     useState<RTDEstimateRecord | null>(null);
-//   const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(
-//     null,
-//   );
+//   const [previewLoadingId, setPreviewLoadingId] = useState<string | null>(null);
 //   const [downloadLoadingId, setDownloadLoadingId] = useState<string | null>(
 //     null,
 //   );
@@ -590,7 +591,8 @@
 //   const selectedClientInfo = useMemo(
 //     () =>
 //       clients.find(
-//         (client) => normalizeClient(client.name) === normalizeClient(selectedClient),
+//         (client) =>
+//           normalizeClient(client.name) === normalizeClient(selectedClient),
 //       ) || null,
 //     [clients, selectedClient],
 //   );
@@ -841,12 +843,14 @@
 //   const netRetained = cashReceived - salesTaxAmount;
 
 //   const selectedFromAccounts = useMemo(
-//     () => uniqueStrings(selectedRecords.map((record) => record.accountFromName)),
+//     () =>
+//       uniqueStrings(selectedRecords.map((record) => record.accountFromName)),
 //     [selectedRecords],
 //   );
 
 //   const selectedStatementIds = useMemo(
-//     () => uniqueStrings(selectedRecords.map((record) => record.statementEntryId)),
+//     () =>
+//       uniqueStrings(selectedRecords.map((record) => record.statementEntryId)),
 //     [selectedRecords],
 //   );
 
@@ -1084,8 +1088,10 @@
 //     if (!selectedSalesTaxId) return "Sales Tax is required.";
 //     if (!selectedWhtId) return "WHT is required.";
 //     if (!selectedTermsId) return "Terms & Conditions is required.";
-//     if (!termsConditionText.trim()) return "Terms & Conditions text is required.";
-//     if (customerPayment <= 0) return "Selected RTD total must be greater than zero.";
+//     if (!termsConditionText.trim())
+//       return "Terms & Conditions text is required.";
+//     if (customerPayment <= 0)
+//       return "Selected RTD total must be greater than zero.";
 //     if (denominator <= 0) {
 //       return "The selected Sales Tax and WHT combination produces an invalid gross-up calculation.";
 //     }
@@ -1161,8 +1167,7 @@
 //       );
 
 //       const estimatePayload = {
-//         rtdRecordId:
-//           selectedRecords.length === 1 ? selectedRecords[0].id : "",
+//         rtdRecordId: selectedRecords.length === 1 ? selectedRecords[0].id : "",
 //         rtdRecordIds: selectedRecords.map((record) => record.id),
 //         rtdRecordCount: selectedRecords.length,
 //         estimateDate,
@@ -1504,7 +1509,9 @@
 
 //             <InfoBox
 //               label="Client"
-//               value={selectedClient || "Select RTD record(s) on the Records tab"}
+//               value={
+//                 selectedClient || "Select RTD record(s) on the Records tab"
+//               }
 //             />
 
 //             <InfoBox
@@ -1565,7 +1572,10 @@
 //           {selectedRecords.length > 0 ? (
 //             <>
 //               <div className="mt-5 grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-4">
-//                 <InfoBox label="RTD Records" value={String(selectedRecords.length)} />
+//                 <InfoBox
+//                   label="RTD Records"
+//                   value={String(selectedRecords.length)}
+//                 />
 //                 <InfoBox
 //                   label="Amount Paid on Client's Behalf"
 //                   value={`Rs. ${formatMoney(customerPayment)}`}
@@ -1671,12 +1681,14 @@
 
 //         <div className="bg-white p-5 rounded-xl shadow border border-gray-100">
 //           <div>
-//             <h2 className="text-sm font-semibold text-gray-700">Service Detail</h2>
+//             <h2 className="text-sm font-semibold text-gray-700">
+//               Service Detail
+//             </h2>
 //             <p className="text-sm text-gray-500">
 //               One service row is created for each selected RTD. Unit Cost is
-//               automatically grossed up so WHT stays hidden from the Tax
-//               Summary. Add extra rows for services outside the linked RTD
-//               records, or mark a row as a heading if it only needs a name.
+//               automatically grossed up so WHT stays hidden from the Tax Summary.
+//               Add extra rows for services outside the linked RTD records, or
+//               mark a row as a heading if it only needs a name.
 //             </p>
 //           </div>
 
@@ -1974,9 +1986,12 @@
 
 //           <div className="bg-white p-5 rounded-xl shadow border border-gray-100">
 //             <div className="mb-5">
-//               <h2 className="text-sm font-semibold text-gray-700">Tax Summary</h2>
+//               <h2 className="text-sm font-semibold text-gray-700">
+//                 Tax Summary
+//               </h2>
 //               <p className="text-sm text-gray-500">
-//                 Only Sales Tax is shown here. WHT is intentionally not displayed.
+//                 Only Sales Tax is shown here. WHT is intentionally not
+//                 displayed.
 //               </p>
 //             </div>
 
@@ -2011,7 +2026,9 @@
 //         </div>
 
 //         <div className="bg-white p-5 rounded-xl shadow border border-gray-100">
-//           <h2 className="text-sm font-semibold text-gray-700">Terms & Conditions</h2>
+//           <h2 className="text-sm font-semibold text-gray-700">
+//             Terms & Conditions
+//           </h2>
 
 //           <div className="mt-5 space-y-5">
 //             <Field label="Terms & Conditions">
@@ -2037,7 +2054,9 @@
 //                 <textarea
 //                   rows={7}
 //                   value={termsConditionText}
-//                   onChange={(event) => setTermsConditionText(event.target.value)}
+//                   onChange={(event) =>
+//                     setTermsConditionText(event.target.value)
+//                   }
 //                   className={withValidity(
 //                     "w-full rounded-lg border border-gray-300 bg-gray-50 p-2 text-sm leading-6 text-gray-700 outline-none transition focus:ring-2 focus:ring-blue-500 focus:border-blue-500",
 //                     !termsConditionText.trim(),
@@ -2071,149 +2090,183 @@
 //             ) : (
 //               <Save className="mr-2 h-4 w-4" />
 //             )}
-//             {saving ? "Saving..." : editId ? "Update Estimate" : "Save Estimate"}
+//             {saving
+//               ? "Saving..."
+//               : editId
+//                 ? "Update Estimate"
+//                 : "Save Estimate"}
 //           </Button>
 //         </div>
 //       </form>
 
 //       <div className="overflow-hidden rounded-xl border border-gray-100 bg-white shadow">
-//           <div className="border-b border-gray-100 px-5 py-4">
-//             <h2 className="text-sm font-semibold text-gray-700">RTD Estimate List</h2>
-//           </div>
+//         <div className="border-b border-gray-100 px-5 py-4">
+//           <h2 className="text-sm font-semibold text-gray-700">
+//             RTD Estimate List
+//           </h2>
+//         </div>
 
-//           <div className="overflow-x-auto">
-//             <table className="w-full min-w-[1450px] text-sm">
-//               <thead>
-//                 <tr className="border-b bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
-//                   <th className="px-5 py-4 text-left">Estimate</th>
-//                   <th className="px-5 py-4 text-left">Subject / Purpose</th>
-//                   <th className="px-5 py-4 text-left">Client</th>
-//                   <th className="px-5 py-4 text-center">RTDs</th>
-//                   <th className="px-5 py-4 text-left">From Account(s)</th>
-//                   <th className="px-5 py-4 text-right">RTD Amount</th>
-//                   <th className="px-5 py-4 text-right">Sales Tax</th>
-//                   <th className="px-5 py-4 text-right">Estimate Total</th>
-//                   <th className="px-5 py-4 text-left">Status</th>
-//                   <th className="px-5 py-4 text-center">Actions</th>
-//                 </tr>
-//               </thead>
+//         <div className="overflow-x-auto">
+//           <table className="w-full min-w-[1650px] text-sm">
+//             <thead>
+//               <tr className="border-b bg-gray-50 text-xs uppercase tracking-wide text-gray-500">
+//                 <th className="px-5 py-4 text-left">Estimate</th>
+//                 <th className="px-5 py-4 text-left">Subject / Purpose</th>
+//                 <th className="px-5 py-4 text-left">Client</th>
+//                 <th className="px-5 py-4 text-center">RTDs</th>
+//                 <th className="px-5 py-4 text-left">From Account(s)</th>
+//                 <th className="px-5 py-4 text-right">RTD Amount</th>
+//                 <th className="px-5 py-4 text-right">Sales Tax</th>
+//                 <th className="px-5 py-4 text-right">Estimate Total</th>
+//                 <th className="px-5 py-4 text-left">PO</th>
+//                 <th className="px-5 py-4 text-center">Days</th>
+//                 <th className="px-5 py-4 text-left">Status</th>
+//                 <th className="px-5 py-4 text-center">Actions</th>
+//               </tr>
+//             </thead>
 
-//               <tbody className="divide-y divide-gray-100">
-//                 {estimates.map((estimate) => {
-//                   const recordIds =
-//                     Array.isArray(estimate.rtdRecordIds) &&
-//                     estimate.rtdRecordIds.length > 0
-//                       ? estimate.rtdRecordIds
-//                       : estimate.rtdRecordId
-//                         ? [estimate.rtdRecordId]
-//                         : [];
+//             <tbody className="divide-y divide-gray-100">
+//               {estimates.map((estimate) => {
+//                 const recordIds =
+//                   Array.isArray(estimate.rtdRecordIds) &&
+//                   estimate.rtdRecordIds.length > 0
+//                     ? estimate.rtdRecordIds
+//                     : estimate.rtdRecordId
+//                       ? [estimate.rtdRecordId]
+//                       : [];
 
-//                   const accountNames =
-//                     Array.isArray(estimate.accountFromNames) &&
-//                     estimate.accountFromNames.length > 0
-//                       ? estimate.accountFromNames
-//                       : estimate.accountFromName
-//                         ? [estimate.accountFromName]
-//                         : [];
+//                 const accountNames =
+//                   Array.isArray(estimate.accountFromNames) &&
+//                   estimate.accountFromNames.length > 0
+//                     ? estimate.accountFromNames
+//                     : estimate.accountFromName
+//                       ? [estimate.accountFromName]
+//                       : [];
 
-//                   const status = getEstimateStatus(estimate);
+//                 const status = getEstimateStatus(estimate);
 
-//                   return (
-//                     <tr key={estimate.id} className="hover:bg-gray-50">
-//                       <td className="px-5 py-4 font-bold">
-//                         {estimate.estimateNo || "-"}
-//                       </td>
-//                       <td className="px-5 py-4">
-//                         {estimate.subjectPurpose || "-"}
-//                       </td>
-//                       <td className="px-5 py-4">{estimate.client || "-"}</td>
-//                       <td className="px-5 py-4 text-center">
-//                         {recordIds.length || estimate.rtdRecordCount || 0}
-//                       </td>
-//                       <td className="px-5 py-4">
-//                         {accountNames.join(", ") || "-"}
-//                       </td>
-//                       <td className="px-5 py-4 text-right">
-//                         Rs. {formatMoney(estimate.customerPayment)}
-//                       </td>
-//                       <td className="px-5 py-4 text-right">
-//                         Rs. {formatMoney(estimate.salesTaxAmount)}
-//                       </td>
-//                       <td className="px-5 py-4 text-right font-bold">
-//                         Rs. {formatMoney(estimate.invoiceTotal || estimate.estimateAmount)}
-//                       </td>
-//                       <td className="px-5 py-4">
-//                         <span
-//                           className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${status.className}`}
-//                         >
-//                           {status.label}
+//                 const poNumber = String(estimate.poNumber || "").trim();
+//                 const noPo = !poNumber;
+//                 const daysSinceCreated = getDaysSince(estimate.createdAt);
+
+//                 return (
+//                   <tr
+//                     key={estimate.id}
+//                     className={
+//                       noPo
+//                         ? "bg-red-50/70 hover:bg-red-100"
+//                         : "hover:bg-gray-50"
+//                     }
+//                   >
+//                     <td className="px-5 py-4 font-bold">
+//                       {estimate.estimateNo || "-"}
+//                     </td>
+//                     <td className="px-5 py-4">
+//                       {estimate.subjectPurpose || "-"}
+//                     </td>
+//                     <td className="px-5 py-4">{estimate.client || "-"}</td>
+//                     <td className="px-5 py-4 text-center">
+//                       {recordIds.length || estimate.rtdRecordCount || 0}
+//                     </td>
+//                     <td className="px-5 py-4">
+//                       {accountNames.join(", ") || "-"}
+//                     </td>
+//                     <td className="px-5 py-4 text-right">
+//                       Rs. {formatMoney(estimate.customerPayment)}
+//                     </td>
+//                     <td className="px-5 py-4 text-right">
+//                       Rs. {formatMoney(estimate.salesTaxAmount)}
+//                     </td>
+//                     <td className="px-5 py-4 text-right font-bold">
+//                       Rs.{" "}
+//                       {formatMoney(
+//                         estimate.invoiceTotal || estimate.estimateAmount,
+//                       )}
+//                     </td>
+//                     <td className="px-5 py-4">
+//                       {noPo ? (
+//                         <span className="font-semibold text-red-600">
+//                           No PO
 //                         </span>
-//                       </td>
-//                       <td className="px-5 py-4">
-//                         <div className="flex items-center justify-center gap-1">
+//                       ) : (
+//                         poNumber
+//                       )}
+//                     </td>
+//                     <td className="px-5 py-4 text-center">
+//                       {daysSinceCreated === null ? "-" : daysSinceCreated}
+//                     </td>
+//                     <td className="px-5 py-4">
+//                       <span
+//                         className={`inline-flex rounded-full border px-2.5 py-1 text-xs font-bold ${status.className}`}
+//                       >
+//                         {status.label}
+//                       </span>
+//                     </td>
+//                     <td className="px-5 py-4">
+//                       <div className="flex items-center justify-center gap-1">
+//                         <button
+//                           type="button"
+//                           onClick={() => handleEditEstimate(estimate)}
+//                           className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
+//                           title="Edit"
+//                         >
+//                           <Pencil className="h-4 w-4" />
+//                         </button>
+//                         <button
+//                           type="button"
+//                           onClick={() => handlePreviewEstimate(estimate)}
+//                           disabled={previewLoadingId === estimate.id}
+//                           className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
+//                           title="Preview"
+//                         >
+//                           {previewLoadingId === estimate.id ? (
+//                             <Loader2 className="h-4 w-4 animate-spin" />
+//                           ) : (
+//                             <Eye className="h-4 w-4" />
+//                           )}
+//                         </button>
+//                         <button
+//                           type="button"
+//                           onClick={() => handleDownloadEstimate(estimate)}
+//                           disabled={downloadLoadingId === estimate.id}
+//                           className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
+//                           title="Download"
+//                         >
+//                           {downloadLoadingId === estimate.id ? (
+//                             <Loader2 className="h-4 w-4 animate-spin" />
+//                           ) : (
+//                             <Download className="h-4 w-4" />
+//                           )}
+//                         </button>
+//                         {!String(estimate.invoiceId || "").trim() ? (
 //                           <button
 //                             type="button"
-//                             onClick={() => handleEditEstimate(estimate)}
+//                             onClick={() => onCreateInvoice?.(estimate)}
 //                             className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-//                             title="Edit"
+//                             title="Create Invoice"
 //                           >
-//                             <Pencil className="h-4 w-4" />
+//                             <Receipt className="h-4 w-4" />
 //                           </button>
-//                           <button
-//                             type="button"
-//                             onClick={() => handlePreviewEstimate(estimate)}
-//                             disabled={previewLoadingId === estimate.id}
-//                             className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
-//                             title="Preview"
-//                           >
-//                             {previewLoadingId === estimate.id ? (
-//                               <Loader2 className="h-4 w-4 animate-spin" />
-//                             ) : (
-//                               <Eye className="h-4 w-4" />
-//                             )}
-//                           </button>
-//                           <button
-//                             type="button"
-//                             onClick={() => handleDownloadEstimate(estimate)}
-//                             disabled={downloadLoadingId === estimate.id}
-//                             className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50"
-//                             title="Download"
-//                           >
-//                             {downloadLoadingId === estimate.id ? (
-//                               <Loader2 className="h-4 w-4 animate-spin" />
-//                             ) : (
-//                               <Download className="h-4 w-4" />
-//                             )}
-//                           </button>
-//                           {!String(estimate.invoiceId || "").trim() ? (
-//                             <button
-//                               type="button"
-//                               onClick={() => onCreateInvoice?.(estimate)}
-//                               className="rounded-lg p-2 text-gray-500 hover:bg-gray-100 hover:text-gray-900"
-//                               title="Create Invoice"
-//                             >
-//                               <Receipt className="h-4 w-4" />
-//                             </button>
-//                           ) : null}
-//                         </div>
-//                       </td>
-//                     </tr>
-//                   );
-//                 })}
-
-//                 {estimates.length === 0 ? (
-//                   <tr>
-//                     <td
-//                       colSpan={10}
-//                       className="px-5 py-12 text-center text-gray-500"
-//                     >
-//                       No RTD Estimates found.
+//                         ) : null}
+//                       </div>
 //                     </td>
 //                   </tr>
-//                 ) : null}
-//               </tbody>
-//             </table>
-//           </div>
+//                 );
+//               })}
+
+//               {estimates.length === 0 ? (
+//                 <tr>
+//                   <td
+//                     colSpan={12}
+//                     className="px-5 py-12 text-center text-gray-500"
+//                   >
+//                     No RTD Estimates found.
+//                   </td>
+//                 </tr>
+//               ) : null}
+//             </tbody>
+//           </table>
+//         </div>
 //       </div>
 
 //       {isPreviewOpen && previewURL ? (
@@ -2423,6 +2476,7 @@ import {
   X,
 } from "lucide-react";
 import { buildEstimatePdfBlob } from "@/lib/estimatePdf";
+import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import type { Estimate } from "../../types";
 
 export const PANEL_ID = "IEDGE-SYSTEM";
@@ -4193,18 +4247,15 @@ export default function RTDEstimate({
                       </td>
 
                       <td className="px-4 py-3">
-                        <AutoGrowTextarea
+                        <RichTextEditor
                           className={fieldClass}
                           minHeight={40}
                           value={service.description}
-                          onChange={(event) =>
-                            updateService(
-                              service.rowId,
-                              "description",
-                              event.target.value,
-                            )
+                          onChange={(html) =>
+                            updateService(service.rowId, "description", html)
                           }
                           placeholder="Description"
+                          data-testid={`textarea-service-description-${service.rowId}`}
                         />
                       </td>
 
