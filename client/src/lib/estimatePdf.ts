@@ -1519,7 +1519,16 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
 
     const COLS = 5;
     const SERVICE_DETAIL_FONT_SIZE = 9;
-    const richDetailByRowIndex = new Map<number, RichDetailLayout>();
+    const richLinesByRowIndex = new Map<number, RichDetailLayout["lines"]>();
+    // autoTable splits a too-tall cell's `cell.text` array across pages by
+    // itself, calling didDrawCell once per page with `cell.text` sliced to
+    // that page's share of lines (and data.row.index becomes -1 for the
+    // continuation fragments). We rely on that native behavior instead of
+    // drawing everything in one shot, so long descriptions correctly
+    // continue onto the next page instead of getting cut off. These two
+    // track which lines belong to the row currently being split.
+    let pendingContinuationLines: RichDetailLayout["lines"] = [];
+    let pendingContinuationCursor = 0;
     const serviceItems = (estimate.services || []) as ServiceItem[];
 
     const serviceRows: any[] = serviceItems.map((s: ServiceItem) => {
@@ -1659,27 +1668,62 @@ export async function buildEstimatePdfBlob(args: BuildPdfArgs): Promise<Blob> {
             SERVICE_DETAIL_FONT_SIZE,
           );
 
-          richDetailByRowIndex.set(data.row.index, layout);
+          richLinesByRowIndex.set(data.row.index, layout.lines);
 
-          data.cell.text = [];
-          data.cell.styles.minCellHeight =
-            layout.lines.length * layout.lineHeight +
-            data.cell.padding("top") +
-            data.cell.padding("bottom") +
-            2;
+          // A placeholder per wrapped line (not an emptied array) is what
+          // lets autoTable compute this cell's height itself and, crucially,
+          // split it across pages on its own when it's taller than one page.
+          data.cell.text = layout.lines.map(() => "");
         }
       },
       didDrawCell: (data: any) => {
         if (data.section !== "body" || data.column?.index !== 0) return;
 
-        const layout = richDetailByRowIndex.get(data.row.index);
-        if (!layout) return;
+        const chunkLineCount = Array.isArray(data.cell.text)
+          ? data.cell.text.length
+          : 0;
+        if (chunkLineCount === 0) return;
 
+        // row.index is -1 for a continuation fragment of a row that got
+        // split across pages — pick up where the previous chunk left off
+        // instead of starting that row's lines over from the top.
+        if (data.row.index !== -1) {
+          pendingContinuationLines =
+            richLinesByRowIndex.get(data.row.index) || [];
+          pendingContinuationCursor = 0;
+        }
+
+        const chunkLines = pendingContinuationLines.slice(
+          pendingContinuationCursor,
+          pendingContinuationCursor + chunkLineCount,
+        );
+        pendingContinuationCursor += chunkLineCount;
+
+        // Derived from the space autoTable actually allocated for this
+        // chunk rather than our own estimate, so drawn lines land exactly
+        // where autoTable expects them (and where the next row starts).
+        // cell.height includes the cell's top+bottom padding, which isn't
+        // available for text lines — dividing it in directly (without
+        // subtracting padding first) inflates lineHeight, and the error
+        // compounds over the chunk until the last line overshoots past the
+        // cell's actual bottom edge into the next row. Verified this holds
+        // for every chunk of a page-split row, not just single-page cells.
+        const availableHeight =
+          data.cell.height -
+          data.cell.padding("top") -
+          data.cell.padding("bottom");
+        const lineHeight = availableHeight / chunkLineCount;
         const x = data.cell.x + data.cell.padding("left");
         const startY =
-          data.cell.y + data.cell.padding("top") + layout.lineHeight * 0.8;
+          data.cell.y + data.cell.padding("top") + lineHeight * 0.8;
 
-        drawRichDetail(pdf, layout, x, startY, SERVICE_DETAIL_FONT_SIZE);
+        drawRichDetail(
+          pdf,
+          { lines: chunkLines, lineHeight },
+          x,
+          startY,
+          SERVICE_DETAIL_FONT_SIZE,
+        );
       },
     });
 
