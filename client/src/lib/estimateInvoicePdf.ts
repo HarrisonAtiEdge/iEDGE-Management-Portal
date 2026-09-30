@@ -1,3 +1,4 @@
+
 // import jsPDF from "jspdf";
 // import autoTable from "jspdf-autotable";
 // import type { Estimate } from "../types";
@@ -381,8 +382,15 @@
 //           | undefined;
 //         const rateNum = Number(String(s.rate ?? 0).replace(/,/g, "")) || 0;
 
-//         const amount =
+//         const baseAmount =
 //           rateMode === "percent" ? units * (rateNum / 100) : units * rateNum;
+
+//         const taxPercent = Number(s.taxPercent ?? 0);
+
+//         const amount =
+//           invoice.taxType === "exclusive" && taxPercent > 0
+//             ? baseAmount + (baseAmount * taxPercent) / 100
+//             : baseAmount;
 
 //         const rateDisplay =
 //           rateMode === "percent"
@@ -734,9 +742,21 @@
 //   return pdf.output("blob");
 // }
 
+
+
+
+
+
+
+
+
+
+
+
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 import type { Estimate } from "../types";
+import { descriptionHtmlToPlainText } from "./richTextPdf";
 
 /**
  * Invoice doc uses the same structure as Estimate + these extra fields:
@@ -1137,7 +1157,7 @@ export async function buildEstimateInvoicePdfBlob(
               : formatMoney(rateNum);
 
         return [
-          `${s.detail}\n${s.description || ""}`,
+          `${s.detail}\n${descriptionHtmlToPlainText(s.description || "")}`,
           units === 0 ? "" : units.toLocaleString(),
           rateDisplay,
           Number(s.taxPercent ?? 0) > 0 && invoice.taxType !== "none"
