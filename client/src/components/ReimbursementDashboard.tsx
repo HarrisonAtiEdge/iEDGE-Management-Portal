@@ -3064,7 +3064,7 @@
 //       ====================================================== */}
 
 //       <Dialog open={showApprovalModal} onOpenChange={setShowApprovalModal}>
-//         <DialogContent className="max-w-md">
+//         <DialogContent className="max-w-lg">
 //           <DialogHeader>
 //             <DialogTitle>
 //               {approvalAction === "approved"
@@ -3438,6 +3438,7 @@ import {
   useCallback,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from "react";
@@ -3451,6 +3452,13 @@ import {
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import PaymentReleaseModal from "@/components/PaymentReleaseModal";
+import {
+  buildReimbursementPdfBlob,
+  buildReimbursementReportPdfBlob,
+  printPdfBlob,
+  type ReimbursementPdfData,
+  type ReimbursementReportPdfData,
+} from "@/lib/reimbursementPdf";
 import { Card, CardContent } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -3481,9 +3489,44 @@ import {
   Check,
   Pencil,
   Loader2,
+  Printer,
+  FileText,
+  Download,
+  ExternalLink,
+  Hash,
 } from "lucide-react";
 
 const PANEL_ID = "IEDGE-SYSTEM";
+
+// Approval and payment release are strictly role-based:
+// only Admin can approve/reject, only Finance can release payment.
+const getRoleKey = (role: any) =>
+  String(role || "")
+    .toLowerCase()
+    .trim()
+    .replace(/[\s-]+/g, "_");
+
+const ADMIN_ROLE_KEYS = ["admin", "main_admin", "super_admin"];
+const FINANCE_ROLE_KEYS = ["finance", "financial_admin", "finance_admin"];
+
+const canApproveReimbursements = (role: any) =>
+  ADMIN_ROLE_KEYS.includes(getRoleKey(role));
+
+const canReleaseReimbursementPayments = (role: any) =>
+  FINANCE_ROLE_KEYS.includes(getRoleKey(role));
+
+// A release can carry several cheques; older records only have chequeNumber.
+const getChequeNumbersText = (source: any) => {
+  const values = Array.isArray(source?.chequeNumbers)
+    ? source.chequeNumbers
+    : [source?.chequeNumber];
+
+  return Array.from(
+    new Set(
+      values.map((value: any) => String(value ?? "").trim()).filter(Boolean),
+    ),
+  ).join(", ");
+};
 
 interface Reimbursement {
   id: string;
@@ -3506,6 +3549,10 @@ interface Reimbursement {
   approvedBy?: string;
   paymentStatus?: string;
   paidBy?: string;
+  paymentType?: string;
+  chequeNumber?: string;
+  transactionReference?: string;
+  paymentReleasedAt?: any;
 
   claimFor?: "project" | "general";
   claimType?: "fuel" | "food";
@@ -3608,6 +3655,38 @@ const getPaymentBadgeClass = (status?: string) => {
   }
 };
 
+const SORT_LABELS: Record<string, string> = {
+  latest: "Latest",
+  oldest: "Oldest",
+  amount_high: "Amount High",
+  amount_low: "Amount Low",
+  client_az: "Client A-Z",
+};
+
+const isPaidItem = (item: Reimbursement) =>
+  String(item.paymentStatus || "pending").toLowerCase() === "paid";
+
+const getClaimTypeLabel = (item: Reimbursement) =>
+  item.claimType === "food"
+    ? "Food"
+    : item.claimType === "fuel" || Number(item.fuelClaim || 0) > 0
+      ? "Fuel"
+      : "Reimbursement";
+
+const getFuelFoodLabel = (item: Reimbursement) =>
+  item.claimType === "food"
+    ? item.foodItem || "Food"
+    : Number(item.fuelClaim || 0) > 0
+      ? `${Number(item.fuelClaim || 0)} KM`
+      : "N/A";
+
+const getPaidAmountLabel = (item: Reimbursement) =>
+  item.paidAmount !== undefined
+    ? formatCurrency(item.paidAmount)
+    : isPaidItem(item)
+      ? formatCurrency(item.approvedAmount ?? item.amount)
+      : "N/A";
+
 function StatCard({
   title,
   value,
@@ -3649,10 +3728,16 @@ function StatCard({
 export default function ReimbursementDashboard() {
   const { userProfile, currentUser } = useAuth();
 
+  const canApprove = canApproveReimbursements(userProfile?.role);
+  const canReleasePayments = canReleaseReimbursementPayments(
+    userProfile?.role,
+  );
+
   const [data, setData] = useState<Reimbursement[]>([]);
   const [approvalFilter, setApprovalFilter] = useState("all");
   const [paymentFilter, setPaymentFilter] = useState("all");
   const [personFilter, setPersonFilter] = useState("all");
+  const [chequeFilter, setChequeFilter] = useState("");
   const [search, setSearch] = useState("");
   const [sortBy, setSortBy] = useState("latest");
   const [page, setPage] = useState(1);
@@ -3675,6 +3760,23 @@ export default function ReimbursementDashboard() {
 
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [detailItem, setDetailItem] = useState<Reimbursement | null>(null);
+
+  const [pdfBusyKey, setPdfBusyKey] = useState<string | null>(null);
+  const [pdfPreviewMeta, setPdfPreviewMeta] = useState<{
+    title: string;
+    fileName: string;
+  } | null>(null);
+  const [pdfPreviewBlob, setPdfPreviewBlob] = useState<Blob | null>(null);
+  const [pdfPreviewUrl, setPdfPreviewUrl] = useState<string | null>(null);
+  const pdfPreviewUrlRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (pdfPreviewUrlRef.current) {
+        URL.revokeObjectURL(pdfPreviewUrlRef.current);
+      }
+    };
+  }, []);
 
   const getReimbursementDocRef = (item: Reimbursement) => {
     if (item.sourcePath === "claim") {
@@ -3854,6 +3956,10 @@ export default function ReimbursementDashboard() {
                 approvedBy: reimbursement.approvedBy || "",
                 paymentStatus: reimbursement.paymentStatus || "pending",
                 paidBy: reimbursement.paidBy || "",
+                paymentType: reimbursement.paymentType || "",
+                chequeNumber: getChequeNumbersText(reimbursement),
+                transactionReference: reimbursement.transactionReference || "",
+                paymentReleasedAt: reimbursement.paymentReleasedAt || null,
               } as Reimbursement;
             })
             .filter(Boolean) as Reimbursement[];
@@ -3945,6 +4051,10 @@ export default function ReimbursementDashboard() {
             approvedBy: claim.approvedBy || "",
             paymentStatus: claim.paymentStatus || "pending",
             paidBy: claim.paidBy || "",
+            paymentType: claim.paymentType || "",
+            chequeNumber: getChequeNumbersText(claim),
+            transactionReference: claim.transactionReference || "",
+            paymentReleasedAt: claim.paymentReleasedAt || null,
           };
         });
       } catch (claimError) {
@@ -3983,6 +4093,7 @@ export default function ReimbursementDashboard() {
 
   const filteredData = useMemo(() => {
     const query = search.trim().toLowerCase();
+    const chequeQuery = chequeFilter.trim().toLowerCase();
 
     const rows = data.filter((item) => {
       const matchesApproval =
@@ -3994,6 +4105,12 @@ export default function ReimbursementDashboard() {
 
       const person = String(item.personName || "Unknown").trim() || "Unknown";
       const matchesPerson = personFilter === "all" || person === personFilter;
+
+      const matchesCheque =
+        !chequeQuery ||
+        String(item.chequeNumber || "")
+          .toLowerCase()
+          .includes(chequeQuery);
 
       const matchesSearch =
         !query ||
@@ -4007,7 +4124,11 @@ export default function ReimbursementDashboard() {
         item.claimFor?.toLowerCase().includes(query);
 
       return (
-        matchesApproval && matchesPayment && matchesPerson && matchesSearch
+        matchesApproval &&
+        matchesPayment &&
+        matchesPerson &&
+        matchesCheque &&
+        matchesSearch
       );
     });
 
@@ -4040,11 +4161,27 @@ export default function ReimbursementDashboard() {
     });
 
     return rows;
-  }, [data, approvalFilter, paymentFilter, personFilter, search, sortBy]);
+  }, [
+    data,
+    approvalFilter,
+    paymentFilter,
+    personFilter,
+    chequeFilter,
+    search,
+    sortBy,
+  ]);
 
   useEffect(() => {
     setPage(1);
-  }, [approvalFilter, paymentFilter, personFilter, search, sortBy, pageSize]);
+  }, [
+    approvalFilter,
+    paymentFilter,
+    personFilter,
+    chequeFilter,
+    search,
+    sortBy,
+    pageSize,
+  ]);
 
   const totalPages = Math.max(1, Math.ceil(filteredData.length / pageSize));
 
@@ -4129,6 +4266,7 @@ export default function ReimbursementDashboard() {
     setApprovalFilter("all");
     setPaymentFilter("all");
     setPersonFilter("all");
+    setChequeFilter("");
     setSearch("");
     setSortBy("latest");
     setPage(1);
@@ -4138,6 +4276,11 @@ export default function ReimbursementDashboard() {
     item: Reimbursement,
     status: "approved" | "rejected",
   ) => {
+    if (!canApprove) {
+      alert("Only Admin can approve or reject reimbursement requests.");
+      return;
+    }
+
     setSelectedItem(item);
     setApprovalAction(status);
     setApprovalAmount(String(item.approvedAmount ?? item.amount ?? 0));
@@ -4147,6 +4290,16 @@ export default function ReimbursementDashboard() {
 
   const submitApprovalDecision = async () => {
     if (!selectedItem || !approvalAction) return;
+
+    if (!canApprove) {
+      alert("Only Admin can approve or reject reimbursement requests.");
+      return;
+    }
+
+    if (selectedItem.status !== "pending") {
+      alert("This reimbursement request has already been decided.");
+      return;
+    }
 
     const finalAmount = Number(approvalAmount || 0);
 
@@ -4217,6 +4370,13 @@ export default function ReimbursementDashboard() {
   // One-click approve at the claimed amount, with no editing — the
   // "Partially Approve" button still opens the dialog above for that.
   const handleQuickApprove = async (item: Reimbursement) => {
+    if (!canApprove) {
+      alert("Only Admin can approve reimbursement requests.");
+      return;
+    }
+
+    if (item.status !== "pending") return;
+
     const key = `${item.sourcePath || "unknown"}-${item.recordId || "record"}-${item.id}`;
     setQuickApprovingKey(key);
 
@@ -4258,6 +4418,343 @@ export default function ReimbursementDashboard() {
     }
   };
 
+  const openPaymentRelease = (item: Reimbursement) => {
+    if (!canReleasePayments) {
+      alert("Only Finance can release reimbursement payments.");
+      return;
+    }
+
+    const paymentStatus = String(item.paymentStatus || "pending").toLowerCase();
+
+    if (item.status !== "approved" || paymentStatus === "paid") {
+      alert("Payment can only be released for approved, unpaid requests.");
+      return;
+    }
+
+    setSelectedItem(item);
+    setShowPaymentModal(true);
+  };
+
+  const getRowKey = (item: Reimbursement) =>
+    `${item.sourcePath || "unknown"}-${item.recordId || "record"}-${item.id}`;
+
+  const buildPdfData = (item: Reimbursement): ReimbursementPdfData => {
+    const isPaid = isPaidItem(item);
+
+    const claimFor =
+      item.claimFor === "project"
+        ? "Project"
+        : item.claimFor === "general"
+          ? "General"
+          : item.projectName && item.projectName !== "N/A"
+            ? "Project"
+            : "N/A";
+
+    return {
+      reference: item.id,
+      claimInformation: [
+        { label: "Claimed By", value: item.personName || "Unknown" },
+        { label: "Submitted Date", value: formatDate(item.submittedDate) },
+        { label: "Client", value: item.client || "N/A" },
+        { label: "Project", value: item.projectName || "N/A" },
+        { label: "Claim For", value: claimFor },
+        { label: "Claim Type", value: getClaimTypeLabel(item) },
+        { label: "Project Code", value: item.projectCode || "N/A" },
+        {
+          label: item.claimType === "food" ? "Food Item" : "Fuel / KM",
+          value: getFuelFoodLabel(item),
+        },
+      ],
+      amountInformation: [
+        { label: "Claim Amount", value: formatCurrency(item.amount) },
+        {
+          label: "Approved Amount",
+          value:
+            item.approvedAmount !== undefined
+              ? formatCurrency(item.approvedAmount)
+              : "N/A",
+        },
+        {
+          label: "Paid Amount",
+          value: getPaidAmountLabel(item),
+        },
+        {
+          label: "Payment Status",
+          value: isPaid ? "Payment Paid" : "Payment Pending",
+        },
+      ],
+      approvalInformation: [
+        {
+          label: "Approval Status",
+          value: formatStatusLabel(item.rawStatus || item.status),
+        },
+        { label: "Approved By", value: item.approvedBy || "Not approved yet" },
+        {
+          label: "Approval Date",
+          value: item.approvalDecisionAt
+            ? formatDate(item.approvalDecisionAt)
+            : "N/A",
+        },
+      ],
+      paymentInformation: [
+        { label: "Paid By", value: item.paidBy || "Not paid yet" },
+        {
+          label: "Payment Date",
+          value: item.paymentReleasedAt
+            ? formatDate(item.paymentReleasedAt)
+            : "N/A",
+        },
+        {
+          label: "Payment Method",
+          value: item.paymentType ? formatStatusLabel(item.paymentType) : "N/A",
+        },
+        { label: "Cheque Number", value: item.chequeNumber || "N/A" },
+        {
+          label: "Transaction Ref.",
+          value: item.transactionReference || "N/A",
+        },
+      ],
+      details: item.details || "No details",
+      approvalRemarks: item.approvalRemarks || "",
+      billUrl: item.billUrl || undefined,
+    };
+  };
+
+  const buildReportPdfData = (): ReimbursementReportPdfData => {
+    const countWhere = (predicate: (item: Reimbursement) => boolean) =>
+      String(filteredData.filter(predicate).length);
+
+    return {
+      filters: [
+        { label: "Search", value: search.trim() || "None" },
+        {
+          label: "Person",
+          value: personFilter === "all" ? "All persons" : personFilter,
+        },
+        { label: "Cheque Number", value: chequeFilter.trim() || "Any" },
+        {
+          label: "Approval Status",
+          value:
+            approvalFilter === "all"
+              ? "All"
+              : formatStatusLabel(approvalFilter),
+        },
+        {
+          label: "Payment Status",
+          value:
+            paymentFilter === "all" ? "All" : formatStatusLabel(paymentFilter),
+        },
+        { label: "Sort", value: SORT_LABELS[sortBy] || sortBy },
+      ],
+      summary: [
+        { label: "Total Claims", value: String(filteredData.length) },
+        {
+          label: "Pending",
+          value: countWhere((item) => item.status === "pending"),
+        },
+        {
+          label: "Approved",
+          value: countWhere((item) => item.status === "approved"),
+        },
+        {
+          label: "Rejected",
+          value: countWhere((item) => item.status === "rejected"),
+        },
+        { label: "Paid", value: countWhere((item) => isPaidItem(item)) },
+        { label: "Claim Amount", value: formatCurrency(filteredAmount) },
+        {
+          label: "Approved Amount",
+          value: formatCurrency(filteredApprovedAmount),
+        },
+        {
+          label: "Paid Amount",
+          value: formatCurrency(filteredPaymentPaidAmount),
+        },
+        {
+          label: "Pending Amount",
+          value: formatCurrency(filteredPaymentPendingAmount),
+        },
+      ],
+      columns: [
+        "#",
+        "Claimed By",
+        "Client / Project",
+        "Type",
+        "Fuel / Food",
+        "Submitted",
+        "Claim Amount",
+        "Approved Amount",
+        "Paid Amount",
+        "Approval",
+        "Payment",
+        "Cheque No.",
+        "Approved By",
+        "Paid By",
+        "Details",
+      ],
+      rows: filteredData.map((item, index) => [
+        String(index + 1),
+        item.personName || "Unknown",
+        `${item.client || "N/A"}\n${item.projectName || "N/A"}`,
+        getClaimTypeLabel(item),
+        getFuelFoodLabel(item),
+        formatDate(item.submittedDate),
+        formatCurrency(item.amount),
+        item.approvedAmount !== undefined
+          ? formatCurrency(item.approvedAmount)
+          : "N/A",
+        getPaidAmountLabel(item),
+        formatStatusLabel(item.rawStatus || item.status),
+        isPaidItem(item) ? "Paid" : "Pending",
+        item.chequeNumber || "N/A",
+        item.approvedBy || "N/A",
+        item.paidBy || "N/A",
+        item.details || "N/A",
+      ]),
+    };
+  };
+
+  const getPdfFileName = (item: Reimbursement) => {
+    const person = String(item.personName || "claim")
+      .trim()
+      .replace(/[^a-z0-9]+/gi, "-")
+      .replace(/^-+|-+$/g, "");
+
+    return `Reimbursement-${person || "claim"}-${item.id}.pdf`;
+  };
+
+  // Single-claim and list-report documents share the same preview/print flow.
+  const getItemPdfJob = (item: Reimbursement) => ({
+    key: getRowKey(item),
+    title: `Reimbursement PDF Preview${
+      item.personName ? ` - ${item.personName}` : ""
+    }`,
+    fileName: getPdfFileName(item),
+    build: () => buildReimbursementPdfBlob(buildPdfData(item)),
+  });
+
+  const getReportPdfJob = () => ({
+    key: "report",
+    title: `Reimbursement Report PDF Preview (${filteredData.length} records)`,
+    fileName: `Reimbursement-Report-${new Date()
+      .toISOString()
+      .slice(0, 10)}.pdf`,
+    build: () => buildReimbursementReportPdfBlob(buildReportPdfData()),
+  });
+
+  type PdfJob = ReturnType<typeof getReportPdfJob>;
+
+  const closePdfPreview = () => {
+    if (pdfPreviewUrlRef.current) {
+      URL.revokeObjectURL(pdfPreviewUrlRef.current);
+      pdfPreviewUrlRef.current = null;
+    }
+
+    setPdfPreviewUrl(null);
+    setPdfPreviewBlob(null);
+    setPdfPreviewMeta(null);
+  };
+
+  const openPdfPreview = async (job: PdfJob) => {
+    setPdfBusyKey(`preview-${job.key}`);
+
+    try {
+      const blob = await job.build();
+
+      if (pdfPreviewUrlRef.current) {
+        URL.revokeObjectURL(pdfPreviewUrlRef.current);
+      }
+
+      const url = URL.createObjectURL(blob);
+      pdfPreviewUrlRef.current = url;
+
+      setPdfPreviewBlob(blob);
+      setPdfPreviewUrl(url);
+      setPdfPreviewMeta({ title: job.title, fileName: job.fileName });
+    } catch (error) {
+      console.error("Reimbursement PDF preview failed:", error);
+      alert("Could not generate the PDF preview. Please try again.");
+    } finally {
+      setPdfBusyKey(null);
+    }
+  };
+
+  const printPdf = async (job: PdfJob) => {
+    setPdfBusyKey(`print-${job.key}`);
+
+    try {
+      printPdfBlob(await job.build());
+    } catch (error) {
+      console.error("Reimbursement print failed:", error);
+      alert("Could not prepare the printout. Please try again.");
+    } finally {
+      setPdfBusyKey(null);
+    }
+  };
+
+  const handleDownloadPreview = () => {
+    if (!pdfPreviewUrl || !pdfPreviewMeta) return;
+
+    const link = document.createElement("a");
+    link.href = pdfPreviewUrl;
+    link.download = pdfPreviewMeta.fileName;
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+  };
+
+  // Print / PDF Preview button pair reused wherever claims are displayed.
+  const renderPdfActions = (
+    job: PdfJob,
+    {
+      size = "sm",
+      previewLabel = "PDF Preview",
+      printLabel = "Print",
+      disabled = false,
+    }: {
+      size?: "sm" | "default";
+      previewLabel?: string;
+      printLabel?: string;
+      disabled?: boolean;
+    } = {},
+  ) => (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        size={size}
+        className="gap-1.5"
+        disabled={disabled || pdfBusyKey !== null}
+        onClick={() => openPdfPreview(job)}
+        data-testid={`button-pdf-preview-${job.key}`}
+      >
+        {pdfBusyKey === `preview-${job.key}` ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <FileText className="h-4 w-4" />
+        )}
+        {previewLabel}
+      </Button>
+
+      <Button
+        type="button"
+        variant="outline"
+        size={size}
+        className="gap-1.5"
+        disabled={disabled || pdfBusyKey !== null}
+        onClick={() => printPdf(job)}
+        data-testid={`button-print-${job.key}`}
+      >
+        {pdfBusyKey === `print-${job.key}` ? (
+          <Loader2 className="h-4 w-4 animate-spin" />
+        ) : (
+          <Printer className="h-4 w-4" />
+        )}
+        {printLabel}
+      </Button>
+    </>
+  );
+
   return (
     <div className="space-y-6 p-6">
       <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
@@ -4266,11 +4763,22 @@ export default function ReimbursementDashboard() {
             Reimbursement Dashboard
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Review, approve, and release reimbursement claims in one place.
+            {canApprove
+              ? "Review and approve reimbursement claims. Payment release is handled by Finance."
+              : canReleasePayments
+                ? "Release payments for approved reimbursement claims. Approval is handled by Admin."
+                : "View and print reimbursement claims. Approval is handled by Admin and payment release by Finance."}
           </p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
+          {renderPdfActions(getReportPdfJob(), {
+            size: "default",
+            previewLabel: "Report PDF Preview",
+            printLabel: "Print Report",
+            disabled: loading,
+          })}
+
           <Button
             variant="outline"
             onClick={clearFilters}
@@ -4333,13 +4841,13 @@ export default function ReimbursementDashboard() {
             <div>
               <h2 className="text-sm font-semibold text-foreground">Filters</h2>
               <p className="text-xs text-muted-foreground">
-                Search faster with person, approval, payment, and sorting
-                filters.
+                Search faster with person, cheque number, approval, payment,
+                and sorting filters.
               </p>
             </div>
           </div>
 
-          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-5">
+          <div className="grid grid-cols-1 gap-3 md:grid-cols-2 xl:grid-cols-6">
             <div className="xl:col-span-2">
               <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
                 Search
@@ -4380,6 +4888,24 @@ export default function ReimbursementDashboard() {
                     </option>
                   ))}
                 </select>
+              </div>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-xs font-medium text-muted-foreground">
+                Cheque Number
+              </label>
+
+              <div className="relative">
+                <Hash className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+
+                <input
+                  placeholder="Enter cheque number"
+                  className="h-10 w-full rounded-lg border border-input bg-background pl-9 pr-3 text-sm outline-none transition focus:border-ring focus:ring-2 focus:ring-ring/20"
+                  value={chequeFilter}
+                  onChange={(e) => setChequeFilter(e.target.value)}
+                  data-testid="input-cheque-filter"
+                />
               </div>
             </div>
 
@@ -4468,7 +4994,8 @@ export default function ReimbursementDashboard() {
             </div>
 
             <div className="text-xs">
-              Showing filtered claims based on your current filters
+              Showing filtered claims based on your current filters. Print
+              Report includes all {filteredData.length} filtered claim(s).
             </div>
           </div>
         </CardContent>
@@ -4541,17 +5068,15 @@ export default function ReimbursementDashboard() {
                         item.status === "rejected";
 
                       const canReleasePayment =
-                        item.status === "approved" && paymentStatus !== "paid";
+                        canReleasePayments &&
+                        item.status === "approved" &&
+                        paymentStatus !== "paid";
 
-                      const rowKey = `${item.sourcePath || "unknown"}-${
-                        item.recordId || "record"
-                      }-${item.id}`;
+                      const rowKey = getRowKey(item);
 
                       return (
                         <tr
-                          key={`${item.sourcePath || "unknown"}-${
-                            item.recordId || "record"
-                          }-${item.id}`}
+                          key={rowKey}
                           className="border-b transition-colors hover:bg-muted/20"
                         >
                           <td className="px-4 py-4 align-top">
@@ -4660,6 +5185,12 @@ export default function ReimbursementDashboard() {
                                   ? "Payment Paid"
                                   : "Payment Pending"}
                               </Badge>
+
+                              {item.chequeNumber && (
+                                <p className="text-xs text-muted-foreground">
+                                  Cheque # {item.chequeNumber}
+                                </p>
+                              )}
                             </div>
                           </td>
 
@@ -4682,7 +5213,7 @@ export default function ReimbursementDashboard() {
                           </td>
 
                           <td className="px-4 py-4 align-top">
-                            <div className="flex justify-end gap-2">
+                            <div className="flex flex-wrap justify-end gap-2">
                               <button
                                 onClick={() => {
                                   setDetailItem(item);
@@ -4695,76 +5226,85 @@ export default function ReimbursementDashboard() {
                                 View Detail
                               </button>
 
-                              <button
-                                disabled={
-                                  actionLocked || quickApprovingKey === rowKey
-                                }
-                                onClick={() => handleQuickApprove(item)}
-                                className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition ${
-                                  actionLocked
-                                    ? "cursor-not-allowed bg-muted text-muted-foreground"
-                                    : "bg-green-600 text-white hover:bg-green-700"
-                                }`}
-                                data-testid={`button-approve-${item.recordId}-${item.id}`}
-                              >
-                                {quickApprovingKey === rowKey ? (
-                                  <Loader2 className="h-4 w-4 animate-spin" />
-                                ) : (
-                                  <CheckCircle2 className="h-4 w-4" />
-                                )}
-                                Approve
-                              </button>
+                              {renderPdfActions(getItemPdfJob(item))}
 
-                              <button
-                                disabled={actionLocked}
-                                onClick={() =>
-                                  openApprovalDialog(item, "approved")
-                                }
-                                className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition ${
-                                  actionLocked
-                                    ? "cursor-not-allowed bg-muted text-muted-foreground"
-                                    : "bg-amber-500 text-white hover:bg-amber-600"
-                                }`}
-                                data-testid={`button-partial-approve-${item.recordId}-${item.id}`}
-                              >
-                                <Pencil className="h-4 w-4" />
-                                Partially Approve
-                              </button>
+                              {canApprove && (
+                                <>
+                                  <button
+                                    disabled={
+                                      actionLocked || quickApprovingKey === rowKey
+                                    }
+                                    onClick={() => handleQuickApprove(item)}
+                                    className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition ${
+                                      actionLocked
+                                        ? "cursor-not-allowed bg-muted text-muted-foreground"
+                                        : "bg-green-600 text-white hover:bg-green-700"
+                                    }`}
+                                    data-testid={`button-approve-${item.recordId}-${item.id}`}
+                                  >
+                                    {quickApprovingKey === rowKey ? (
+                                      <Loader2 className="h-4 w-4 animate-spin" />
+                                    ) : (
+                                      <CheckCircle2 className="h-4 w-4" />
+                                    )}
+                                    Approve
+                                  </button>
+    
+                                  <button
+                                    disabled={actionLocked}
+                                    onClick={() =>
+                                      openApprovalDialog(item, "approved")
+                                    }
+                                    className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition ${
+                                      actionLocked
+                                        ? "cursor-not-allowed bg-muted text-muted-foreground"
+                                        : "bg-amber-500 text-white hover:bg-amber-600"
+                                    }`}
+                                    data-testid={`button-partial-approve-${item.recordId}-${item.id}`}
+                                  >
+                                    <Pencil className="h-4 w-4" />
+                                    Partially Approve
+                                  </button>
+    
+                                  <button
+                                    disabled={actionLocked}
+                                    onClick={() =>
+                                      openApprovalDialog(item, "rejected")
+                                    }
+                                    className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition ${
+                                      actionLocked
+                                        ? "cursor-not-allowed bg-muted text-muted-foreground"
+                                        : "bg-red-600 text-white hover:bg-red-700"
+                                    }`}
+                                    data-testid={`button-reject-${item.recordId}-${item.id}`}
+                                  >
+                                    <XCircle className="h-4 w-4" />
+                                    Reject
+                                  </button>
+                                </>
+                              )}
 
-                              <button
-                                disabled={actionLocked}
-                                onClick={() =>
-                                  openApprovalDialog(item, "rejected")
-                                }
-                                className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition ${
-                                  actionLocked
-                                    ? "cursor-not-allowed bg-muted text-muted-foreground"
-                                    : "bg-red-600 text-white hover:bg-red-700"
-                                }`}
-                                data-testid={`button-reject-${item.recordId}-${item.id}`}
-                              >
-                                <XCircle className="h-4 w-4" />
-                                Reject
-                              </button>
-
-                              <button
-                                disabled={!canReleasePayment}
-                                onClick={() => {
-                                  setSelectedItem(item);
-                                  setShowPaymentModal(true);
-                                }}
-                                className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition ${
-                                  canReleasePayment
-                                    ? "bg-blue-600 text-white hover:bg-blue-700"
-                                    : "cursor-not-allowed bg-muted text-muted-foreground"
-                                }`}
-                                data-testid={`button-release-payment-${item.recordId}-${item.id}`}
-                              >
-                                <Wallet className="h-4 w-4" />
-                                {paymentStatus === "paid"
-                                  ? "Paid"
-                                  : "Release Payment"}
-                              </button>
+                              {canReleasePayments && (
+                                <button
+                                  disabled={!canReleasePayment}
+                                  onClick={() => openPaymentRelease(item)}
+                                  className={`inline-flex h-9 items-center gap-1.5 rounded-lg px-3 text-sm font-medium transition ${
+                                    canReleasePayment
+                                      ? "bg-blue-600 text-white hover:bg-blue-700"
+                                      : "cursor-not-allowed bg-muted text-muted-foreground"
+                                  }`}
+                                  data-testid={`button-release-payment-${item.recordId}-${item.id}`}
+                                >
+                                  <Wallet className="h-4 w-4" />
+                                  {paymentStatus === "paid"
+                                    ? "Paid"
+                                    : item.status === "approved"
+                                      ? "Release Payment"
+                                      : item.status === "rejected"
+                                        ? "Rejected"
+                                        : "Awaiting Approval"}
+                                </button>
+                              )}
                             </div>
                           </td>
                         </tr>
@@ -4836,8 +5376,11 @@ export default function ReimbursementDashboard() {
         </CardContent>
       </Card>
 
-      <Dialog open={showApprovalModal} onOpenChange={setShowApprovalModal}>
-        <DialogContent className="max-w-md">
+      <Dialog
+        open={showApprovalModal && canApprove}
+        onOpenChange={setShowApprovalModal}
+      >
+        <DialogContent className="max-w-lg">
           <DialogHeader>
             <DialogTitle>
               {approvalAction === "approved"
@@ -4900,32 +5443,38 @@ export default function ReimbursementDashboard() {
               />
             </div>
 
-            <div className="flex justify-end gap-2 pt-2">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setShowApprovalModal(false)}
-                disabled={approvalSaving}
-              >
-                Cancel
-              </Button>
+            <div className="flex flex-wrap items-center justify-between gap-2 pt-2">
+              <div className="flex flex-wrap gap-2">
+                {selectedItem && renderPdfActions(getItemPdfJob(selectedItem))}
+              </div>
 
-              <Button
-                type="button"
-                onClick={submitApprovalDecision}
-                disabled={approvalSaving}
-                className={
-                  approvalAction === "approved"
-                    ? "bg-green-600 text-white hover:bg-green-700"
-                    : "bg-red-600 text-white hover:bg-red-700"
-                }
-              >
-                {approvalSaving
-                  ? "Saving..."
-                  : approvalAction === "approved"
-                    ? "Approve"
-                    : "Reject"}
-              </Button>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => setShowApprovalModal(false)}
+                  disabled={approvalSaving}
+                >
+                  Cancel
+                </Button>
+
+                <Button
+                  type="button"
+                  onClick={submitApprovalDecision}
+                  disabled={approvalSaving}
+                  className={
+                    approvalAction === "approved"
+                      ? "bg-green-600 text-white hover:bg-green-700"
+                      : "bg-red-600 text-white hover:bg-red-700"
+                  }
+                >
+                  {approvalSaving
+                    ? "Saving..."
+                    : approvalAction === "approved"
+                      ? "Approve"
+                      : "Reject"}
+                </Button>
+              </div>
             </div>
           </div>
         </DialogContent>
@@ -5046,12 +5595,47 @@ export default function ReimbursementDashboard() {
                 </div>
               </div>
 
-              <div className="rounded-xl border p-3">
-                <p className="text-xs text-muted-foreground">Approved By</p>
-                <p className="text-sm text-foreground">
-                  {detailItem.approvedBy || "Not approved yet"}
-                </p>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="rounded-xl border p-3">
+                  <p className="text-xs text-muted-foreground">Approved By</p>
+                  <p className="text-sm text-foreground">
+                    {detailItem.approvedBy || "Not approved yet"}
+                  </p>
+                </div>
+
+                <div className="rounded-xl border p-3">
+                  <p className="text-xs text-muted-foreground">Paid By</p>
+                  <p className="text-sm text-foreground">
+                    {detailItem.paidBy || "Not paid yet"}
+                  </p>
+                </div>
               </div>
+
+              {(detailItem.paymentType ||
+                detailItem.chequeNumber ||
+                detailItem.transactionReference) && (
+                <div className="grid grid-cols-2 gap-3">
+                  <div className="rounded-xl border p-3">
+                    <p className="text-xs text-muted-foreground">
+                      Payment Method
+                    </p>
+                    <p className="text-sm text-foreground">
+                      {detailItem.paymentType
+                        ? formatStatusLabel(detailItem.paymentType)
+                        : "N/A"}
+                    </p>
+                  </div>
+
+                  <div className="rounded-xl border p-3">
+                    <p className="text-xs text-muted-foreground">
+                      Cheque Number
+                    </p>
+                    <p className="text-sm text-foreground">
+                      {detailItem.chequeNumber || "N/A"}
+                    </p>
+                  </div>
+                </div>
+              )}
 
               {detailItem.billUrl && (
                 <a
@@ -5065,7 +5649,11 @@ export default function ReimbursementDashboard() {
                 </a>
               )}
 
-              <div className="flex justify-end">
+              <div className="flex flex-wrap justify-end gap-2">
+                {renderPdfActions(getItemPdfJob(detailItem), {
+                  size: "default",
+                })}
+
                 <Button
                   variant="outline"
                   onClick={() => {
@@ -5081,8 +5669,68 @@ export default function ReimbursementDashboard() {
         </DialogContent>
       </Dialog>
 
+      <Dialog
+        open={Boolean(pdfPreviewUrl)}
+        onOpenChange={(open) => {
+          if (!open) closePdfPreview();
+        }}
+      >
+        <DialogContent className="flex h-[90vh] max-w-5xl flex-col gap-3 p-4">
+          <DialogHeader>
+            <DialogTitle>
+              {pdfPreviewMeta?.title || "Reimbursement PDF Preview"}
+            </DialogTitle>
+          </DialogHeader>
+
+          {pdfPreviewUrl && (
+            <iframe
+              src={pdfPreviewUrl}
+              title="Reimbursement PDF Preview"
+              className="w-full flex-1 rounded-lg border"
+            />
+          )}
+
+          <div className="flex flex-wrap justify-end gap-2">
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={() =>
+                pdfPreviewUrl &&
+                window.open(pdfPreviewUrl, "_blank", "noopener,noreferrer")
+              }
+            >
+              <ExternalLink className="h-4 w-4" />
+              Open in New Tab
+            </Button>
+
+            <Button
+              variant="outline"
+              className="gap-2"
+              onClick={handleDownloadPreview}
+              data-testid="button-download-reimbursement-pdf"
+            >
+              <Download className="h-4 w-4" />
+              Download
+            </Button>
+
+            <Button
+              className="gap-2"
+              onClick={() => pdfPreviewBlob && printPdfBlob(pdfPreviewBlob)}
+              data-testid="button-print-reimbursement-pdf"
+            >
+              <Printer className="h-4 w-4" />
+              Print
+            </Button>
+
+            <Button variant="outline" onClick={closePdfPreview}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
+
       <PaymentReleaseModal
-        isOpen={showPaymentModal}
+        isOpen={showPaymentModal && canReleasePayments}
         onClose={() => {
           setShowPaymentModal(false);
           setSelectedItem(null);
@@ -5112,6 +5760,12 @@ export default function ReimbursementDashboard() {
         parties={selectedItem?.personName ? [selectedItem.personName] : []}
         initialPaymentMethod="cash"
         buildUpdateData={({ formData, receiptUrl, selectedAccount, actor }) => {
+          const chequeNumbers: string[] = Array.isArray(
+            (formData as any).chequeNumbers,
+          )
+            ? (formData as any).chequeNumbers.filter(Boolean)
+            : [];
+
           if (selectedItem?.sourcePath === "claim") {
             return {
               paymentStatus: "paid",
@@ -5127,6 +5781,7 @@ export default function ReimbursementDashboard() {
               ...(formData.chequeNumber
                 ? { chequeNumber: formData.chequeNumber }
                 : {}),
+              ...(chequeNumbers.length ? { chequeNumbers } : {}),
               ...(selectedAccount ? { selectedAccount } : {}),
             };
           }
@@ -5145,6 +5800,9 @@ export default function ReimbursementDashboard() {
             "reimbursement.updatedAt": serverTimestamp(),
             ...(formData.chequeNumber
               ? { "reimbursement.chequeNumber": formData.chequeNumber }
+              : {}),
+            ...(chequeNumbers.length
+              ? { "reimbursement.chequeNumbers": chequeNumbers }
               : {}),
             ...(selectedAccount
               ? { "reimbursement.selectedAccount": selectedAccount }
