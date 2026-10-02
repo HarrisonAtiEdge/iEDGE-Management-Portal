@@ -1694,7 +1694,16 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Combobox } from "@/components/ui/combobox";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
+import { printRecordDocument, type PrintableRecord } from "@/lib/recordPrint";
 import { useLocation } from "wouter";
 
 type AccountType = "cheque" | "online";
@@ -1737,458 +1746,8 @@ type RecordItem = {
 
 type ItemField = keyof RecordItem;
 
-type PrintableRecordItem = {
-  category: string;
-  amount: number;
-  name: string;
-  description: string;
-};
-
-type PrintableRecordData = {
-  recordId?: string;
-  selectedDate: string;
-  accountType: AccountType;
-  accountTitle: string;
-  accountNo: string;
-  bank: string;
-  branch?: string;
-  city?: string;
-  platform?: string;
-  routingNumber?: string;
-  chequeNumber: string;
-  statementTitle: string;
-  chequeAmount: number;
-  totalItemAmount: number;
-  remainingBalance: number;
-  createdByName: string;
-  items: PrintableRecordItem[];
-};
-
-const escapeHtml = (value: unknown): string => {
-  return String(value ?? "")
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\"/g, "&quot;")
-    .replace(/'/g, "&#039;");
-};
-
-const formatPrintAmount = (value: number): string => {
-  return value.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-};
-
 const normalizeDescriptionLineBreaks = (value: string): string => {
   return value.replace(/\r\n?/g, "\n");
-};
-
-const formatDescriptionForPrint = (value: string): string => {
-  const normalizedValue = normalizeDescriptionLineBreaks(value);
-
-  if (!normalizedValue.trim()) {
-    return '<span class="description-empty">-</span>';
-  }
-
-  return `<div class="description-text">${escapeHtml(normalizedValue)}</div>`;
-};
-
-const printRecord = (record: PrintableRecordData): boolean => {
-  const printWindow = window.open("", "_blank", "width=1100,height=850");
-
-  if (!printWindow) return false;
-
-  const accountSource =
-    record.accountType === "online"
-      ? record.platform || record.bank || "-"
-      : record.bank || "-";
-
-  const branchOrRouting =
-    record.accountType === "online"
-      ? record.routingNumber || "-"
-      : record.branch || "-";
-
-  const itemRows = record.items
-    .map(
-      (item, index) => `
-        <tr>
-          <td class="number">${index + 1}</td>
-          <td>${escapeHtml(item.category || "-")}</td>
-          <td>${escapeHtml(item.name || "-")}</td>
-          <td><div class="description-content">${formatDescriptionForPrint(
-            item.description,
-          )}</div></td>
-          <td class="amount">${escapeHtml(formatPrintAmount(item.amount))}</td>
-        </tr>`,
-    )
-    .join("");
-
-  const html = `<!doctype html>
-<html lang="en">
-<head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>Record ${escapeHtml(record.chequeNumber)}</title>
-  <style>
-    @page {
-      size: A4;
-      margin: 14mm;
-    }
-
-    * {
-      box-sizing: border-box;
-    }
-
-    body {
-      margin: 0;
-      color: #172033;
-      background: #ffffff;
-      font-family: Arial, Helvetica, sans-serif;
-      font-size: 12px;
-      line-height: 1.45;
-    }
-
-    .document {
-      width: 100%;
-      margin: 0 auto;
-    }
-
-    .header {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 24px;
-      padding-bottom: 16px;
-      border-bottom: 2px solid #172033;
-    }
-
-    .brand h1 {
-      margin: 0;
-      font-size: 24px;
-      letter-spacing: 0.8px;
-    }
-
-    .brand p {
-      margin: 5px 0 0;
-      color: #667085;
-      font-size: 11px;
-    }
-
-    .document-meta {
-      min-width: 220px;
-      text-align: right;
-    }
-
-    .document-meta .title {
-      font-size: 17px;
-      font-weight: 700;
-    }
-
-    .document-meta .line {
-      margin-top: 4px;
-      color: #475467;
-    }
-
-    .section {
-      margin-top: 18px;
-      break-inside: avoid;
-    }
-
-    .section-title {
-      margin: 0 0 9px;
-      padding: 7px 10px;
-      border-left: 4px solid #172033;
-      background: #f2f4f7;
-      font-size: 12px;
-      font-weight: 700;
-      letter-spacing: 0.4px;
-      text-transform: uppercase;
-    }
-
-    .details-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px 24px;
-    }
-
-    .detail {
-      display: grid;
-      grid-template-columns: 125px minmax(0, 1fr);
-      gap: 8px;
-      padding: 6px 0;
-      border-bottom: 1px solid #e4e7ec;
-    }
-
-    .detail .label {
-      color: #667085;
-      font-weight: 600;
-    }
-
-    .detail .value {
-      overflow-wrap: anywhere;
-      color: #101828;
-      font-weight: 600;
-    }
-
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      table-layout: fixed;
-    }
-
-    thead {
-      display: table-header-group;
-    }
-
-    tr {
-      break-inside: avoid;
-    }
-
-    th,
-    td {
-      padding: 8px;
-      border: 1px solid #d0d5dd;
-      vertical-align: top;
-      overflow-wrap: anywhere;
-    }
-
-    th {
-      background: #f2f4f7;
-      color: #344054;
-      font-size: 10px;
-      letter-spacing: 0.35px;
-      text-align: left;
-      text-transform: uppercase;
-    }
-
-    th:nth-child(1),
-    td:nth-child(1) {
-      width: 6%;
-    }
-
-    th:nth-child(2),
-    td:nth-child(2) {
-      width: 18%;
-    }
-
-    th:nth-child(3),
-    td:nth-child(3) {
-      width: 23%;
-    }
-
-    th:nth-child(4),
-    td:nth-child(4) {
-      width: 35%;
-    }
-
-    th:nth-child(5),
-    td:nth-child(5) {
-      width: 18%;
-    }
-
-    .number {
-      text-align: center;
-    }
-
-    .amount {
-      text-align: right;
-      white-space: nowrap;
-    }
-
-    .description-content {
-      color: #344054;
-      line-height: 1.5;
-    }
-
-    .description-text {
-      margin: 0;
-      white-space: pre-wrap;
-      overflow-wrap: anywhere;
-    }
-
-    .description-empty {
-      color: #98a2b3;
-    }
-
-    .summary {
-      width: 360px;
-      margin-left: auto;
-      border: 1px solid #d0d5dd;
-    }
-
-    .summary-row {
-      display: flex;
-      justify-content: space-between;
-      gap: 18px;
-      padding: 9px 12px;
-      border-bottom: 1px solid #e4e7ec;
-    }
-
-    .summary-row:last-child {
-      border-bottom: 0;
-      background: #f2f4f7;
-      font-size: 13px;
-      font-weight: 700;
-    }
-
-    .summary-label {
-      color: #475467;
-    }
-
-    .summary-value {
-      font-weight: 700;
-      white-space: nowrap;
-    }
-
-    .footer {
-      margin-top: 24px;
-      padding-top: 10px;
-      border-top: 1px solid #d0d5dd;
-      color: #667085;
-      font-size: 10px;
-      text-align: center;
-    }
-
-    @media print {
-      .document {
-        width: 100%;
-      }
-    }
-  </style>
-</head>
-<body>
-  <main class="document">
-    <header class="header">
-      <div class="brand">
-        <h1>IEDGE</h1>
-        <p>Official account, cheque and transaction record</p>
-      </div>
-
-      <div class="document-meta">
-        <div class="title">Financial Record</div>
-        <div class="line"><strong>Record ID:</strong> ${escapeHtml(
-          record.recordId || "Not saved yet",
-        )}</div>
-        <div class="line"><strong>Date:</strong> ${escapeHtml(
-          record.selectedDate,
-        )}</div>
-      </div>
-    </header>
-
-    <section class="section">
-      <h2 class="section-title">Record Information</h2>
-      <div class="details-grid">
-        <div class="detail">
-          <span class="label">Cheque Number</span>
-          <span class="value">${escapeHtml(record.chequeNumber)}</span>
-        </div>
-        <div class="detail">
-          <span class="label">Statement Title</span>
-          <span class="value">${escapeHtml(record.statementTitle || "-")}</span>
-        </div>
-        <div class="detail">
-          <span class="label">Created By</span>
-          <span class="value">${escapeHtml(record.createdByName)}</span>
-        </div>
-        <div class="detail">
-          <span class="label">Account Type</span>
-          <span class="value">${
-            record.accountType === "cheque"
-              ? "Cheque Account"
-              : "Online Account"
-          }</span>
-        </div>
-      </div>
-    </section>
-
-    <section class="section">
-      <h2 class="section-title">Account Details</h2>
-      <div class="details-grid">
-        <div class="detail">
-          <span class="label">Account Title</span>
-          <span class="value">${escapeHtml(record.accountTitle || "-")}</span>
-        </div>
-        <div class="detail">
-          <span class="label">Bank / Platform</span>
-          <span class="value">${escapeHtml(accountSource)}</span>
-        </div>
-        <div class="detail">
-          <span class="label">Account Number</span>
-          <span class="value">${escapeHtml(record.accountNo || "-")}</span>
-        </div>
-        <div class="detail">
-          <span class="label">Branch / Routing</span>
-          <span class="value">${escapeHtml(branchOrRouting)}</span>
-        </div>
-      </div>
-    </section>
-
-    <section class="section">
-      <h2 class="section-title">Record Items</h2>
-      <table>
-        <thead>
-          <tr>
-            <th>#</th>
-            <th>Category</th>
-            <th>Name</th>
-            <th>Description</th>
-            <th class="amount">Amount</th>
-          </tr>
-        </thead>
-        <tbody>${itemRows}</tbody>
-      </table>
-    </section>
-
-    <section class="section">
-      <h2 class="section-title">Cheque Summary</h2>
-      <div class="summary">
-        <div class="summary-row">
-          <span class="summary-label">Cheque Amount</span>
-          <span class="summary-value">${escapeHtml(
-            formatPrintAmount(record.chequeAmount),
-          )}</span>
-        </div>
-        <div class="summary-row">
-          <span class="summary-label">Total Item Amount</span>
-          <span class="summary-value">${escapeHtml(
-            formatPrintAmount(record.totalItemAmount),
-          )}</span>
-        </div>
-        <div class="summary-row">
-          <span class="summary-label">Remaining Balance</span>
-          <span class="summary-value">${escapeHtml(
-            formatPrintAmount(record.remainingBalance),
-          )}</span>
-        </div>
-      </div>
-    </section>
-
-    <footer class="footer">
-      Printed ${escapeHtml(new Date().toLocaleString("en-US"))}
-    </footer>
-  </main>
-
-  <script>
-    window.addEventListener("load", function () {
-      window.setTimeout(function () {
-        window.print();
-      }, 200);
-    });
-
-    window.addEventListener("afterprint", function () {
-      window.close();
-    });
-  </script>
-</body>
-</html>`;
-
-  printWindow.document.open();
-  printWindow.document.write(html);
-  printWindow.document.close();
-  printWindow.focus();
-
-  return true;
 };
 
 const PANEL_ID = "IEDGE-SYSTEM";
@@ -2381,7 +1940,8 @@ export default function Record() {
   const [duplicateChequeWarning, setDuplicateChequeWarning] =
     useState<string>("");
   const [lastSavedRecord, setLastSavedRecord] =
-    useState<PrintableRecordData | null>(null);
+    useState<PrintableRecord | null>(null);
+  const [showSavedDialog, setShowSavedDialog] = useState<boolean>(false);
 
   const getErrorMessage = (error: unknown): string => {
     if (error instanceof Error) return error.message;
@@ -2717,107 +2277,14 @@ export default function Record() {
     return "";
   };
 
-  const getCurrentPrintableRecord = (): PrintableRecordData | null => {
-    if (!selectedAccount) return null;
-
-    const profileData = userProfile as {
-      id?: string;
-      name?: string;
-      displayName?: string;
-      email?: string;
-    } | null;
-
-    return {
-      selectedDate,
-      accountType: selectedAccount.type,
-      accountTitle: selectedAccount.accountTitle,
-      accountNo: selectedAccount.accountNo,
-      bank: selectedAccount.bank,
-      branch: selectedAccount.branch || "",
-      city: selectedAccount.city || "",
-      platform: selectedAccount.platform || "",
-      routingNumber: selectedAccount.routingNumber || "",
-      chequeNumber: chequeNumber.trim(),
-      statementTitle: statementTitle.trim(),
-      chequeAmount: chequeValue,
-      totalItemAmount,
-      remainingBalance,
-      createdByName:
-        profileData?.name ||
-        profileData?.displayName ||
-        profileData?.email ||
-        "Unknown User",
-      items: items.map((item) => ({
-        category: item.category,
-        name: item.name.trim(),
-        amount: Number(item.amount),
-        description: normalizeDescriptionLineBreaks(item.description),
-      })),
-    };
-  };
-
-  const handlePrint = () => {
-    const hasCurrentRecordData = Boolean(
-      selectedAccountKey ||
-        chequeNumber.trim() ||
-        statementTitle.trim() ||
-        chequeAmount ||
-        items.some(
-          (item) =>
-            item.category ||
-            item.amount ||
-            item.name.trim() ||
-            item.description.trim(),
-        ),
-    );
-
-    if (hasCurrentRecordData) {
-      const error = validateForm();
-
-      if (error) {
-        setSubmitError(error);
-        toast({
-          title: "Cannot print record",
-          description: error,
-          variant: "destructive",
-        });
-        return;
-      }
-
-      const currentRecord = getCurrentPrintableRecord();
-
-      if (!currentRecord) return;
-
-      const opened = printRecord(currentRecord);
-
-      if (!opened) {
-        toast({
-          title: "Print window blocked",
-          description: "Please allow pop-ups for this website and try again.",
-          variant: "destructive",
-        });
-      }
-      return;
+  const openRecordPrintout = (record: PrintableRecord) => {
+    if (!printRecordDocument(record)) {
+      toast({
+        title: "Print window blocked",
+        description: "Please allow pop-ups for this website and try again.",
+        variant: "destructive",
+      });
     }
-
-    if (lastSavedRecord) {
-      const opened = printRecord(lastSavedRecord);
-
-      if (!opened) {
-        toast({
-          title: "Print window blocked",
-          description: "Please allow pop-ups for this website and try again.",
-          variant: "destructive",
-        });
-      }
-      return;
-    }
-
-    toast({
-      title: "No record available",
-      description: "Enter record details or save a record before printing.",
-      variant: "destructive",
-    });
   };
 
   async function handleSubmit(e: FormEvent<HTMLFormElement>) {
@@ -2899,8 +2366,10 @@ export default function Record() {
       const savedDocument = await addDoc(getPanelCollection("Record"), payload);
 
       setLastSavedRecord({
-        recordId: savedDocument.id,
+        id: savedDocument.id,
+        status: payload.status,
         selectedDate,
+        chequeDate: selectedDate,
         accountType: selectedAccount.type,
         accountTitle: selectedAccount.accountTitle,
         accountNo: selectedAccount.accountNo,
@@ -2935,6 +2404,7 @@ export default function Record() {
       });
 
       resetForm();
+      setShowSavedDialog(true);
     } catch (error) {
       console.error("Failed to add record:", error);
 
@@ -3287,17 +2757,28 @@ export default function Record() {
               </div>
             )}
 
-            <div className="mt-6 flex flex-wrap justify-end gap-3">
-              <Button
-                type="button"
-                variant="outline"
-                onClick={handlePrint}
-                disabled={loading}
-                data-testid="button-print-record"
-              >
-                Print Record
-              </Button>
+            {lastSavedRecord && (
+              <div className="mt-5 flex flex-col gap-3 rounded-lg border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+                <p className="font-medium text-emerald-800">
+                  Last saved record: Cheque {lastSavedRecord.chequeNumber}
+                  {lastSavedRecord.statementTitle
+                    ? ` - ${lastSavedRecord.statementTitle}`
+                    : ""}
+                </p>
 
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={() => openRecordPrintout(lastSavedRecord)}
+                  data-testid="button-printout-saved-record"
+                >
+                  Printout
+                </Button>
+              </div>
+            )}
+
+            <div className="mt-6 flex flex-wrap justify-end gap-3">
               <Button
                 type="button"
                 variant="outline"
@@ -3325,6 +2806,65 @@ export default function Record() {
           </CardContent>
         </Card>
       </form>
+
+      <Dialog open={showSavedDialog} onOpenChange={setShowSavedDialog}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>Record Saved</DialogTitle>
+            <DialogDescription>
+              The record was saved successfully. You can print it now or
+              later from the Record List.
+            </DialogDescription>
+          </DialogHeader>
+
+          {lastSavedRecord && (
+            <div className="grid grid-cols-2 gap-3 rounded-xl border bg-muted/40 p-4 text-sm">
+              <div>
+                <p className="text-muted-foreground">Cheque Number</p>
+                <p className="font-medium">{lastSavedRecord.chequeNumber}</p>
+              </div>
+
+              <div>
+                <p className="text-muted-foreground">Date</p>
+                <p className="font-medium">{lastSavedRecord.selectedDate}</p>
+              </div>
+
+              <div>
+                <p className="text-muted-foreground">Account</p>
+                <p className="font-medium">{lastSavedRecord.accountTitle}</p>
+              </div>
+
+              <div>
+                <p className="text-muted-foreground">Cheque Amount</p>
+                <p className="font-medium">
+                  {formatAmount(lastSavedRecord.chequeAmount || 0)}
+                </p>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => setShowSavedDialog(false)}
+              data-testid="button-close-saved-dialog"
+            >
+              Close
+            </Button>
+
+            <Button
+              type="button"
+              onClick={() => {
+                if (lastSavedRecord) openRecordPrintout(lastSavedRecord);
+              }}
+              data-testid="button-printout-after-save"
+            >
+              Printout
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
