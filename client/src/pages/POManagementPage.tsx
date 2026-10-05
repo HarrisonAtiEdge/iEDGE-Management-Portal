@@ -3,12 +3,15 @@ import { useLocation } from "wouter";
 import jsPDF from "jspdf";
 import {
   collection,
+  deleteField,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
   serverTimestamp,
   updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 import {
   AlertTriangle,
@@ -23,6 +26,7 @@ import {
   RotateCcw,
   Search,
   ShieldCheck,
+  Trash2,
   Wallet,
   XCircle,
 } from "lucide-react";
@@ -56,6 +60,15 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  AlertDialog,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import {
   Select,
   SelectContent,
   SelectItem,
@@ -84,6 +97,11 @@ import {
   isCurrentRequestApprover,
 } from "@/lib/budgetApprovalWorkflow";
 import { useToast } from "@/hooks/use-toast";
+import {
+  getPurchaseOrderEditLockReason,
+  hasPurchaseOrderPaymentReleased,
+  isPurchaseOrderAdminRole,
+} from "@/lib/purchaseOrderRules";
 
 const PANEL_ID = "IEDGE-SYSTEM";
 const CREATE_PO_ROUTE = "/create-po";
@@ -282,9 +300,7 @@ function canAccessPurchaseOrders(profile: any, roleConfigs: any[] = []) {
   if (!profile) return false;
 
   const profileRoleKey = getRoleKey(profile?.role);
-  const isAdmin = ["main_admin", "admin", "administrator"].includes(
-    profileRoleKey,
-  );
+  const isAdmin = isPurchaseOrderAdminRole(profile?.role);
 
   const assignedRole = roleConfigs.find((role: any) =>
     [role?.id, role?.name, role?.label, role?.displayName].some(
@@ -384,9 +400,7 @@ function canViewAllPurchaseOrders(user: any) {
 
   // Backward-compatible default for administrator records created before the
   // per-user Purchase Order visibility field existed.
-  return ["main_admin", "admin", "administrator"].includes(
-    getRoleKey(user?.role),
-  );
+  return isPurchaseOrderAdminRole(user?.role);
 }
 
 function roundMoney(value: any) {
@@ -1197,6 +1211,8 @@ export default function POManagementPage() {
   const [rejectionOpen, setRejectionOpen] = useState(false);
   const [rejectionPO, setRejectionPO] = useState<PurchaseOrder | null>(null);
   const [rejectionLoading, setRejectionLoading] = useState(false);
+  const [deletingPO, setDeletingPO] = useState<PurchaseOrder | null>(null);
+  const [deleteLoading, setDeleteLoading] = useState(false);
 
   const { data: workflowConfigs = [] } = useFirestoreQuery<any>(
     `Panels/${PANEL_ID}/workflowConfigs`,
@@ -1302,6 +1318,7 @@ export default function POManagementPage() {
     roleConfigs,
   );
   const isFinanceUser = isFinancePurchaseOrderRole(effectiveUser?.role);
+  const isAdminUser = isPurchaseOrderAdminRole(effectiveUser?.role);
   const userCanViewAllPurchaseOrders = canViewAllPurchaseOrders(effectiveUser);
 
   const visiblePurchaseOrders = useMemo(() => {
@@ -1669,12 +1686,28 @@ export default function POManagementPage() {
     navigate(CREATE_PO_ROUTE);
   };
 
+  // A PO is editable by its creator or an Admin until it is approved.
+  const canEditPO = (po: PurchaseOrder) =>
+    (isAdminUser || isPurchaseOrderOwnedByUser(po, effectiveUser)) &&
+    !getPurchaseOrderEditLockReason(po);
+
   const handleEditPO = (po: PurchaseOrder) => {
-    if (!isPurchaseOrderOwnedByUser(po, effectiveUser)) {
+    if (!isAdminUser && !isPurchaseOrderOwnedByUser(po, effectiveUser)) {
       toast({
         title: "Edit not allowed",
         description:
-          "Only the person who created this Purchase Order can edit it.",
+          "Only the person who created this Purchase Order or an Admin can edit it.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const lockReason = getPurchaseOrderEditLockReason(po);
+
+    if (lockReason) {
+      toast({
+        title: "Edit not allowed",
+        description: lockReason,
         variant: "destructive",
       });
       return;
@@ -1730,6 +1763,76 @@ export default function POManagementPage() {
   const handleViewPO = (po: PurchaseOrder) => {
     setViewingPO(po);
     setViewDialogOpen(true);
+  };
+
+  const handleDeletePO = async () => {
+    if (!deletingPO) return;
+
+    if (!isAdminUser) {
+      toast({
+        title: "Delete not allowed",
+        description: "Only Admin users can delete a Purchase Order.",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    const po = deletingPO;
+
+    try {
+      setDeleteLoading(true);
+
+      const batch = writeBatch(db);
+      batch.delete(doc(db, "Panels", PANEL_ID, "PO", po.id));
+
+      // A PO created from a Budget Request marks that request as having a PO.
+      // Clear the link so the request can get a new PO, but only if the
+      // request still points at this PO.
+      if (po.source === "budget_request" && po.sourceInvoiceId) {
+        const requestRef = doc(
+          db,
+          "Panels",
+          PANEL_ID,
+          "invoiceRequests",
+          po.sourceInvoiceId,
+        );
+        const requestSnap = await getDoc(requestRef);
+
+        if (requestSnap.exists() && requestSnap.data()?.poId === po.id) {
+          batch.update(requestRef, {
+            poCreated: false,
+            poSubmitted: false,
+            poId: deleteField(),
+            poNumber: deleteField(),
+            poSubmittedAt: deleteField(),
+            updatedAt: serverTimestamp(),
+          });
+        }
+      }
+
+      await batch.commit();
+
+      toast({
+        title: "Purchase Order deleted",
+        description: `${po.poNumber || "The Purchase Order"} was deleted.`,
+      });
+
+      if (viewingPO?.id === po.id) {
+        setViewDialogOpen(false);
+        setViewingPO(null);
+      }
+
+      setDeletingPO(null);
+    } catch (error: any) {
+      console.error("Failed to delete Purchase Order:", error);
+      toast({
+        title: "Delete failed",
+        description: error?.message || "Could not delete the Purchase Order.",
+        variant: "destructive",
+      });
+    } finally {
+      setDeleteLoading(false);
+    }
   };
 
   const getCurrentUserId = () =>
@@ -2558,7 +2661,7 @@ export default function POManagementPage() {
                             <Banknote className="h-4 w-4" />
                           </Button>
 
-                          {isPurchaseOrderOwnedByUser(po, effectiveUser) && (
+                          {canEditPO(po) && (
                             <Button
                               type="button"
                               size="icon"
@@ -2607,6 +2710,20 @@ export default function POManagementPage() {
                           >
                             <FileText className="h-4 w-4" />
                           </Button>
+
+                          {isAdminUser && (
+                            <Button
+                              type="button"
+                              size="icon"
+                              variant="outline"
+                              className="h-9 w-9 rounded-xl border-rose-200 text-rose-700 hover:bg-rose-50"
+                              title="Delete"
+                              aria-label="Delete purchase order"
+                              onClick={() => setDeletingPO(po)}
+                            >
+                              <Trash2 className="h-4 w-4" />
+                            </Button>
+                          )}
                         </div>
                       </TableCell>
                     </TableRow>
@@ -2676,6 +2793,63 @@ export default function POManagementPage() {
           {viewingPO ? <PurchaseOrderView po={viewingPO} /> : null}
         </DialogContent>
       </Dialog>
+
+      <AlertDialog
+        open={Boolean(deletingPO)}
+        onOpenChange={(open) => {
+          if (!open && !deleteLoading) setDeletingPO(null);
+        }}
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Delete Purchase Order?</AlertDialogTitle>
+            <AlertDialogDescription asChild>
+              <div className="space-y-3 text-sm text-muted-foreground">
+                <p>
+                  <span className="font-semibold text-foreground">
+                    {deletingPO?.poNumber || "This Purchase Order"}
+                  </span>
+                  {deletingPO?.supplierName
+                    ? ` for ${deletingPO.supplierName}`
+                    : ""}{" "}
+                  ({formatCurrency(safeNumber(deletingPO?.totalAmount))}) will
+                  be permanently deleted. This cannot be undone.
+                </p>
+
+                {deletingPO && hasPurchaseOrderPaymentReleased(deletingPO) && (
+                  <p className="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 font-medium text-amber-800">
+                    {formatCurrency(getTotalReleasedAmount(deletingPO))} has
+                    already been released against this PO. Its payment history
+                    is stored on the PO and will be deleted with it.
+                  </p>
+                )}
+
+                {deletingPO?.source === "budget_request" &&
+                  deletingPO.sourceInvoiceId && (
+                    <p>
+                      This PO was created from a Budget Request. The request
+                      will be unlinked so a new PO can be created for it.
+                    </p>
+                  )}
+              </div>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+
+          <AlertDialogFooter>
+            <AlertDialogCancel disabled={deleteLoading}>
+              Cancel
+            </AlertDialogCancel>
+            <Button
+              type="button"
+              variant="destructive"
+              onClick={handleDeletePO}
+              disabled={deleteLoading}
+            >
+              {deleteLoading ? "Deleting..." : "Delete PO"}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

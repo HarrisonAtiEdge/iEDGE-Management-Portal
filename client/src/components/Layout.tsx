@@ -1959,6 +1959,7 @@ import { Link, useLocation } from "wouter";
 import { NotificationBell } from "@/components/NotificationBell";
 import { useNotifications } from "@/hooks/useNotifications";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { getAllChequeNumbers } from "@/lib/chequeNumbers";
 
 const PANEL_ID = "IEDGE-SYSTEM";
 
@@ -1969,7 +1970,14 @@ interface SidebarItem {
   children?: SidebarItem[];
 }
 
-type GlobalSearchKind = "estimate" | "invoice" | "po";
+type ChequeSearchKind =
+  | "record"
+  | "payment"
+  | "budgetRequest"
+  | "reimbursement"
+  | "statementEntry";
+
+type GlobalSearchKind = "estimate" | "invoice" | "po" | ChequeSearchKind;
 
 type GlobalSearchRecord = {
   id: string;
@@ -2011,6 +2019,96 @@ const GLOBAL_SEARCH_SOURCES: Array<{
     route: "/purchase-orders",
   },
 ];
+
+// Collections that hold cheques. Unlike the sources above, these are matched
+// on cheque numbers only, so a general keyword search is not flooded with
+// payments and ledger entries. ownerField is the field holding the creator's
+// uid, used to limit non-admin users to their own records; null means the
+// collection has no owner field and is only searchable by admin/finance roles.
+const CHEQUE_SEARCH_SOURCES: Array<{
+  key: ChequeSearchKind;
+  collectionName: string;
+  label: string;
+  route: string;
+  ownerField: string | null;
+}> = [
+  {
+    key: "record",
+    collectionName: "Record",
+    label: "Cheque Record",
+    route: "/records",
+    ownerField: "createdBy",
+  },
+  {
+    key: "payment",
+    collectionName: "payments",
+    label: "Payment",
+    route: "/account-statement",
+    ownerField: null,
+  },
+  {
+    key: "budgetRequest",
+    collectionName: "invoiceRequests",
+    label: "Budget Request",
+    route: "/budget-requests",
+    ownerField: "createdBy",
+  },
+  {
+    key: "reimbursement",
+    collectionName: "claimReimbursements",
+    label: "Reimbursement",
+    route: "/reimbursement",
+    ownerField: "createdBy",
+  },
+  {
+    key: "statementEntry",
+    collectionName: "accountStatementManualEntries",
+    label: "Statement Entry",
+    route: "/account-statement",
+    ownerField: "createdById",
+  },
+];
+
+const GLOBAL_SEARCH_VIEW_ALL_ROLES = [
+  "main_admin",
+  "admin",
+  "operational_admin",
+  "financial_admin",
+  "finance",
+];
+
+const createEmptyGlobalSearchData = (): GlobalSearchData => ({
+  estimate: [],
+  invoice: [],
+  po: [],
+  record: [],
+  payment: [],
+  budgetRequest: [],
+  reimbursement: [],
+  statementEntry: [],
+});
+
+// The stored cheque number that best matches the search, or "" if none does.
+function getMatchingChequeNumber(
+  record: GlobalSearchRecord,
+  searchTerm: string,
+): string {
+  const compactSearch = normalizeGlobalSearchValue(searchTerm);
+  if (!compactSearch) return "";
+
+  const chequeNumbers = getAllChequeNumbers(record);
+
+  return (
+    chequeNumbers.find(
+      (chequeNumber) =>
+        normalizeGlobalSearchValue(chequeNumber) === compactSearch,
+    ) ||
+    chequeNumbers.find((chequeNumber) =>
+      normalizeGlobalSearchValue(chequeNumber).includes(compactSearch),
+    ) ||
+    ""
+  );
+}
 
 function getGlobalSearchModuleRoute(result: GlobalSearchResult): string {
   if (result.kind === "estimate") {
@@ -2276,7 +2374,9 @@ function getSearchResultDetails(record: GlobalSearchRecord) {
       record?.title,
       record?.project,
       record?.description,
+      record?.statementTitle,
     ),
+    chequeNumbers: getAllChequeNumbers(record).join(", "),
     company: firstNonEmpty(record?.company, record?.companyName),
     status: firstNonEmpty(record?.status),
     date: formatGlobalSearchDate(
@@ -2284,13 +2384,18 @@ function getSearchResultDetails(record: GlobalSearchRecord) {
         record?.poDate ??
         record?.date ??
         record?.createdAt ??
-        record?.submittedAt,
+        record?.submittedAt ??
+        record?.selectedDate ??
+        record?.chequeDate,
     ),
     amount: formatGlobalSearchAmount(
       record?.total ??
         record?.totalAmount ??
         record?.grandTotal ??
         record?.netTotal ??
+        record?.chequeAmount ??
+        record?.claimAmount ??
+        record?.amount ??
         0,
     ),
     createdBy: firstNonEmpty(
@@ -2763,11 +2868,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   const [globalSearch, setGlobalSearch] = useState("");
   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
   const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
-  const [globalSearchData, setGlobalSearchData] = useState<GlobalSearchData>({
-    estimate: [],
-    invoice: [],
-    po: [],
-  });
+  // Cheque collections load only once the search box is first used, so pages
+  // don't keep five extra live listeners open for users who never search.
+  const [chequeSearchActivated, setChequeSearchActivated] = useState(false);
+  const [chequeSearchLoading, setChequeSearchLoading] = useState(false);
+  const [globalSearchData, setGlobalSearchData] = useState<GlobalSearchData>(
+    createEmptyGlobalSearchData,
+  );
   const [selectedGlobalSearchResult, setSelectedGlobalSearchResult] =
     useState<GlobalSearchResult | null>(null);
 
@@ -2828,11 +2935,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         setGlobalSearch("");
         setGlobalSearchOpen(false);
         setSelectedGlobalSearchResult(null);
-        setGlobalSearchData({
-          estimate: [],
-          invoice: [],
-          po: [],
-        });
+        setChequeSearchActivated(false);
+        setGlobalSearchData(createEmptyGlobalSearchData());
         setLoading(false);
         setLocation("/login");
         return;
@@ -2942,22 +3046,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!searchUserId || !role) {
-      setGlobalSearchData({
+      setGlobalSearchData((previous) => ({
+        ...previous,
         estimate: [],
         invoice: [],
         po: [],
-      });
+      }));
       setGlobalSearchLoading(false);
       return;
     }
 
-    const canViewAllSearchRecords = [
-      "main_admin",
-      "admin",
-      "operational_admin",
-      "financial_admin",
-      "finance",
-    ].includes(role);
+    const canViewAllSearchRecords = GLOBAL_SEARCH_VIEW_ALL_ROLES.includes(role);
 
     setGlobalSearchLoading(true);
 
@@ -3027,6 +3126,100 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     };
   }, [searchUserId, role]);
 
+  useEffect(() => {
+    const emptyChequeData = () =>
+      Object.fromEntries(
+        CHEQUE_SEARCH_SOURCES.map((source) => [source.key, []]),
+      ) as Pick<GlobalSearchData, ChequeSearchKind>;
+
+    if (!searchUserId || !role || !chequeSearchActivated) {
+      setGlobalSearchData((previous) => ({
+        ...previous,
+        ...emptyChequeData(),
+      }));
+      setChequeSearchLoading(false);
+      return;
+    }
+
+    const canViewAllSearchRecords = GLOBAL_SEARCH_VIEW_ALL_ROLES.includes(role);
+
+    const sources = CHEQUE_SEARCH_SOURCES.filter(
+      (source) => canViewAllSearchRecords || source.ownerField,
+    );
+
+    if (sources.length === 0) {
+      setChequeSearchLoading(false);
+      return;
+    }
+
+    setChequeSearchLoading(true);
+
+    let initializedSources = 0;
+
+    const unsubscribers = sources.map((source) => {
+      const sourceRef = collection(
+        db,
+        "Panels",
+        PANEL_ID,
+        source.collectionName,
+      );
+
+      const sourceQuery =
+        canViewAllSearchRecords || !source.ownerField
+          ? query(sourceRef)
+          : query(sourceRef, where(source.ownerField, "==", searchUserId));
+
+      let initialized = false;
+
+      const markOnce = () => {
+        if (initialized) return;
+        initialized = true;
+        initializedSources += 1;
+
+        if (initializedSources >= sources.length) {
+          setChequeSearchLoading(false);
+        }
+      };
+
+      return onSnapshot(
+        sourceQuery,
+        (snapshot) => {
+          // Only documents that actually carry a cheque number are kept.
+          const records = snapshot.docs
+            .map((snapshotDoc) => ({
+              id: snapshotDoc.id,
+              ...snapshotDoc.data(),
+            }))
+            .filter((record) => getAllChequeNumbers(record).length > 0);
+
+          setGlobalSearchData((previous) => ({
+            ...previous,
+            [source.key]: records,
+          }));
+
+          markOnce();
+        },
+        (error) => {
+          console.warn(
+            `Global cheque search could not read ${source.collectionName}:`,
+            error,
+          );
+
+          setGlobalSearchData((previous) => ({
+            ...previous,
+            [source.key]: [],
+          }));
+
+          markOnce();
+        },
+      );
+    });
+
+    return () => {
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
+  }, [searchUserId, role, chequeSearchActivated]);
+
   const globalSearchResults = useMemo(() => {
     const searchValue = String(globalSearch || "").trim();
 
@@ -3034,7 +3227,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
       return [];
     }
 
-    const results: GlobalSearchResult[] = GLOBAL_SEARCH_SOURCES.flatMap(
+    const keywordResults: GlobalSearchResult[] = GLOBAL_SEARCH_SOURCES.flatMap(
       (source) =>
         globalSearchData[source.key]
           .filter((record) => recordMatchesGlobalSearch(record, searchValue))
@@ -3046,6 +3239,30 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             primaryNumber: getPrimarySearchNumber(source.key, record),
           })),
     );
+
+    const chequeResults: GlobalSearchResult[] = CHEQUE_SEARCH_SOURCES.flatMap(
+      (source) =>
+        globalSearchData[source.key].flatMap((record) => {
+          const matchedChequeNumber = getMatchingChequeNumber(
+            record,
+            searchValue,
+          );
+
+          return matchedChequeNumber
+            ? [
+                {
+                  kind: source.key,
+                  label: source.label,
+                  route: source.route,
+                  record,
+                  primaryNumber: matchedChequeNumber,
+                },
+              ]
+            : [];
+        }),
+    );
+
+    const results = [...keywordResults, ...chequeResults];
 
     return results
       .sort((a, b) => {
@@ -3379,14 +3596,18 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             <input
               type="text"
               value={globalSearch}
-              onFocus={() => setGlobalSearchOpen(true)}
+              onFocus={() => {
+                setGlobalSearchOpen(true);
+                setChequeSearchActivated(true);
+              }}
               onChange={(event) => {
                 setGlobalSearch(event.target.value);
                 setGlobalSearchOpen(true);
+                setChequeSearchActivated(true);
               }}
-              placeholder="Search any keyword in Estimate, PO, or Invoice records"
+              placeholder="Search any keyword in Estimate, PO, or Invoice records, or a cheque number"
               className="h-10 w-full rounded-xl border border-border bg-background pl-9 pr-10 text-sm outline-none transition placeholder:text-muted-foreground focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
-              aria-label="Search all Estimate, PO, and Invoice record data"
+              aria-label="Search all Estimate, PO, and Invoice record data, or any cheque number"
             />
 
             {globalSearch && (
@@ -3411,7 +3632,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                       Global Search
                     </p>
                     <p className="mt-0.5 text-sm font-medium text-foreground">
-                      {globalSearchLoading
+                      {globalSearchLoading || chequeSearchLoading
                         ? "Loading records..."
                         : `${globalSearchResults.length} result${
                             globalSearchResults.length === 1 ? "" : "s"
@@ -3424,7 +3645,9 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                   </span>
                 </div>
 
-                {!globalSearchLoading && globalSearchResults.length === 0 ? (
+                {!globalSearchLoading &&
+                !chequeSearchLoading &&
+                globalSearchResults.length === 0 ? (
                   <div className="rounded-xl bg-secondary/50 px-4 py-8 text-center">
                     <Search className="mx-auto h-5 w-5 text-muted-foreground" />
                     <p className="mt-2 text-sm font-semibold text-foreground">
@@ -3432,8 +3655,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                     </p>
                     <p className="mt-1 text-xs text-muted-foreground">
                       Search any saved value such as number, client, vendor,
-                      subject, company, status, description, item, amount, or
-                      reference.
+                      subject, company, status, description, item, amount,
+                      reference, or cheque number.
                     </p>
                   </div>
                 ) : (
@@ -3494,6 +3717,17 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                                     </span>{" "}
                                     <span className="font-semibold text-foreground">
                                       {details.invoiceNo}
+                                    </span>
+                                  </div>
+                                )}
+
+                                {details.chequeNumbers && (
+                                  <div className="min-w-0">
+                                    <span className="text-muted-foreground">
+                                      Cheque No:
+                                    </span>{" "}
+                                    <span className="break-all font-semibold text-foreground">
+                                      {details.chequeNumbers}
                                     </span>
                                   </div>
                                 )}

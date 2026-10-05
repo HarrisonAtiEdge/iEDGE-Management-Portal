@@ -1079,6 +1079,7 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   onSnapshot,
   orderBy,
   query,
@@ -1089,6 +1090,7 @@ import {
 import { ArrowLeft, Plus, Save, Trash2 } from "lucide-react";
 
 import { db } from "@/lib/firebase";
+import { getPurchaseOrderEditLockReason } from "@/lib/purchaseOrderRules";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1980,10 +1982,33 @@ export default function CreatePOPage() {
       setSavingPO(true);
 
       if (editingPOId) {
-        await updateDoc(
-          doc(db, "Panels", PANEL_ID, "PO", editingPOId),
-          payload,
-        );
+        const poRef = doc(db, "Panels", PANEL_ID, "PO", editingPOId);
+
+        // Re-check against the latest saved PO: it may have been approved,
+        // paid or deleted since this edit was opened.
+        const latestPOSnap = await getDoc(poRef);
+
+        if (!latestPOSnap.exists()) {
+          toast({
+            title: "Update not saved",
+            description: "This Purchase Order no longer exists.",
+            variant: "destructive",
+          });
+          return;
+        }
+
+        const lockReason = getPurchaseOrderEditLockReason(latestPOSnap.data());
+
+        if (lockReason) {
+          toast({
+            title: "Update not saved",
+            description: lockReason,
+            variant: "destructive",
+          });
+          return;
+        }
+
+        await updateDoc(poRef, payload);
         toast({
           title: "PO updated",
           description: "Purchase order updated successfully.",
