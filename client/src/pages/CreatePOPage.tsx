@@ -1090,7 +1090,11 @@ import {
 import { ArrowLeft, Plus, Save, Trash2 } from "lucide-react";
 
 import { db } from "@/lib/firebase";
-import { getPurchaseOrderEditLockReason } from "@/lib/purchaseOrderRules";
+import { useAuth } from "@/contexts/AuthContext";
+import {
+  getPurchaseOrderEditLockReason,
+  isPurchaseOrderAdminRole,
+} from "@/lib/purchaseOrderRules";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -1558,6 +1562,7 @@ function buildPOItemsFromBudgetRequest(source: any): EstimateLineItem[] {
 
 export default function CreatePOPage() {
   const { toast } = useToast();
+  const { userProfile } = useAuth();
   const [, setLocation] = useLocation();
 
   const [suppliers, setSuppliers] = useState<Supplier[]>([]);
@@ -1982,6 +1987,15 @@ export default function CreatePOPage() {
       setSavingPO(true);
 
       if (editingPOId) {
+        if (isPurchaseOrderAdminRole(userProfile?.role)) {
+          toast({
+            title: "Update not saved",
+            description: "Admin users cannot edit Purchase Orders.",
+            variant: "destructive",
+          });
+          return;
+        }
+
         const poRef = doc(db, "Panels", PANEL_ID, "PO", editingPOId);
 
         // Re-check against the latest saved PO: it may have been approved,
@@ -2340,3 +2354,4 @@ export default function CreatePOPage() {
     </div>
   );
 }
+ 

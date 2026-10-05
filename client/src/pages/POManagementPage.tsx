@@ -1686,17 +1686,16 @@ export default function POManagementPage() {
     navigate(CREATE_PO_ROUTE);
   };
 
-  // A PO is editable by its creator or an Admin until it is approved.
+  // Any non-Admin user can edit a PO they can see, until it is approved.
+  // Admins manage POs through Delete instead.
   const canEditPO = (po: PurchaseOrder) =>
-    (isAdminUser || isPurchaseOrderOwnedByUser(po, effectiveUser)) &&
-    !getPurchaseOrderEditLockReason(po);
+    !isAdminUser && !getPurchaseOrderEditLockReason(po);
 
   const handleEditPO = (po: PurchaseOrder) => {
-    if (!isAdminUser && !isPurchaseOrderOwnedByUser(po, effectiveUser)) {
+    if (isAdminUser) {
       toast({
         title: "Edit not allowed",
-        description:
-          "Only the person who created this Purchase Order or an Admin can edit it.",
+        description: "Admin users cannot edit Purchase Orders.",
         variant: "destructive",
       });
       return;
@@ -2812,8 +2811,8 @@ export default function POManagementPage() {
                   {deletingPO?.supplierName
                     ? ` for ${deletingPO.supplierName}`
                     : ""}{" "}
-                  ({formatCurrency(safeNumber(deletingPO?.totalAmount))}) will
-                  be permanently deleted. This cannot be undone.
+                  ({formatCurrency(safeNumber(deletingPO?.totalAmount))}) will be
+                  permanently deleted. This cannot be undone.
                 </p>
 
                 {deletingPO && hasPurchaseOrderPaymentReleased(deletingPO) && (
@@ -2836,9 +2835,7 @@ export default function POManagementPage() {
           </AlertDialogHeader>
 
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteLoading}>
-              Cancel
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteLoading}>Cancel</AlertDialogCancel>
             <Button
               type="button"
               variant="destructive"
