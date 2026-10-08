@@ -2,8 +2,6 @@ import {
   addDoc,
   collection,
   getDocs,
-  orderBy,
-  query,
   serverTimestamp,
   updateDoc,
   doc,
@@ -28,42 +26,52 @@ export interface CreatePaymentAccountInput {
   isActive?: boolean;
 }
 
-export async function fetchPaymentAccounts(): Promise<PaymentAccount[]> {
-  const q = query(
-    collection(db, ...COLLECTION_PATH),
-    orderBy("accountName", "asc")
+export const paymentAccountsCollection = () =>
+  collection(db, ...COLLECTION_PATH);
+
+export function sortPaymentAccounts(accounts: PaymentAccount[]) {
+  return [...accounts].sort((a, b) =>
+    String(a.accountName || a.bankName || "").localeCompare(
+      String(b.accountName || b.bankName || ""),
+    ),
   );
+}
 
-  const snap = await getDocs(q);
+// Sorted in the browser: a Firestore orderBy("accountName") would silently
+// leave out any account document that has no accountName field.
+export async function fetchPaymentAccounts(): Promise<PaymentAccount[]> {
+  const snap = await getDocs(paymentAccountsCollection());
 
-  return snap.docs.map((d) => {
-    const data: any = d.data();
+  return sortPaymentAccounts(
+    snap.docs.map((d) => mapPaymentAccount(d.id, d.data())),
+  );
+}
 
-    return {
-      id: d.id,
-      accountName: data.accountName || "",
-      accountNumber: data.accountNumber || "",
-      bankName: data.bankName || "",
-      iban: data.iban || "",
-      branchName: data.branchName || "",
-      branchCode: data.branchCode || "",
-      currency: data.currency || "PKR",
-      balance:
-        typeof data.currentBalance === "number"
-          ? data.currentBalance
-          : typeof data.openingBalance === "number"
-          ? data.openingBalance
-          : 0,
-      openingBalance:
-        typeof data.openingBalance === "number" ? data.openingBalance : 0,
-      currentBalance:
-        typeof data.currentBalance === "number" ? data.currentBalance : 0,
-      notes: data.notes || "",
-      isActive: data.isActive !== false,
-      createdAt: data.createdAt || null,
-      updatedAt: data.updatedAt || null,
-    } as PaymentAccount;
-  });
+export function mapPaymentAccount(id: string, data: any): PaymentAccount {
+  return {
+    id,
+    accountName: data.accountName || "",
+    accountNumber: data.accountNumber || "",
+    bankName: data.bankName || "",
+    iban: data.iban || "",
+    branchName: data.branchName || "",
+    branchCode: data.branchCode || "",
+    currency: data.currency || "PKR",
+    balance:
+      typeof data.currentBalance === "number"
+        ? data.currentBalance
+        : typeof data.openingBalance === "number"
+        ? data.openingBalance
+        : 0,
+    openingBalance:
+      typeof data.openingBalance === "number" ? data.openingBalance : 0,
+    currentBalance:
+      typeof data.currentBalance === "number" ? data.currentBalance : 0,
+    notes: data.notes || "",
+    isActive: data.isActive !== false,
+    createdAt: data.createdAt || null,
+    updatedAt: data.updatedAt || null,
+  } as PaymentAccount;
 }
 
 export async function createPaymentAccount(input: CreatePaymentAccountInput) {

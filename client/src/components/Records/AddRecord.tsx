@@ -1677,9 +1677,15 @@ import {
   addDoc,
   collection,
   getDocs,
+  onSnapshot,
   serverTimestamp,
   Timestamp,
 } from "firebase/firestore";
+import {
+  mapPaymentAccount,
+  paymentAccountsCollection,
+  sortPaymentAccounts,
+} from "@/lib/payments/paymentAccounts";
 import { db } from "@/lib/firebase";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
@@ -1709,20 +1715,9 @@ import {
   normalizeChequeNumber,
 } from "@/lib/chequeNumbers";
 import { useLocation } from "wouter";
+import { Plus } from "lucide-react";
 
 type AccountType = "cheque" | "online";
-
-type FirestoreAccountData = {
-  accountTitle?: string;
-  accountNo?: string;
-  bank?: string;
-  branch?: string;
-  city?: string;
-  platform?: string;
-  routingNumber?: string;
-  isActive?: boolean;
-  createdBy?: string;
-};
 
 type AccountOption = {
   id: string;
@@ -1735,10 +1730,6 @@ type AccountOption = {
   city?: string;
   platform?: string;
   routingNumber?: string;
-};
-
-type RawAccountOption = AccountOption & {
-  isActive?: boolean;
 };
 
 type RecordItem = {
@@ -1818,86 +1809,53 @@ export default function Record() {
   useEffect(() => {
     let isMounted = true;
 
-    async function fetchAccounts() {
-      try {
-        setAccountsLoading(true);
+    // Same source as the Account Dashboard: the Payment Accounts. The older
+    // chequeAccounts/onlineAccounts lists held stale copies of these accounts
+    // and are not read. Watched live, so new or deactivated accounts show up
+    // without reloading the page.
+    const unsubscribe = onSnapshot(
+      paymentAccountsCollection(),
+      (snapshot) => {
+        if (!isMounted) return;
 
-        const [chequeSnapshot, onlineSnapshot] = await Promise.all([
-          getDocs(collection(db, "chequeAccounts")),
-          getDocs(collection(db, "onlineAccounts")),
-        ]);
-
-        const chequeAccountsRaw: RawAccountOption[] = chequeSnapshot.docs.map(
-          (doc) => {
-            const data = doc.data() as FirestoreAccountData;
-
-            return {
-              id: doc.id,
-              key: `cheque-${doc.id}`,
-              type: "cheque",
-              accountTitle: data.accountTitle || "Untitled Account",
-              accountNo: data.accountNo || "",
-              bank: data.bank || "",
-              branch: data.branch || "",
-              city: data.city || "",
-              isActive: data.isActive,
-            };
-          },
-        );
-
-        const onlineAccountsRaw: RawAccountOption[] = onlineSnapshot.docs.map(
-          (doc) => {
-            const data = doc.data() as FirestoreAccountData;
-
-            return {
-              id: doc.id,
-              key: `online-${doc.id}`,
-              type: "online",
-              accountTitle: data.accountTitle || "Untitled Account",
-              accountNo: data.accountNo || "",
-              bank: data.bank || "",
-              platform: data.platform || "",
-              routingNumber: data.routingNumber || "",
-              isActive: data.isActive,
-            };
-          },
-        );
-
-        const activeChequeAccounts: AccountOption[] = chequeAccountsRaw
+        const activeAccounts: AccountOption[] = sortPaymentAccounts(
+          snapshot.docs.map((accountDoc) =>
+            mapPaymentAccount(accountDoc.id, accountDoc.data()),
+          ),
+        )
           .filter((account) => account.isActive !== false)
-          .map(({ isActive, ...account }) => account);
+          // Payment accounts are bank accounts, so a cheque is drawn on them.
+          .map((account) => ({
+            id: account.id,
+            key: account.id,
+            type: "cheque",
+            accountTitle:
+              account.accountName || account.bankName || "Untitled Account",
+            accountNo: account.accountNumber || "",
+            bank: account.bankName || "",
+            branch: account.branchName || "",
+          }));
 
-        const activeOnlineAccounts: AccountOption[] = onlineAccountsRaw
-          .filter((account) => account.isActive !== false)
-          .map(({ isActive, ...account }) => account);
-
-        const mergedAccounts = [
-          ...activeChequeAccounts,
-          ...activeOnlineAccounts,
-        ].sort((a, b) => a.accountTitle.localeCompare(b.accountTitle));
-
-        if (isMounted) {
-          setAccounts(mergedAccounts);
-        }
-      } catch (error) {
+        setAccounts(activeAccounts);
+        setAccountsLoading(false);
+      },
+      (error) => {
         console.error("Failed to fetch accounts:", error);
 
+        if (!isMounted) return;
+
+        setAccountsLoading(false);
         toast({
           title: "Error",
           description: getErrorMessage(error) || "Failed to fetch accounts",
           variant: "destructive",
         });
-      } finally {
-        if (isMounted) {
-          setAccountsLoading(false);
-        }
-      }
-    }
-
-    fetchAccounts();
+      },
+    );
 
     return () => {
       isMounted = false;
+      unsubscribe();
     };
   }, [toast]);
 
@@ -2191,6 +2149,8 @@ export default function Record() {
         chequeDate: selectedDate,
 
         accountId: selectedAccount.id,
+        // Lets the Account Dashboard deduct this cheque from the account.
+        accountSource: "paymentAccounts",
         accountType: selectedAccount.type,
         accountTitle: selectedAccount.accountTitle,
         accountNo: selectedAccount.accountNo,
@@ -2314,9 +2274,9 @@ export default function Record() {
                   <SelectContent>
                     {accounts.map((account) => (
                       <SelectItem key={account.key} value={account.key}>
-                        {account.accountTitle} - {account.bank} -{" "}
-                        {account.accountNo} (
-                        {account.type === "cheque" ? "Cheque" : "Online"})
+                        {[account.accountTitle, account.bank, account.accountNo]
+                          .filter(Boolean)
+                          .join(" - ")}
                       </SelectItem>
                     ))}
                   </SelectContent>
@@ -2424,17 +2384,7 @@ export default function Record() {
 
         <Card>
           <CardHeader>
-            <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <CardTitle>Record Items</CardTitle>
-
-              <Button
-                type="button"
-                onClick={handleAddItem}
-                data-testid="button-add-item"
-              >
-                Add New Item
-              </Button>
-            </div>
+            <CardTitle>Record Items</CardTitle>
           </CardHeader>
 
           <CardContent className="space-y-4">
@@ -2539,6 +2489,17 @@ export default function Record() {
                 </div>
               </div>
             ))}
+
+            <Button
+              type="button"
+              variant="outline"
+              className="w-full border-dashed"
+              onClick={handleAddItem}
+              data-testid="button-add-item"
+            >
+              <Plus className="mr-2 h-4 w-4" />
+              Add New Item
+            </Button>
           </CardContent>
         </Card>
 

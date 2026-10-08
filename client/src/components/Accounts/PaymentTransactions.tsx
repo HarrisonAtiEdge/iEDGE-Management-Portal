@@ -3445,12 +3445,17 @@ import {
   collection,
   doc,
   getDocs,
+  onSnapshot,
   runTransaction,
   serverTimestamp,
 } from "firebase/firestore";
 import { getAuth } from "firebase/auth";
 import { db } from "@/lib/firebase";
-import { fetchPaymentAccounts } from "@/lib/payments/paymentAccounts";
+import {
+  mapPaymentAccount,
+  paymentAccountsCollection,
+  sortPaymentAccounts,
+} from "@/lib/payments/paymentAccounts";
 import type { PaymentAccount } from "@/lib/payments/types";
 
 import * as XLSX from "xlsx";
@@ -3527,6 +3532,17 @@ const getBalanceInfo = (data: Record<string, unknown>): BalanceInfo | null => {
   return null;
 };
 
+// "Name · Bank · Account No" so similarly named accounts can be told apart.
+const getAccountOptionLabel = (account: PaymentAccount) =>
+  [
+    account.accountName || account.bankName || "Unnamed Account",
+    account.accountName ? account.bankName : "",
+    account.accountNumber,
+  ]
+    .map((value) => String(value || "").trim())
+    .filter(Boolean)
+    .join(" · ");
+
 const getAccountBalance = (account?: PaymentAccount) => {
   if (!account) return null;
 
@@ -3583,6 +3599,8 @@ type DateRange = "all" | "today" | "thisMonth" | "lastMonth";
 export default function PaymentTransactions() {
   const [payments, setPayments] = useState<Payment[]>([]);
   const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
+  const [accountsLoaded, setAccountsLoaded] = useState(false);
+  const [accountsError, setAccountsError] = useState("");
   const [selectedAccount, setSelectedAccount] = useState("all");
 
   const [clientFilter, setClientFilter] = useState("");
@@ -3617,18 +3635,55 @@ export default function PaymentTransactions() {
     fetchAllData();
   }, []);
 
+  // Accounts are watched live, so the From/To dropdowns and their balances
+  // always reflect the latest accounts in the database (new, renamed,
+  // deactivated, or balance changed by another user's transfer).
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      paymentAccountsCollection(),
+      (snapshot) => {
+        setAccounts(
+          sortPaymentAccounts(
+            snapshot.docs.map((accountDoc) =>
+              mapPaymentAccount(accountDoc.id, accountDoc.data()),
+            ),
+          ).filter((account) => account.isActive !== false),
+        );
+        setAccountsError("");
+        setAccountsLoaded(true);
+      },
+      (err) => {
+        console.error("Failed to load payment accounts:", err);
+        setAccountsError(
+          "Unable to load accounts from the database. Please refresh and try again.",
+        );
+        setAccountsLoaded(true);
+      },
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  // Clear a selection whose account was deactivated or deleted meanwhile.
+  useEffect(() => {
+    if (!accountsLoaded) return;
+
+    const accountIds = new Set(accounts.map((account) => account.id));
+
+    if (fromAccountId && !accountIds.has(fromAccountId)) setFromAccountId("");
+    if (toAccountId && !accountIds.has(toAccountId)) setToAccountId("");
+  }, [accounts, accountsLoaded, fromAccountId, toAccountId]);
+
   const fetchAllData = async () => {
     try {
       setLoading(true);
       setError("");
 
-      const [paymentSnap, invoiceSnap, transferSnap, accountRows] =
-        await Promise.all([
-          getDocs(collection(db, "Panels", "IEDGE-SYSTEM", "payments")),
-          getDocs(collection(db, "Panels", "IEDGE-SYSTEM", "estimateInvoices")),
-          getDocs(collection(db, "Panels", "IEDGE-SYSTEM", "accountTransfers")),
-          fetchPaymentAccounts(),
-        ]);
+      const [paymentSnap, invoiceSnap, transferSnap] = await Promise.all([
+        getDocs(collection(db, "Panels", "IEDGE-SYSTEM", "payments")),
+        getDocs(collection(db, "Panels", "IEDGE-SYSTEM", "estimateInvoices")),
+        getDocs(collection(db, "Panels", "IEDGE-SYSTEM", "accountTransfers")),
+      ]);
 
       const invoiceMap: Record<string, any> = {};
 
@@ -3699,7 +3754,6 @@ export default function PaymentTransactions() {
 
       setPayments(data);
       setTransfers(transferRows);
-      setAccounts(accountRows.filter((account) => account.isActive !== false));
     } catch (err) {
       console.error(err);
       setError("Unable to load payment transactions. Please try again.");
@@ -4374,6 +4428,12 @@ export default function PaymentTransactions() {
             </div>
 
             <form onSubmit={handleAccountTransfer} className="p-6">
+              {accountsError && (
+                <div className="mb-5 rounded-2xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm font-medium text-rose-700">
+                  {accountsError}
+                </div>
+              )}
+
               <div className="grid gap-5 lg:grid-cols-2">
                 <div>
                   <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
@@ -4392,14 +4452,28 @@ export default function PaymentTransactions() {
                     }}
                   >
                     <SelectTrigger className="h-12 rounded-2xl border-slate-200 bg-slate-50">
-                      <SelectValue placeholder="Select source account" />
+                      <SelectValue
+                        placeholder={
+                          accountsLoaded
+                            ? "Select source account"
+                            : "Loading accounts..."
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      {accounts.map((account) => (
-                        <SelectItem key={account.id} value={account.id}>
-                          {accountLabelMap[account.id] || "Unnamed Account"}
+                      {accounts.length === 0 ? (
+                        <SelectItem value="__no_accounts__" disabled>
+                          {accountsLoaded
+                            ? "No active accounts found"
+                            : "Loading accounts..."}
                         </SelectItem>
-                      ))}
+                      ) : (
+                        accounts.map((account) => (
+                          <SelectItem key={account.id} value={account.id}>
+                            {getAccountOptionLabel(account)}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
 
@@ -4428,18 +4502,32 @@ export default function PaymentTransactions() {
                     }}
                   >
                     <SelectTrigger className="h-12 rounded-2xl border-slate-200 bg-slate-50">
-                      <SelectValue placeholder="Select destination account" />
+                      <SelectValue
+                        placeholder={
+                          accountsLoaded
+                            ? "Select destination account"
+                            : "Loading accounts..."
+                        }
+                      />
                     </SelectTrigger>
                     <SelectContent>
-                      {accounts.map((account) => (
-                        <SelectItem
-                          key={account.id}
-                          value={account.id}
-                          disabled={account.id === fromAccountId}
-                        >
-                          {accountLabelMap[account.id] || "Unnamed Account"}
+                      {accounts.length === 0 ? (
+                        <SelectItem value="__no_accounts__" disabled>
+                          {accountsLoaded
+                            ? "No active accounts found"
+                            : "Loading accounts..."}
                         </SelectItem>
-                      ))}
+                      ) : (
+                        accounts.map((account) => (
+                          <SelectItem
+                            key={account.id}
+                            value={account.id}
+                            disabled={account.id === fromAccountId}
+                          >
+                            {getAccountOptionLabel(account)}
+                          </SelectItem>
+                        ))
+                      )}
                     </SelectContent>
                   </Select>
 

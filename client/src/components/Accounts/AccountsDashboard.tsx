@@ -2100,14 +2100,24 @@
 
 
 import { useEffect, useMemo, useState } from "react";
-import { collection, getDocs } from "firebase/firestore";
+import {
+  collection,
+  getDocs,
+  onSnapshot,
+  type DocumentData,
+  type Query,
+  type QuerySnapshot,
+} from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
 import {
   createPaymentAccount,
-  fetchPaymentAccounts,
+  mapPaymentAccount,
+  paymentAccountsCollection,
+  sortPaymentAccounts,
   updatePaymentAccount,
 } from "@/lib/payments/paymentAccounts";
+import { calculateAccountBalances } from "@/lib/payments/accountBalances";
 import { PaymentAccount } from "@/lib/payments/types";
 import { useToast } from "@/hooks/use-toast";
 
@@ -2168,6 +2178,30 @@ const emptyForm: AccountFormData = {
 const PAGE_SIZE_OPTIONS = [5, 10, 20, 50];
 const COLORS = ["#2563eb", "#cbd5e1"];
 
+const PANEL_ID = "IEDGE-SYSTEM";
+
+// Documents whose payment releases can be charged to a payment account.
+const RELEASE_SOURCE_COLLECTIONS = [
+  "invoiceRequests",
+  "PO",
+  "claimReimbursements",
+] as const;
+
+type BalanceSourceKey =
+  | "transfers"
+  | "records"
+  | "meetingUpdates"
+  | (typeof RELEASE_SOURCE_COLLECTIONS)[number];
+
+const BALANCE_SOURCE_LABELS: Record<BalanceSourceKey, string> = {
+  transfers: "Account transfers",
+  records: "Cheque records",
+  meetingUpdates: "Sales reimbursements",
+  invoiceRequests: "Budget requests",
+  PO: "Purchase orders",
+  claimReimbursements: "Claim reimbursements",
+};
+
 export default function AccountsDashboard() {
   const { toast } = useToast();
 
@@ -2191,62 +2225,243 @@ export default function AccountsDashboard() {
   );
   const [formData, setFormData] = useState<AccountFormData>(emptyForm);
 
+  // Transactions that move money in or out of a payment account, keyed by
+  // source. A key appears once its first snapshot has arrived.
+  const [balanceSources, setBalanceSources] = useState<
+    Partial<Record<BalanceSourceKey, any[]>>
+  >({});
+  const [paymentsLoaded, setPaymentsLoaded] = useState(false);
+  const [balanceSourceErrors, setBalanceSourceErrors] = useState<
+    BalanceSourceKey[]
+  >([]);
+
+  // Everything on the dashboard is read live from Firestore, so account
+  // details and balances update as soon as a transaction is saved anywhere.
   useEffect(() => {
-    fetchData();
-    loadAccounts();
+    const panelCollection = (name: string) =>
+      collection(db, "Panels", PANEL_ID, name);
+
+    const toRows = (snapshot: QuerySnapshot<DocumentData>): any[] =>
+      snapshot.docs.map((snapshotDoc) => ({
+        id: snapshotDoc.id,
+        ...snapshotDoc.data(),
+      }));
+
+    const reportError = (label: string, error: unknown) => {
+      console.error(`Failed to load ${label}:`, error);
+      toast({
+        title: "Error",
+        description: `Failed to load ${label}`,
+        variant: "destructive",
+      });
+    };
+
+    const watchBalanceSource = (
+      key: BalanceSourceKey,
+      source: Query<DocumentData>,
+    ) =>
+      onSnapshot(
+        source,
+        (snapshot) => {
+          setBalanceSources((previous) => ({
+            ...previous,
+            [key]: toRows(snapshot),
+          }));
+          setBalanceSourceErrors((previous) =>
+            previous.filter((item) => item !== key),
+          );
+        },
+        (error) => {
+          console.error(`Failed to load ${BALANCE_SOURCE_LABELS[key]}:`, error);
+          setBalanceSources((previous) => ({ ...previous, [key]: [] }));
+          setBalanceSourceErrors((previous) =>
+            previous.includes(key) ? previous : [...previous, key],
+          );
+        },
+      );
+
+    const unsubscribers = [
+      onSnapshot(
+        paymentAccountsCollection(),
+        (snapshot) => {
+          setAccounts(
+            sortPaymentAccounts(
+              snapshot.docs.map((snapshotDoc) =>
+                mapPaymentAccount(snapshotDoc.id, snapshotDoc.data()),
+              ),
+            ),
+          );
+        },
+        (error) => reportError("payment accounts", error),
+      ),
+
+      onSnapshot(
+        panelCollection("payments"),
+        (snapshot) => {
+          const rows = toRows(snapshot);
+
+          rows.sort(
+            (a: any, b: any) =>
+              new Date(b.paymentDate).getTime() -
+              new Date(a.paymentDate).getTime(),
+          );
+
+          setPayments(rows);
+          setPaymentsLoaded(true);
+        },
+        (error) => {
+          setPaymentsLoaded(true);
+          reportError("payments", error);
+        },
+      ),
+
+      onSnapshot(
+        panelCollection("estimateInvoices"),
+        (snapshot) => setInvoices(toRows(snapshot)),
+        (error) => reportError("invoices", error),
+      ),
+
+      watchBalanceSource("transfers", panelCollection("accountTransfers")),
+      watchBalanceSource("records", panelCollection("Record")),
+      ...RELEASE_SOURCE_COLLECTIONS.map((name) =>
+        watchBalanceSource(name, panelCollection(name)),
+      ),
+    ];
+
+    return () => unsubscribers.forEach((unsubscribe) => unsubscribe());
+  }, [toast]);
+
+  // Sales reimbursements are stored in a meetingUpdates subcollection under
+  // each sales record, at both the panel path and the legacy root path. They
+  // are read per record by explicit path (as the Reimbursement Dashboard
+  // does); a collection-group query is rejected by the Firestore rules.
+  // The reads are redone whenever either sales record list changes.
+  useEffect(() => {
+    const recordIds = { panel: new Set<string>(), root: new Set<string>() };
+    const ready = { panel: false, root: false };
+    let loadVersion = 0;
+    let disposed = false;
+
+    const loadMeetingUpdates = async () => {
+      if (!ready.panel || !ready.root) return;
+
+      const version = ++loadVersion;
+
+      const readSubcollection = (path: string[]) =>
+        getDocs(collection(db, path[0], ...path.slice(1))).then((snapshot) =>
+          snapshot.docs.map((meetingDoc) => meetingDoc.data()),
+        );
+
+      const results = await Promise.allSettled([
+        ...Array.from(recordIds.panel).map((id) =>
+          readSubcollection([
+            "Panels",
+            PANEL_ID,
+            "salesRecords",
+            id,
+            "meetingUpdates",
+          ]),
+        ),
+        ...Array.from(recordIds.root).map((id) =>
+          readSubcollection(["salesRecords", id, "meetingUpdates"]),
+        ),
+      ]);
+
+      if (disposed || version !== loadVersion) return;
+
+      const reimbursementUpdates = results.flatMap((result) =>
+        result.status === "fulfilled"
+          ? result.value.filter((meeting) => meeting?.reimbursement?.enabled)
+          : [],
+      );
+      const failedReads = results.filter(
+        (result) => result.status === "rejected",
+      );
+
+      if (failedReads.length > 0) {
+        console.error(
+          `Failed to load ${failedReads.length} sales reimbursement list(s):`,
+          (failedReads[0] as PromiseRejectedResult).reason,
+        );
+      }
+
+      setBalanceSources((previous) => ({
+        ...previous,
+        meetingUpdates: reimbursementUpdates,
+      }));
+      setBalanceSourceErrors((previous) =>
+        failedReads.length > 0
+          ? previous.includes("meetingUpdates")
+            ? previous
+            : [...previous, "meetingUpdates"]
+          : previous.filter((item) => item !== "meetingUpdates"),
+      );
+    };
+
+    const watchSalesRecords = (
+      key: "panel" | "root",
+      source: Query<DocumentData>,
+    ) =>
+      onSnapshot(
+        source,
+        (snapshot) => {
+          recordIds[key] = new Set(snapshot.docs.map((record) => record.id));
+          ready[key] = true;
+          void loadMeetingUpdates();
+        },
+        (error) => {
+          // The legacy root path may not exist or be readable; the panel
+          // path is the primary source, so only its failure is reported.
+          if (key === "panel") {
+            console.error("Failed to load sales records:", error);
+            setBalanceSourceErrors((previous) =>
+              previous.includes("meetingUpdates")
+                ? previous
+                : [...previous, "meetingUpdates"],
+            );
+          }
+
+          recordIds[key] = new Set();
+          ready[key] = true;
+          void loadMeetingUpdates();
+        },
+      );
+
+    const unsubscribers = [
+      watchSalesRecords(
+        "panel",
+        collection(db, "Panels", PANEL_ID, "salesRecords"),
+      ),
+      watchSalesRecords("root", collection(db, "salesRecords")),
+    ];
+
+    return () => {
+      disposed = true;
+      unsubscribers.forEach((unsubscribe) => unsubscribe());
+    };
   }, []);
 
-  const fetchData = async () => {
-    try {
-      const paySnap = await getDocs(
-        collection(db, "Panels", "IEDGE-SYSTEM", "payments"),
-      );
+  const balancesLoading =
+    !paymentsLoaded ||
+    Object.keys(BALANCE_SOURCE_LABELS).some(
+      (key) => !balanceSources[key as BalanceSourceKey],
+    );
 
-      const invSnap = await getDocs(
-        collection(db, "Panels", "IEDGE-SYSTEM", "estimateInvoices"),
-      );
-
-      const payData: any[] = [];
-      const invData: any[] = [];
-
-      paySnap.forEach((doc) => {
-        payData.push({ id: doc.id, ...doc.data() });
-      });
-
-      invSnap.forEach((doc) => {
-        invData.push({ id: doc.id, ...doc.data() });
-      });
-
-      payData.sort(
-        (a, b) =>
-          new Date(b.paymentDate).getTime() - new Date(a.paymentDate).getTime(),
-      );
-
-      setPayments(payData);
-      setInvoices(invData);
-    } catch (error) {
-      console.error("Failed to load dashboard data:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load dashboard data",
-        variant: "destructive",
-      });
-    }
-  };
-
-  async function loadAccounts() {
-    try {
-      const rows = await fetchPaymentAccounts();
-      setAccounts(rows);
-    } catch (error) {
-      console.error("Failed to load payment accounts:", error);
-      toast({
-        title: "Error",
-        description: "Failed to load payment accounts",
-        variant: "destructive",
-      });
-    }
-  }
+  const accountBalances = useMemo(
+    () =>
+      calculateAccountBalances(accounts, {
+        payments,
+        transfers: balanceSources.transfers || [],
+        records: balanceSources.records || [],
+        releaseDocuments: [
+          ...(balanceSources.meetingUpdates || []),
+          ...RELEASE_SOURCE_COLLECTIONS.flatMap(
+            (name) => balanceSources[name] || [],
+          ),
+        ],
+      }),
+    [accounts, payments, balanceSources],
+  );
 
   function formatCurrency(value: number | string | undefined | null) {
     return `Rs ${Number(value || 0).toLocaleString()}`;
@@ -2347,7 +2562,6 @@ export default function AccountsDashboard() {
         description: "Payment account created successfully",
       });
 
-      await loadAccounts();
       resetFormAndClose();
     } catch (error: any) {
       console.error("Failed to create payment account:", error);
@@ -2414,7 +2628,6 @@ export default function AccountsDashboard() {
         description: "Account updated successfully",
       });
 
-      await loadAccounts();
       resetFormAndClose();
     } catch (error: any) {
       console.error("Failed to update account:", error);
@@ -2439,7 +2652,6 @@ export default function AccountsDashboard() {
         description: "Account updated successfully",
       });
 
-      await loadAccounts();
     } catch (error: any) {
       console.error("Failed to update account:", error);
       toast({
@@ -2848,10 +3060,23 @@ export default function AccountsDashboard() {
                     </DialogHeader>
                     <p className="mt-1 text-sm text-slate-500">
                       Review account details, status, and balance information.
+                      Current balances are calculated live from payments
+                      received, payments released, cheque records and account
+                      transfers.
                     </p>
                   </div>
 
                   <div className="px-6 py-6">
+                    {balanceSourceErrors.length > 0 && (
+                      <div className="mb-4 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm font-medium text-amber-800">
+                        Balances may be incomplete:{" "}
+                        {balanceSourceErrors
+                          .map((key) => BALANCE_SOURCE_LABELS[key])
+                          .join(", ")}{" "}
+                        could not be loaded.
+                      </div>
+                    )}
+
                     {accounts.length === 0 ? (
                       <div className="rounded-[1.5rem] border border-dashed border-slate-200 bg-white p-10 text-center text-sm text-slate-500">
                         No payment accounts found.
@@ -2927,16 +3152,87 @@ export default function AccountsDashboard() {
                                 </span>
                               </div>
 
-                              <div className="flex justify-between gap-3">
-                                <span className="text-slate-400">Current Balance</span>
-                                <span className="text-right font-bold text-slate-950">
-                                  {formatCurrency(
-                                    (account as any).currentBalance ??
-                                      (account as any).balance ??
-                                      0,
-                                  )}
-                                </span>
-                              </div>
+                              {(() => {
+                                const balance = accountBalances[account.id];
+
+                                if (balancesLoading || !balance) {
+                                  return (
+                                    <div className="flex justify-between gap-3">
+                                      <span className="text-slate-400">
+                                        Current Balance
+                                      </span>
+                                      <span className="text-right text-slate-400">
+                                        Calculating...
+                                      </span>
+                                    </div>
+                                  );
+                                }
+
+                                const transfersNet =
+                                  balance.transfersIn - balance.transfersOut;
+                                const breakdown = [
+                                  {
+                                    label: "Received",
+                                    value: balance.received,
+                                    sign: "+",
+                                  },
+                                  {
+                                    label: "Payments released",
+                                    value: balance.released,
+                                    sign: "−",
+                                  },
+                                  {
+                                    label: "Cheque records",
+                                    value: balance.chequeRecords,
+                                    sign: "−",
+                                  },
+                                  {
+                                    label: "Transfers (net)",
+                                    value: Math.abs(transfersNet),
+                                    sign: transfersNet < 0 ? "−" : "+",
+                                  },
+                                ].filter((item) => item.value > 0);
+
+                                return (
+                                  <>
+                                    {breakdown.map((item) => (
+                                      <div
+                                        key={item.label}
+                                        className="flex justify-between gap-3 text-xs"
+                                      >
+                                        <span className="text-slate-400">
+                                          {item.label}
+                                        </span>
+                                        <span
+                                          className={`text-right font-medium ${
+                                            item.sign === "+"
+                                              ? "text-emerald-700"
+                                              : "text-rose-700"
+                                          }`}
+                                        >
+                                          {item.sign} {formatCurrency(item.value)}
+                                        </span>
+                                      </div>
+                                    ))}
+
+                                    <div className="flex justify-between gap-3 border-t border-slate-200/70 pt-2">
+                                      <span className="text-slate-400">
+                                        Current Balance
+                                      </span>
+                                      <span
+                                        className={`text-right font-bold ${
+                                          balance.current < 0
+                                            ? "text-rose-700"
+                                            : "text-slate-950"
+                                        }`}
+                                      >
+                                        {balance.current < 0 ? "−" : ""}
+                                        {formatCurrency(Math.abs(balance.current))}
+                                      </span>
+                                    </div>
+                                  </>
+                                );
+                              })()}
                             </div>
 
                             {account.notes ? (

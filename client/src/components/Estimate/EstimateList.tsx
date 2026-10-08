@@ -3756,6 +3756,7 @@ export default function EstimateList({
   const [isOperationAdmin, setIsOperationAdmin] = useState(false);
 
   const [estimateFilter, setEstimateFilter] = useState(initialEstimateNo);
+  const [projectCodeFilter, setProjectCodeFilter] = useState("");
   const [clientFilter, setClientFilter] = useState("");
   const [subjectFilter, setSubjectFilter] = useState("");
   const [poNumberFilter, setPoNumberFilter] = useState("");
@@ -3766,8 +3767,6 @@ export default function EstimateList({
   const [dateRange, setDateRange] = useState<
     "all" | "today" | "7days" | "thisMonth" | "lastMonth"
   >("all");
-  const [minAmount, setMinAmount] = useState("");
-  const [maxAmount, setMaxAmount] = useState("");
 
   const [currentPage, setCurrentPage] = useState(1);
   const [itemsPerPage, setItemsPerPage] = useState(10);
@@ -4108,11 +4107,24 @@ export default function EstimateList({
     );
   };
 
+  // Same fallbacks the Estimate form uses when loading a saved project code.
+  const getProjectCode = (estimate: Estimate) => {
+    const item = estimate as any;
+
+    return String(
+      item.projectCode || item.linkedProjectCode || item.salesProjectCode || "",
+    ).trim();
+  };
+
   const filteredEstimates = useMemo(() => {
     return estimates.filter((e) => {
       const estimateMatch = (e.estimateNo ?? "")
         .toLowerCase()
         .includes(estimateFilter.toLowerCase());
+
+      const projectCodeMatch = getProjectCode(e)
+        .toLowerCase()
+        .includes(projectCodeFilter.trim().toLowerCase());
 
       const clientMatch = (e.client ?? "")
         .toLowerCase()
@@ -4143,33 +4155,27 @@ export default function EstimateList({
 
       const dateMatch = isDateInRange(e.date);
 
-      const amount = Number(e.total || 0);
-      const minOk = minAmount ? amount >= Number(minAmount) : true;
-      const maxOk = maxAmount ? amount <= Number(maxAmount) : true;
-
       return (
         estimateMatch &&
+        projectCodeMatch &&
         clientMatch &&
         subjectMatch &&
         poNumberMatch &&
         poPresenceMatch &&
         createdByMatch &&
-        dateMatch &&
-        minOk &&
-        maxOk
+        dateMatch
       );
     });
   }, [
     estimates,
     estimateFilter,
+    projectCodeFilter,
     clientFilter,
     subjectFilter,
     poNumberFilter,
     poPresenceFilter,
     createdByFilter,
     dateRange,
-    minAmount,
-    maxAmount,
     usersMap,
   ]);
 
@@ -4208,32 +4214,31 @@ export default function EstimateList({
     setCurrentPage(1);
   }, [
     estimateFilter,
+    projectCodeFilter,
     clientFilter,
     subjectFilter,
     poNumberFilter,
     poPresenceFilter,
     createdByFilter,
     dateRange,
-    minAmount,
-    maxAmount,
     itemsPerPage,
   ]);
 
   const clearFilters = () => {
     setEstimateFilter("");
+    setProjectCodeFilter("");
     setClientFilter("");
     setSubjectFilter("");
     setPoNumberFilter("");
     setPoPresenceFilter("all");
     setCreatedByFilter("");
     setDateRange("all");
-    setMinAmount("");
-    setMaxAmount("");
   };
 
   const handleExport = () => {
     const exportData = filteredEstimates.map((e) => ({
       "Estimate No": e.estimateNo || "",
+      "Project Code": getProjectCode(e),
       Client: e.client || "",
       Subject: e.subject || "",
       "poNumber": getPoNumber(e),
@@ -4359,6 +4364,16 @@ export default function EstimateList({
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 className={`${inputClass} pl-9`}
+                placeholder="Project Code"
+                value={projectCodeFilter}
+                onChange={(e) => setProjectCodeFilter(e.target.value)}
+              />
+            </div>
+
+            <div className="relative">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                className={`${inputClass} pl-9`}
                 placeholder="Client"
                 value={clientFilter}
                 onChange={(e) => setClientFilter(e.target.value)}
@@ -4423,32 +4438,19 @@ export default function EstimateList({
                 </option>
               ))}
             </select>
-
-            <input
-              type="number"
-              placeholder="Min amount"
-              className={inputClass}
-              value={minAmount}
-              onChange={(e) => setMinAmount(e.target.value)}
-            />
-
-            <input
-              type="number"
-              placeholder="Max amount"
-              className={inputClass}
-              value={maxAmount}
-              onChange={(e) => setMaxAmount(e.target.value)}
-            />
           </div>
         </div>
 
         <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-sm">
           <div className="overflow-x-auto">
-            <table className="w-full min-w-[1280px] text-sm">
+            <table className="w-full min-w-[1400px] text-sm">
               <thead>
                 <tr className="border-b border-slate-200 bg-slate-50/80 text-xs uppercase tracking-wide text-slate-500">
                   <th className="px-5 py-4 text-left font-bold">
                     Estimate No
+                  </th>
+                  <th className="px-5 py-4 text-left font-bold">
+                    Project Code
                   </th>
                   <th className="px-5 py-4 text-left font-bold">Client</th>
                   <th className="px-5 py-4 text-left font-bold">Subject</th>
@@ -4479,6 +4481,12 @@ export default function EstimateList({
                     </td>
 
                     <td className="px-5 py-4">
+                      <span className="font-semibold text-slate-700">
+                        {getProjectCode(e) || "—"}
+                      </span>
+                    </td>
+
+                    <td className="px-5 py-4">
                       <div className="font-semibold text-slate-800">
                         {e.client || "—"}
                       </div>
@@ -4491,9 +4499,13 @@ export default function EstimateList({
                     </td>
 
                     <td className="px-5 py-4">
-                      <span className="font-semibold text-slate-700">
-                        {getPoNumber(e) || "—"}
-                      </span>
+                      {getPoNumber(e) ? (
+                        <span className="font-semibold text-slate-700">
+                          {getPoNumber(e)}
+                        </span>
+                      ) : (
+                        <span className="text-slate-400">No PO</span>
+                      )}
                     </td>
 
                     <td className="px-5 py-4 text-slate-600">
@@ -4610,7 +4622,7 @@ export default function EstimateList({
 
                 {filteredEstimates.length === 0 && (
                   <tr>
-                    <td colSpan={10} className="px-5 py-16 text-center">
+                    <td colSpan={11} className="px-5 py-16 text-center">
                       <div className="mx-auto flex max-w-sm flex-col items-center">
                         <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
                           <Search className="h-6 w-6" />
