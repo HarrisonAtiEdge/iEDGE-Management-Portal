@@ -4290,6 +4290,18 @@ export function SalesRecordModal({
     };
   }, [isOpen]);
 
+  // The client name is the Select value, so it must be non-empty (Radix
+  // throws on "") and unique (Radix keys its hidden <option>s by value).
+  const clientOptions = useMemo(() => {
+    const seen = new Set<string>();
+    return clients.filter((c) => {
+      const name = String(c.name || "");
+      if (!name.trim() || seen.has(name)) return false;
+      seen.add(name);
+      return true;
+    });
+  }, [clients]);
+
   const salesDepartmentUsers = useMemo(
     () => allUsers.filter((user) => isSalesUser(user)),
     [allUsers],
@@ -4987,44 +4999,82 @@ export function SalesRecordModal({
       return null;
     }
 
+    // Meeting-only users can't edit these fields, so only check them for
+    // people who can.
+    if (!isMeetingOnlyUser) {
+      if (!String(formData.client || "").trim()) {
+        toast({
+          title: "Client required",
+          description: "Please select a client before saving the project.",
+          variant: "destructive",
+        });
+        return null;
+      }
+
+      if (!String(formData.projectName || "").trim()) {
+        toast({
+          title: "Project name required",
+          description: "Please enter the project name before saving.",
+          variant: "destructive",
+        });
+        return null;
+      }
+    }
+
+    // Firestore rejects undefined, so every name falls back to a string.
+    const actorName = userProfile.displayName || userProfile.email || "";
+
     setLoading(true);
     try {
       const projectedValueNumber = parseFloat(formData.projectedValue) || 0;
-      const filteredActionItems = formData.actionItems.filter(
-        (it) => it.trim() !== "",
+      // Older records can hold null or non-string action items.
+      const cleanItems = (items: unknown) =>
+        (Array.isArray(items) ? items : [])
+          .map((it) => String(it ?? "").trim())
+          .filter(Boolean);
+      const filteredActionItems = cleanItems(formData.actionItems);
+      const filteredFollowUpActionItems = cleanItems(
+        formData.nextFollowUpActionItems,
       );
-      const filteredFollowUpActionItems =
-        formData.nextFollowUpActionItems.filter((it) => it.trim() !== "");
+      const followUpDate =
+        formData.nextFollowUpDate instanceof Date &&
+        !Number.isNaN(formData.nextFollowUpDate.getTime())
+          ? formData.nextFollowUpDate
+          : null;
       const existingProjectCode = String(
         editingRecord?.projectCode || "",
       ).trim();
       const draftProjectCode = String(formData.projectCode || "").trim();
 
+      // The meeting-only save never writes the project code, so don't
+      // consume a sequence number for it.
       const finalProjectCode = existingProjectCode
         ? existingProjectCode
         : isNewSequenceProjectCode(draftProjectCode)
           ? draftProjectCode
-          : await getNextProjectCode();
+          : isMeetingOnlyUser
+            ? ""
+            : await getNextProjectCode();
 
       const recordData: any = {
-        client: formData.client,
-        contactPerson: formData.contactPerson,
-        contactMobile: formData.contactMobile,
+        client: String(formData.client ?? ""),
+        contactPerson: String(formData.contactPerson ?? ""),
+        contactMobile: String(formData.contactMobile ?? ""),
         projectCode: finalProjectCode,
         projectCodeCanonical: finalProjectCode,
-        projectName: formData.projectName,
-        estimateNumber: formData.estimateNumber,
+        projectName: String(formData.projectName ?? ""),
+        estimateNumber: String(formData.estimateNumber ?? ""),
         projectedValue: projectedValueNumber,
-        visit: formData.visit,
-        goal: formData.goal,
+        visit: formData.visit === true,
+        goal: String(formData.goal ?? ""),
         actionItems: filteredActionItems,
         nextFollowUp: {
-          date: formData.nextFollowUpDate || null,
+          date: followUpDate,
           actionItems: filteredFollowUpActionItems,
         },
-        projectStatus: formData.projectStatus,
-        projectCustodians: formData.projectCustodians,
-        supervisors: formData.supervisors,
+        projectStatus: formData.projectStatus || "Lead",
+        projectCustodians: normalizeStringArray(formData.projectCustodians),
+        supervisors: normalizeStringArray(formData.supervisors),
         updatedAt: serverTimestamp(),
       };
 
@@ -5046,14 +5096,13 @@ export function SalesRecordModal({
         );
 
         const existingSnap = await getDoc(recordDoc);
-        const existingData = existingSnap.exists()
-          ? (existingSnap.data() as any)
-          : {};
-        const existingAdminParticipantIds = Array.isArray(
+        if (!existingSnap.exists()) {
+          throw new Error("This project no longer exists.");
+        }
+        const existingData = existingSnap.data() as any;
+        const existingAdminParticipantIds = normalizeStringArray(
           existingData.adminParticipantIds,
-        )
-          ? existingData.adminParticipantIds
-          : [];
+        );
 
         const mergedAdminParticipantIds =
           userProfile.role !== "sales"
@@ -5066,7 +5115,7 @@ export function SalesRecordModal({
             : existingData.assignedAdminId || undefined;
         const assignedAdminName =
           userProfile.role !== "sales"
-            ? userProfile.displayName
+            ? actorName
             : existingData.assignedAdminName || undefined;
 
         const permissionContext = {
@@ -5089,7 +5138,7 @@ export function SalesRecordModal({
         const permissionSets = buildRecordPermissionSets(permissionContext);
         const followUpOnlyPayload: any = {
           nextFollowUp: {
-            date: formData.nextFollowUpDate || null,
+            date: followUpDate,
             actionItems: filteredFollowUpActionItems,
           },
           updatedAt: serverTimestamp(),
@@ -5130,15 +5179,14 @@ export function SalesRecordModal({
         );
 
         const existingSnap = await getDoc(recordDoc);
-        const existingData = existingSnap.exists()
-          ? (existingSnap.data() as any)
-          : {};
+        if (!existingSnap.exists()) {
+          throw new Error("This project no longer exists.");
+        }
+        const existingData = existingSnap.data() as any;
 
-        const existingAdminParticipantIds = Array.isArray(
+        const existingAdminParticipantIds = normalizeStringArray(
           existingData.adminParticipantIds,
-        )
-          ? existingData.adminParticipantIds
-          : [];
+        );
 
         const finalRecordData: any = {
           ...recordData,
@@ -5155,14 +5203,14 @@ export function SalesRecordModal({
           salesPersonName:
             existingData.salesPersonName ||
             editingRecord.salesPersonName ||
-            userProfile.displayName,
+            actorName,
           assignedAdminId:
             userProfile.role !== "sales"
               ? actorId
               : (existingData.assignedAdminId ?? null),
           assignedAdminName:
             userProfile.role !== "sales"
-              ? userProfile.displayName
+              ? actorName
               : (existingData.assignedAdminName ?? null),
           adminParticipantIds:
             userProfile.role !== "sales"
@@ -5194,7 +5242,7 @@ export function SalesRecordModal({
         const assignedAdminId =
           userProfile.role !== "sales" ? actorId : undefined;
         const assignedAdminName =
-          userProfile.role !== "sales" ? userProfile.displayName : undefined;
+          userProfile.role !== "sales" ? actorName : undefined;
         const adminParticipantIds =
           userProfile.role !== "sales" ? [actorId] : [];
         const permissionSets = buildRecordPermissionSets({
@@ -5209,7 +5257,7 @@ export function SalesRecordModal({
           ...recordData,
           createdAt: serverTimestamp(),
           salesPersonId,
-          salesPersonName: userProfile.displayName,
+          salesPersonName: actorName,
           assignedAdminId: assignedAdminId ?? null,
           assignedAdminName: assignedAdminName ?? null,
           adminParticipantIds,
@@ -5245,11 +5293,14 @@ export function SalesRecordModal({
       }
 
       return { savedRecordId, savedProjectCode: finalProjectCode };
-    } catch (err) {
+    } catch (err: any) {
       console.error("Error saving sales record:", err);
       toast({
         title: "Error",
-        description: "Failed to save sales record",
+        description:
+          err?.code === "permission-denied"
+            ? "You don't have permission to save this project."
+            : err?.message || "Failed to save sales record",
         variant: "destructive",
       });
       return null;
@@ -5497,6 +5548,9 @@ export function SalesRecordModal({
         <div className="grid h-[calc(96vh-88px)] gap-5 text-sm xl:grid-cols-[minmax(620px,1.15fr)_minmax(540px,1fr)]">
           <div className="min-w-0 rounded-lg border bg-background p-4 overflow-y-auto">
             <form
+              // Meeting-only users can't edit the locked "required" fields, so
+              // browser validation would block their follow-up saves.
+              noValidate={isMeetingOnlyUser}
               onSubmit={(e) => {
                 e.preventDefault();
                 handleSave();
@@ -5549,7 +5603,7 @@ export function SalesRecordModal({
                             <SelectValue placeholder="Select Client" />
                           </SelectTrigger>
                           <SelectContent>
-                            {clients.map((c) => (
+                            {clientOptions.map((c) => (
                               <SelectItem key={c.id} value={c.name}>
                                 {c.name}
                               </SelectItem>

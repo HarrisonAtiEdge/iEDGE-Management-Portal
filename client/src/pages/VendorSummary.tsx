@@ -2162,15 +2162,13 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import {
-  Building2,
   FileText,
   HandCoins,
   Loader2,
+  ScrollText,
   Printer,
   Search,
-  SlidersHorizontal,
   Download,
-  Users,
   Wallet,
 } from "lucide-react";
 import { useFirestoreQuery } from "@/hooks/useFirestore";
@@ -2196,6 +2194,11 @@ import {
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import PaymentReleaseModal from "@/components/PaymentReleaseModal";
+import VendorAccountStatement, {
+  type VendorStatement,
+  type VendorStatementBill,
+  type VendorStatementPayment,
+} from "@/components/VendorAccountStatement";
 import { fetchPaymentAccounts } from "@/lib/payments/paymentAccounts";
 import type { PaymentAccount } from "@/lib/payments/types";
 import { useToast } from "@/hooks/use-toast";
@@ -2756,28 +2759,14 @@ function getPaymentStatus(
   return "Unpaid";
 }
 
-function getStatusBadgeClass(status: string) {
+function getStatusDotClass(status: string) {
   const normalized = normalizeText(status);
 
-  if (normalized === "paid") {
-    return "border-emerald-200 bg-emerald-50 text-emerald-700";
-  }
+  if (normalized === "paid") return "bg-emerald-500";
+  if (normalized === "partially paid") return "bg-blue-500";
+  if (normalized === "pending") return "bg-amber-500";
 
-  if (normalized === "partially paid") {
-    return "border-blue-200 bg-blue-50 text-blue-700";
-  }
-
-  if (normalized === "pending") {
-    return "border-amber-200 bg-amber-50 text-amber-700";
-  }
-
-  return "border-slate-200 bg-slate-50 text-slate-600";
-}
-
-function getTypeBadgeClass(type: RequestType) {
-  return type === "Project"
-    ? "border-indigo-200 bg-indigo-50 text-indigo-700"
-    : "border-slate-200 bg-slate-50 text-slate-700";
+  return "bg-slate-300";
 }
 
 function getVendorMeta(invoice: any) {
@@ -3301,6 +3290,387 @@ function buildVendorTransactions(
     });
 }
 
+// ---------------------------------------------------------------------------
+// Vendor account statement
+// ---------------------------------------------------------------------------
+
+const STATEMENT_PAYMENT_METHOD_LABELS: Record<string, string> = {
+  cash: "Cash",
+  cheque: "Cheque",
+  bank_transfer: "Bank Transfer",
+  wire: "Online Transfer",
+  online: "Online Transfer",
+};
+
+function getStatementPaymentMethod(value: any) {
+  const key = normalizeText(value).replace(/\s+/g, "_");
+  return STATEMENT_PAYMENT_METHOD_LABELS[key] || getFirstTextValue([value]);
+}
+
+function getReleaseAccountName(entry: any) {
+  const account = entry?.selectedAccount || {};
+  const name = getFirstTextValue([
+    entry?.selectedAccountName,
+    account?.accountName,
+    account?.accountTitle,
+  ]);
+  const bank = getFirstTextValue([account?.bankName, account?.bank]);
+
+  if (!name && normalizeText(entry?.paymentMethod) === "cash") return "Cash";
+
+  return [name, bank && bank !== name ? bank : ""].filter(Boolean).join(" · ");
+}
+
+function getReleaseReference(entry: any) {
+  const cheques = (
+    Array.isArray(entry?.chequeNumbers) ? entry.chequeNumbers : []
+  )
+    .concat(entry?.chequeNumber)
+    .map((value: any) => String(value || "").trim())
+    .filter(Boolean);
+
+  return Array.from(
+    new Set([
+      ...cheques.map((cheque: string) => `Cheque ${cheque}`),
+      getFirstTextValue([entry?.transactionReference]),
+    ]),
+  )
+    .filter(Boolean)
+    .join(" · ");
+}
+
+function getProjectCodeValue(source: any) {
+  return getFirstTextValue([
+    source?.projectCode,
+    source?.project_code,
+    source?.linkedProjectCode,
+  ]);
+}
+
+// The request amount this vendor's share is measured against; mirrors the
+// totalBaseAmount used by buildVendorTransactions.
+function getRequestBaseAmount(invoice: any) {
+  const requestTotal = getTotalRequestAmount(invoice);
+  if (requestTotal > 0) return requestTotal;
+
+  const items = getSourceItems(invoice);
+  const hasItemLevelVendors = items.some((item: any) =>
+    Boolean(getItemVendorName(item)),
+  );
+
+  return items
+    .filter((item: any) =>
+      hasItemLevelVendors
+        ? Boolean(getItemVendorName(item))
+        : Boolean(getInvoiceVendorName(invoice)),
+    )
+    .reduce((sum: number, item: any) => sum + getItemAmount(item), 0);
+}
+
+type StatementPaymentDraft = Omit<
+  VendorStatementPayment,
+  | "billKey"
+  | "sourceLabel"
+  | "reference"
+  | "projectName"
+  | "projectCode"
+  | "pendingAfter"
+>;
+
+// Builds one vendor's statement from the same transactions the Vendor Summary
+// already uses (so the supplier matching and PO/Budget Request de-duplication
+// are identical), then expands each bill into its individual payments from the
+// payment release history saved on the PO, Budget Request or Record.
+function buildVendorStatement({
+  supplier,
+  vendorName,
+  openingBalance,
+  vendorTransactions,
+  invoices,
+  purchaseOrders,
+  records,
+}: {
+  supplier?: FirestoreSupplierData;
+  vendorName: string;
+  openingBalance: number;
+  vendorTransactions: VendorTransaction[];
+  invoices: any[];
+  purchaseOrders: PurchaseOrder[];
+  records: FirestoreRecordData[];
+}): VendorStatement {
+  const vendorKey = normalizeVendorKey(vendorName);
+  const supplierId = String(supplier?.id || "").trim();
+
+  const invoiceLookup = new Map<string, any>();
+  invoices.forEach((invoice) => {
+    [invoice?.id, invoice?.requestId]
+      .map((value) => String(value || "").trim())
+      .filter(Boolean)
+      .forEach((key) => invoiceLookup.set(key, invoice));
+  });
+  const poLookup = new Map(purchaseOrders.map((po) => [String(po.id), po]));
+  const recordLookup = new Map(
+    records.map((record) => [String(record.id), record]),
+  );
+
+  type BillDraft = VendorStatementBill & {
+    sourceType: VendorTransaction["sourceType"];
+    sourceId: string;
+    fallbackPaymentDate: Date | null;
+    purposes: string[];
+  };
+
+  const bills = new Map<string, BillDraft>();
+
+  vendorTransactions.forEach((transaction) => {
+    const sourceId =
+      transaction.sourceType === "purchase_order"
+        ? String(transaction.sourcePOId || "")
+        : transaction.sourceType === "invoice_request"
+          ? String(transaction.sourceInvoiceId || transaction.requestId || "")
+          : String(transaction.requestId || "");
+    const key = `${transaction.sourceType || "bill"}-${sourceId || transaction.id}`;
+
+    const linkedPO =
+      transaction.sourceType === "purchase_order"
+        ? poLookup.get(sourceId)
+        : undefined;
+    const linkedInvoice = linkedPO
+      ? invoiceLookup.get(String(linkedPO.sourceInvoiceId || "").trim()) ||
+        invoiceLookup.get(String(linkedPO.sourceRequestId || "").trim())
+      : transaction.sourceType === "invoice_request"
+        ? invoiceLookup.get(sourceId)
+        : undefined;
+
+    const existing: BillDraft = bills.get(key) || {
+      key,
+      sourceType: transaction.sourceType,
+      sourceId,
+      sourceLabel:
+        transaction.sourceType === "purchase_order"
+          ? "Purchase Order"
+          : transaction.sourceType === "record"
+            ? "Record"
+            : "Budget Request",
+      reference: transaction.billNo || transaction.requestId,
+      purpose: "",
+      purposes: [],
+      projectName: transaction.projectName,
+      projectCode: getProjectCodeValue(linkedInvoice),
+      date: transaction.requestDate,
+      fallbackPaymentDate: transaction.paymentDate,
+      payable: 0,
+      paid: 0,
+      pending: 0,
+    };
+
+    existing.payable += transaction.totalRequestAmount;
+    existing.paid += transaction.paidAmount;
+    if (
+      transaction.purpose &&
+      !existing.purposes.includes(transaction.purpose)
+    ) {
+      existing.purposes.push(transaction.purpose);
+    }
+    if (
+      transaction.requestDate &&
+      (!existing.date || transaction.requestDate < existing.date)
+    ) {
+      existing.date = transaction.requestDate;
+    }
+
+    bills.set(key, existing);
+  });
+
+  const payments: VendorStatementPayment[] = [];
+
+  const statementBills = Array.from(bills.values()).map(
+    (bill): VendorStatementBill => {
+      bill.purpose = bill.purposes.slice(0, 3).join(", ") || bill.reference;
+      bill.payable = roundMoney(bill.payable);
+
+      const releaseToDraft = (
+        entry: any,
+        amount: number,
+        index: number,
+        isShare = false,
+      ): StatementPaymentDraft => ({
+        id: `${bill.key}-${entry?.id || index}`,
+        date:
+          getDateFromValue(entry?.releasedAt) ||
+          getDateFromValue(entry?.paymentDate) ||
+          bill.fallbackPaymentDate,
+        amount: roundMoney(amount),
+        purpose:
+          getFirstTextValue([entry?.transactionName, entry?.paymentNotes]) ||
+          bill.purpose,
+        accountName: getReleaseAccountName(entry),
+        paymentMethod: getStatementPaymentMethod(entry?.paymentMethod),
+        transactionReference: getReleaseReference(entry),
+        isShare,
+      });
+
+      let drafts: StatementPaymentDraft[] = [];
+
+      if (bill.sourceType === "purchase_order") {
+        const po = poLookup.get(bill.sourceId);
+        drafts = getPaymentReleaseHistory(po).map((entry, index) =>
+          releaseToDraft(entry, getPaymentReleaseAmount(entry), index),
+        );
+      } else if (bill.sourceType === "invoice_request") {
+        const invoice = invoiceLookup.get(bill.sourceId);
+        const baseAmount = getRequestBaseAmount(invoice);
+        const share =
+          baseAmount > 0 ? Math.min(bill.payable / baseAmount, 1) : 1;
+        const items = getSourceItems(invoice);
+
+        drafts = getPaymentReleaseHistory(invoice).flatMap((entry, index) => {
+          const amount = getPaymentReleaseAmount(entry);
+
+          // Unscoped release: it paid the whole request, so this vendor's
+          // portion is its share of the request.
+          if (normalizeText(entry?.paymentScope) !== "vendor") {
+            return share >= 0.999
+              ? [releaseToDraft(entry, amount, index)]
+              : [releaseToDraft(entry, amount * share, index, true)];
+          }
+
+          const scopedNames = [
+            entry?.paymentVendorName,
+            ...(Array.isArray(entry?.paymentVendorNames)
+              ? entry.paymentVendorNames
+              : []),
+          ]
+            .map(normalizeVendorKey)
+            .filter(Boolean);
+          const isForVendor =
+            Boolean(supplierId && entry?.paymentSupplierId === supplierId) ||
+            scopedNames.includes(vendorKey);
+
+          if (!isForVendor) return [];
+
+          // One payment for several local vendors: split by item amounts.
+          if (entry?.combinedLocalVendorPayment && scopedNames.length > 1) {
+            const coveredAmount = items
+              .filter((item: any) =>
+                scopedNames.includes(
+                  normalizeVendorKey(getItemVendorName(item)),
+                ),
+              )
+              .reduce(
+                (sum: number, item: any) => sum + getItemAmount(item),
+                0,
+              );
+            const vendorShare =
+              coveredAmount > 0
+                ? Math.min(bill.payable / coveredAmount, 1)
+                : 0;
+
+            return [releaseToDraft(entry, amount * vendorShare, index, true)];
+          }
+
+          return [releaseToDraft(entry, amount, index)];
+        });
+      } else if (bill.sourceType === "record") {
+        const record: any = recordLookup.get(bill.sourceId);
+
+        if (record) {
+          drafts = [
+            {
+              id: `${bill.key}-payment`,
+              date:
+                getDateFromValue(record?.selectedDate) ||
+                getDateFromValue(record?.createdAt) ||
+                bill.date,
+              amount: bill.payable,
+              purpose: bill.purpose,
+              accountName: [
+                getFirstTextValue([record?.accountTitle]),
+                getFirstTextValue([record?.bank, record?.platform]),
+              ]
+                .filter(Boolean)
+                .join(" · "),
+              paymentMethod:
+                getStatementPaymentMethod(record?.paymentMethod) ||
+                (record?.accountType === "online"
+                  ? "Online Transfer"
+                  : "Cheque"),
+              transactionReference: getReleaseReference(record),
+              isShare: false,
+            },
+          ];
+        }
+      }
+
+      drafts = drafts.filter((draft) => draft.amount > 0.009);
+
+      // Older documents without a payment history still report a paid total;
+      // show it as one payment so the statement matches the totals.
+      if (drafts.length === 0 && bill.paid > 0.009) {
+        drafts = [
+          {
+            id: `${bill.key}-paid`,
+            date: bill.fallbackPaymentDate,
+            amount: roundMoney(bill.paid),
+            purpose: bill.purpose,
+            accountName: "",
+            paymentMethod: "",
+            transactionReference: "",
+            isShare: false,
+          },
+        ];
+      }
+
+      bill.paid = roundMoney(
+        drafts.reduce((sum, draft) => sum + draft.amount, 0),
+      );
+      bill.pending = roundMoney(Math.max(bill.payable - bill.paid, 0));
+
+      let paidSoFar = 0;
+      [...drafts]
+        .sort((a, b) => (a.date?.getTime() || 0) - (b.date?.getTime() || 0))
+        .forEach((draft) => {
+          paidSoFar += draft.amount;
+          payments.push({
+            ...draft,
+            billKey: bill.key,
+            sourceLabel: bill.sourceLabel,
+            reference: bill.reference,
+            projectName: bill.projectName,
+            projectCode: bill.projectCode,
+            pendingAfter: roundMoney(Math.max(bill.payable - paidSoFar, 0)),
+          });
+        });
+
+      return {
+        key: bill.key,
+        sourceLabel: bill.sourceLabel,
+        reference: bill.reference,
+        purpose: bill.purpose,
+        projectName: bill.projectName,
+        projectCode: bill.projectCode,
+        date: bill.date,
+        payable: bill.payable,
+        paid: bill.paid,
+        pending: bill.pending,
+      };
+    },
+  );
+
+  return {
+    vendorName,
+    address: getFirstTextValue([
+      supplier?.address,
+      [supplier?.city, supplier?.country].filter(Boolean).join(", "),
+    ]),
+    ntn: getFirstTextValue([supplier?.ntn]),
+    paymentTerms: getFirstTextValue([supplier?.paymentTerms]),
+    openingBalance,
+    bills: statementBills,
+    payments,
+  };
+}
+
 function isWithinDatePreset(row: VendorTransaction, preset: DatePreset) {
   if (preset === "all") return true;
 
@@ -3486,6 +3856,35 @@ export default function VendorSummary() {
   function closePaymentRelease() {
     setIsPaymentModalOpen(false);
     setPaymentInvoice(null);
+  }
+
+  function isReleasable(transaction: VendorTransaction) {
+    return (
+      canReleasePayment &&
+      ["invoice_request", "purchase_order"].includes(
+        transaction.sourceType || "",
+      ) &&
+      transaction.paymentEligible !== false &&
+      transaction.remainingBalance > 0
+    );
+  }
+
+  function renderReleaseAction(transaction: VendorTransaction) {
+    if (!isReleasable(transaction)) return null;
+
+    return (
+      <Button
+        type="button"
+        size="sm"
+        variant="ghost"
+        className="h-7 gap-1 rounded-lg px-2 text-xs font-medium text-emerald-700 hover:bg-emerald-50 hover:text-emerald-800"
+        onClick={() => openPaymentRelease(transaction)}
+        title="Release Payment"
+      >
+        <HandCoins className="h-3.5 w-3.5" />
+        Release payment
+      </Button>
+    );
   }
 
   useEffect(() => {
@@ -3739,6 +4138,36 @@ export default function VendorSummary() {
     if (!selectedVendorKey) return undefined;
     return supplierLookup.get(selectedVendorKey);
   }, [selectedVendorKey, supplierLookup]);
+
+  const [statementOpen, setStatementOpen] = useState(false);
+
+  // Built only for the open statement, from all of the vendor's transactions
+  // (the page's type and cheque filters do not apply to the statement).
+  const vendorStatement = useMemo<VendorStatement | null>(() => {
+    if (!statementOpen || !selectedVendor || !selectedVendorKey) return null;
+
+    return buildVendorStatement({
+      supplier: selectedSupplier,
+      vendorName: selectedVendor.vendorName,
+      openingBalance: selectedVendor.openingBalance,
+      vendorTransactions: transactions.filter(
+        (transaction) =>
+          normalizeVendorKey(transaction.vendorName) === selectedVendorKey,
+      ),
+      invoices: invoices as any[],
+      purchaseOrders: purchaseOrders as PurchaseOrder[],
+      records,
+    });
+  }, [
+    statementOpen,
+    selectedVendor,
+    selectedVendorKey,
+    selectedSupplier,
+    transactions,
+    invoices,
+    purchaseOrders,
+    records,
+  ]);
 
   const selectedVendorPurchaseOrders = useMemo(() => {
     if (!selectedVendorKey) return [];
@@ -4614,26 +5043,6 @@ export default function VendorSummary() {
     };
   };
 
-  const dashboardStats = useMemo(() => {
-    if (!selectedVendor) {
-      return {
-        totalPaid: 0,
-        totalOpeningBalance: 0,
-        totalRemaining: 0,
-        totalOverdue: 0,
-        totalTransactions: 0,
-      };
-    }
-
-    return {
-      totalPaid: selectedVendor.paidAmount,
-      totalOpeningBalance: selectedVendor.openingBalance,
-      totalRemaining: selectedVendor.openBalance,
-      totalOverdue: selectedVendor.overduePayment,
-      totalTransactions: selectedTransactions.length,
-    };
-  }, [selectedVendor, selectedTransactions]);
-
   if (loading) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-slate-50">
@@ -4648,63 +5057,35 @@ export default function VendorSummary() {
   }
 
   return (
-    <div className="min-h-screen bg-slate-50 p-4 text-slate-900 lg:p-6">
-      <div className="mx-auto flex h-[calc(100vh-48px)]  gap-5 overflow-hidden">
-        <aside className="flex w-[320px] shrink-0 flex-col overflow-hidden rounded-[28px] border border-slate-200 bg-white shadow-sm">
-          <div className="border-b border-slate-100 p-5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                  Vendors
-                </p>
-                <h2 className="mt-1 text-xl font-bold tracking-tight text-slate-950">
-                  Payment History
-                </h2>
-              </div>
-
-              <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-emerald-50 text-emerald-700">
-                <Users className="h-5 w-5" />
-              </div>
+    <div className="min-h-screen overflow-x-hidden bg-slate-50 p-3 text-slate-900 sm:p-5">
+      {/* Below xl the vendor list stacks above the details; from xl up they sit
+          side by side and each scrolls on its own. */}
+      <div className="mx-auto flex min-w-0 flex-col gap-4 xl:h-[calc(100vh-40px)] xl:flex-row xl:gap-5 xl:overflow-hidden">
+        <aside className="flex w-full min-w-0 flex-col overflow-hidden rounded-2xl border border-slate-200 bg-white xl:w-72 xl:shrink-0">
+          <div className="border-b border-slate-100 p-4">
+            <div className="flex items-baseline justify-between">
+              <h2 className="text-sm font-semibold text-slate-900">Vendors</h2>
+              <span className="text-xs text-slate-400">
+                {filteredVendorSummaries.length}
+              </span>
             </div>
 
-            <div className="relative mt-5">
-              <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <div className="relative mt-3">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
               <input
                 value={supplierSearch}
                 onChange={(event) => setSupplierSearch(event.target.value)}
-                placeholder="Search vendor..."
-                className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 pl-11 pr-4 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-emerald-300 focus:bg-white focus:ring-4 focus:ring-emerald-50"
+                placeholder="Search vendors"
+                className="h-9 w-full rounded-lg border border-slate-200 bg-slate-50 pl-9 pr-3 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-slate-300 focus:bg-white"
               />
-            </div>
-
-            <div className="mt-4 rounded-2xl bg-slate-950 p-4 text-white">
-              <p className="text-xs text-slate-300">Total Paid</p>
-              <p className="mt-1 text-lg font-bold">
-                {formatCurrency(dashboardStats.totalPaid)}
-              </p>
-              <div className="mt-3 flex items-center justify-between text-xs text-slate-300">
-                <span>Selected vendor only</span>
-                <span>{dashboardStats.totalTransactions} transactions</span>
-              </div>
-              <div className="mt-3 border-t border-white/10 pt-3">
-                <p className="text-xs text-slate-400">Total Opening Balance</p>
-                <p className="mt-1 text-sm font-semibold text-white">
-                  {formatCurrency(dashboardStats.totalOpeningBalance)}
-                </p>
-              </div>
             </div>
           </div>
 
-          <div className="flex-1 space-y-2 overflow-y-auto p-3">
+          <div className="max-h-[320px] flex-1 overflow-y-auto p-2 xl:max-h-none">
             {filteredVendorSummaries.length === 0 ? (
-              <div className="rounded-2xl border border-dashed border-slate-200 p-6 text-center">
-                <p className="text-sm font-medium text-slate-700">
-                  No vendors found
-                </p>
-                <p className="mt-1 text-xs text-slate-400">
-                  Try changing your search or filter.
-                </p>
-              </div>
+              <p className="px-3 py-8 text-center text-sm text-slate-400">
+                No vendors found
+              </p>
             ) : (
               filteredVendorSummaries.map((vendor) => {
                 const isActive =
@@ -4713,61 +5094,46 @@ export default function VendorSummary() {
                 return (
                   <button
                     key={vendor.vendorName}
+                    type="button"
                     onClick={() => {
                       setSelectedVendorName(vendor.vendorName);
                       setActiveTab("transactions");
                     }}
-                    className={`w-full rounded-2xl border p-4 text-left transition ${
-                      isActive
-                        ? "border-emerald-200 bg-emerald-50 shadow-sm"
-                        : "border-transparent bg-white hover:border-slate-200 hover:bg-slate-50"
+                    className={`flex w-full items-center gap-3 rounded-lg px-3 py-2.5 text-left transition ${
+                      isActive ? "bg-slate-100" : "hover:bg-slate-50"
                     }`}
                   >
-                    <div className="flex items-start gap-3">
-                      <div
-                        className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl text-sm font-bold ${
-                          isActive
-                            ? "bg-emerald-600 text-white"
-                            : "bg-slate-100 text-slate-600"
-                        }`}
-                      >
-                        {getInitials(vendor.vendorName) || "V"}
-                      </div>
+                    <span
+                      className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-xs font-semibold ${
+                        isActive
+                          ? "bg-slate-900 text-white"
+                          : "bg-slate-100 text-slate-500"
+                      }`}
+                    >
+                      {getInitials(vendor.vendorName) || "V"}
+                    </span>
 
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-sm font-semibold text-slate-900">
-                          {vendor.vendorName}
-                        </p>
-                        <p className="mt-1 truncate text-xs text-slate-500">
-                          {vendor.company || "No company added"}
-                        </p>
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium text-slate-900">
+                        {vendor.vendorName}
+                      </span>
+                      {vendor.company && (
+                        <span className="block truncate text-xs text-slate-400">
+                          {vendor.company}
+                        </span>
+                      )}
+                    </span>
 
-                        <div className="mt-3 grid grid-cols-3 gap-2">
-                          <div>
-                            <p className="text-[11px] text-slate-400">
-                              Opening
-                            </p>
-                            <p className="truncate text-xs font-semibold text-slate-700">
-                              {formatCurrency(vendor.openingBalance)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[11px] text-slate-400">Paid</p>
-                            <p className="truncate text-xs font-semibold text-slate-700">
-                              {formatCurrency(vendor.paidAmount)}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="text-[11px] text-slate-400">
-                              Remaining
-                            </p>
-                            <p className="truncate text-xs font-semibold text-slate-700">
-                              {formatCurrency(vendor.openBalance)}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </div>
+                    <span
+                      className={`shrink-0 text-xs font-medium tabular-nums ${
+                        vendor.openBalance > 0.009
+                          ? "text-amber-700"
+                          : "text-slate-400"
+                      }`}
+                      title="Remaining amount"
+                    >
+                      {formatPKR(vendor.openBalance)}
+                    </span>
                   </button>
                 );
               })
@@ -4775,481 +5141,302 @@ export default function VendorSummary() {
           </div>
         </aside>
 
-        <main className="flex-1 overflow-y-auto rounded-[28px] border border-slate-200 bg-white shadow-sm">
+        <main className="min-w-0 flex-1 rounded-2xl border border-slate-200 bg-white xl:overflow-y-auto">
           {!selectedVendor ? (
-            <div className="flex h-full items-center justify-center p-10">
-              <div className="max-w-md text-center">
-                <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-3xl bg-slate-100 text-slate-500">
-                  <Wallet className="h-7 w-7" />
-                </div>
-                <h2 className="mt-5 text-xl font-bold text-slate-950">
+            <div className="flex h-full min-h-[320px] items-center justify-center p-10">
+              <div className="max-w-sm text-center">
+                <Wallet className="mx-auto h-6 w-6 text-slate-300" />
+                <h2 className="mt-3 text-base font-semibold text-slate-900">
                   No vendor payment records found
                 </h2>
-                <p className="mt-2 text-sm leading-6 text-slate-500">
-                  Only suppliers saved in Firebase will appear here. Matching
-                  transactions are loaded from Invoice Requests and Records.
+                <p className="mt-1 text-sm text-slate-500">
+                  Only suppliers saved in Firebase appear here, with their
+                  Purchase Orders, Budget Requests and Records.
                 </p>
               </div>
             </div>
           ) : (
-            <div className="p-5 lg:p-7">
-              <div className="rounded-[28px] bg-slate-950 p-6 text-white lg:p-7">
-                <div className="flex flex-col gap-6 lg:flex-row lg:items-start lg:justify-between">
-                  <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.2em] text-emerald-300">
-                      Vendor Summary
-                    </p>
-                    <h1 className="mt-3 max-w-3xl text-3xl font-bold tracking-tight lg:text-4xl">
+            <>
+              <header className="flex flex-col gap-4 border-b border-slate-100 p-4 sm:p-6 lg:flex-row lg:items-center lg:justify-between">
+                <div className="flex min-w-0 items-center gap-3">
+                  <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-full bg-slate-900 text-sm font-semibold text-white">
+                    {getInitials(selectedVendor.vendorName) || "V"}
+                  </span>
+                  <div className="min-w-0">
+                    <h1 className="break-words text-xl font-semibold tracking-tight text-slate-950">
                       {selectedVendor.vendorName}
                     </h1>
-                    <p className="mt-3 max-w-2xl text-sm leading-6 text-slate-300">
-                      Complete payment history with cheque number, project
-                      details, payment status, and remaining balance.
+                    <p className="truncate text-sm text-slate-500">
+                      {[selectedVendor.company, selectedVendor.billingAddress]
+                        .filter(Boolean)
+                        .join(" · ") || "Vendor"}
                     </p>
                   </div>
-
-                  <div className="flex flex-wrap gap-2">
-                    {canReleasePayment && (
-                      <button
-                        type="button"
-                        onClick={openVendorManualPayment}
-                        className="flex h-11 items-center gap-2 rounded-2xl bg-emerald-500 px-4 text-sm font-semibold text-white transition hover:bg-emerald-400 disabled:cursor-not-allowed disabled:opacity-50"
-                        title={
-                          payableVendorOutstanding > 0.009
-                            ? "Allocate one payment across this vendor's oldest unpaid POs"
-                            : "Click to see why this vendor currently has no payable approved POs"
-                        }
-                      >
-                        <HandCoins className="h-4 w-4" />
-                        Manual Payment (FIFO)
-                      </button>
-                    )}
-
-                    <button
-                      type="button"
-                      onClick={handleDownloadVendorSummary}
-                      className="flex h-11 items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={selectedTransactions.length === 0}
-                      title="Download filtered vendor transactions as CSV"
-                    >
-                      <Download className="h-4 w-4" />
-                      Download
-                    </button>
-
-                    <button
-                      type="button"
-                      onClick={handlePrintVendorSummary}
-                      className="flex h-11 items-center gap-2 rounded-2xl border border-white/10 bg-white/10 px-4 text-sm font-semibold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-50"
-                      disabled={selectedTransactions.length === 0}
-                      title="Print the filtered vendor statement"
-                    >
-                      <Printer className="h-4 w-4" />
-                      Print
-                    </button>
-                  </div>
                 </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button
+                    type="button"
+                    size="sm"
+                    onClick={() => setStatementOpen(true)}
+                    className="gap-1.5 rounded-lg bg-slate-900 text-white hover:bg-slate-800"
+                    data-testid="button-vendor-account-statement"
+                  >
+                    <ScrollText className="h-4 w-4" />
+                    Account Statement
+                  </Button>
+
+                  {canReleasePayment && (
+                    <Button
+                      type="button"
+                      size="sm"
+                      variant="outline"
+                      onClick={openVendorManualPayment}
+                      className="gap-1.5 rounded-lg"
+                      title={
+                        payableVendorOutstanding > 0.009
+                          ? "Allocate one payment across this vendor's oldest unpaid POs"
+                          : "Click to see why this vendor currently has no payable approved POs"
+                      }
+                    >
+                      <HandCoins className="h-4 w-4" />
+                      Manual Payment
+                    </Button>
+                  )}
+
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    onClick={handleDownloadVendorSummary}
+                    disabled={selectedTransactions.length === 0}
+                    className="h-9 w-9 rounded-lg text-slate-500"
+                    title="Download filtered transactions as CSV"
+                    aria-label="Download filtered transactions as CSV"
+                  >
+                    <Download className="h-4 w-4" />
+                  </Button>
+
+                  <Button
+                    type="button"
+                    size="icon"
+                    variant="ghost"
+                    onClick={handlePrintVendorSummary}
+                    disabled={selectedTransactions.length === 0}
+                    className="h-9 w-9 rounded-lg text-slate-500"
+                    title="Print the filtered vendor summary"
+                    aria-label="Print the filtered vendor summary"
+                  >
+                    <Printer className="h-4 w-4" />
+                  </Button>
+                </div>
+              </header>
+
+              <div className="grid grid-cols-1 divide-y divide-slate-100 border-b border-slate-100 sm:grid-cols-3 sm:divide-x sm:divide-y-0">
+                {[
+                  {
+                    label: "Opening balance",
+                    value: selectedVendor.openingBalance,
+                    tone: "text-slate-900",
+                  },
+                  {
+                    label: "Total paid",
+                    value: selectedVendor.paidAmount,
+                    tone: "text-emerald-700",
+                  },
+                  {
+                    label: "Remaining",
+                    value: selectedVendor.openBalance,
+                    tone:
+                      selectedVendor.openBalance > 0.009
+                        ? "text-amber-700"
+                        : "text-slate-900",
+                  },
+                ].map((stat) => (
+                  <div key={stat.label} className="min-w-0 px-4 py-4 sm:px-6">
+                    <p className="text-xs text-slate-500">{stat.label}</p>
+                    <p
+                      className={`mt-1 break-words text-lg font-semibold tabular-nums ${stat.tone}`}
+                    >
+                      {formatCurrency(stat.value)}
+                    </p>
+                  </div>
+                ))}
               </div>
 
-              <div className="mt-5 grid gap-5 xl:grid-cols-[1fr_340px]">
-                <section className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-                  <div className="flex items-center justify-between">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                        Vendor Details
-                      </p>
-                      <h2 className="mt-1 text-lg font-bold text-slate-950">
-                        Profile Information
-                      </h2>
-                    </div>
-
-                    <div className="flex h-11 w-11 items-center justify-center rounded-2xl bg-slate-100 text-slate-600">
-                      <Building2 className="h-5 w-5" />
-                    </div>
-                  </div>
-
-                  <div className="mt-5 grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-                    <div className="rounded-2xl bg-slate-50 p-4">
-                      <p className="text-xs font-medium text-slate-400">
-                        Company
-                      </p>
-                      <p className="mt-2 text-sm font-semibold text-slate-800">
-                        {selectedVendor.company || "-"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl bg-slate-50 p-4">
-                      <p className="text-xs font-medium text-slate-400">
-                        Billing Address
-                      </p>
-                      <p className="mt-2 line-clamp-2 text-sm font-semibold text-slate-800">
-                        {selectedVendor.billingAddress || "-"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl bg-slate-50 p-4">
-                      <p className="text-xs font-medium text-slate-400">
-                        Bill Pay ACH Info
-                      </p>
-                      <p className="mt-2 text-sm font-semibold text-slate-800">
-                        {selectedVendor.achInfo || "-"}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl bg-slate-50 p-4">
-                      <p className="text-xs font-medium text-slate-400">
-                        Opening Balance
-                      </p>
-                      <p className="mt-2 text-sm font-bold text-slate-900">
-                        {formatCurrency(selectedVendor.openingBalance)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl bg-slate-50 p-4">
-                      <p className="text-xs font-medium text-slate-400">
-                        Total Amount Paid
-                      </p>
-                      <p className="mt-2 text-sm font-bold text-emerald-700">
-                        {formatCurrency(selectedVendor.paidAmount)}
-                      </p>
-                    </div>
-                  </div>
-                </section>
-
-                <aside className="rounded-[24px] border border-slate-200 bg-white p-5 shadow-sm">
-                  <p className="text-xs font-semibold uppercase tracking-[0.18em] text-slate-400">
-                    Balance Overview
-                  </p>
-
-                  <div className="mt-5 space-y-4">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-                      <p className="text-xs font-medium text-slate-600">
-                        Opening Balance
-                      </p>
-                      <p className="mt-2 text-xl font-bold text-slate-900">
-                        {formatCurrency(selectedVendor.openingBalance)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-emerald-100 bg-emerald-50 p-4">
-                      <p className="text-xs font-medium text-emerald-700">
-                        Total Amount Paid
-                      </p>
-                      <p className="mt-2 text-xl font-bold text-emerald-900">
-                        {formatCurrency(selectedVendor.paidAmount)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-amber-100 bg-amber-50 p-4">
-                      <p className="text-xs font-medium text-amber-700">
-                        Remaining Amount
-                      </p>
-                      <p className="mt-2 text-xl font-bold text-amber-900">
-                        {formatCurrency(selectedVendor.openBalance)}
-                      </p>
-                    </div>
-                  </div>
-                </aside>
-              </div>
-
-              <div className="mt-5 rounded-[24px] border border-slate-200 bg-white shadow-sm">
-                <div className="border-b border-slate-100 p-4">
-                  <div className="flex flex-col gap-4 xl:flex-row xl:items-center xl:justify-between">
-                    <div className="flex flex-wrap gap-2">
-                      {[
-                        { key: "transactions", label: "Transaction List" },
-                        { key: "details", label: "Supplier Details" },
-                        { key: "notes", label: "Notes" },
-                      ].map((tab) => (
-                        <button
-                          key={tab.key}
-                          onClick={() =>
-                            setActiveTab(
-                              tab.key as "transactions" | "details" | "notes",
-                            )
-                          }
-                          className={`rounded-2xl px-4 py-2 text-sm font-semibold transition ${
-                            activeTab === tab.key
-                              ? "bg-slate-950 text-white shadow-sm"
-                              : "bg-slate-100 text-slate-600 hover:bg-slate-200"
-                          }`}
-                        >
-                          {tab.label}
-                        </button>
-                      ))}
-                    </div>
-
-                    {activeTab === "transactions" && (
-                      <div className="flex flex-wrap items-center gap-3">
-                        <select
-                          value={typeFilter}
-                          onChange={(event) =>
-                            setTypeFilter(event.target.value as TypeFilter)
-                          }
-                          className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                        >
-                          <option value="all">All Types</option>
-                          <option value="general">General</option>
-                          <option value="project">Project</option>
-                        </select>
-
-                        <input
-                          value={chequeNumberSearch}
-                          onChange={(event) =>
-                            setChequeNumberSearch(event.target.value)
-                          }
-                          placeholder="Search cheque no..."
-                          className="h-11 w-[190px] rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none transition placeholder:text-slate-400 focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                        />
-
-                        <select
-                          value={datePreset}
-                          onChange={(event) =>
-                            setDatePreset(event.target.value as DatePreset)
-                          }
-                          className="h-11 rounded-2xl border border-slate-200 bg-white px-4 text-sm font-medium text-slate-700 outline-none transition focus:border-emerald-300 focus:ring-4 focus:ring-emerald-50"
-                        >
-                          <option value="last12">Last 12 months</option>
-                          <option value="last30">Last 30 days</option>
-                          <option value="thisMonth">This month</option>
-                          <option value="all">All dates</option>
-                        </select>
-
-                        <button className="flex h-11 items-center gap-2 rounded-2xl bg-slate-100 px-4 text-sm font-semibold text-slate-700 transition hover:bg-slate-200">
-                          <SlidersHorizontal className="h-4 w-4" />
-                          Filter
-                        </button>
-                      </div>
-                    )}
-                  </div>
-                </div>
+              <div className="flex flex-col gap-3 border-b border-slate-100 px-4 pt-3 sm:px-6 2xl:flex-row 2xl:items-end 2xl:justify-between">
+                <nav className="flex gap-5 text-sm">
+                  {[
+                    {
+                      key: "transactions",
+                      label: "Transactions",
+                      count: selectedTransactions.length,
+                    },
+                    { key: "details", label: "Details" },
+                  ].map((tab) => (
+                    <button
+                      key={tab.key}
+                      type="button"
+                      onClick={() =>
+                        setActiveTab(tab.key as "transactions" | "details")
+                      }
+                      className={`-mb-px border-b-2 pb-3 font-medium transition ${
+                        activeTab === tab.key
+                          ? "border-slate-900 text-slate-900"
+                          : "border-transparent text-slate-500 hover:text-slate-700"
+                      }`}
+                    >
+                      {tab.label}
+                      {tab.count !== undefined && (
+                        <span className="ml-1.5 text-xs text-slate-400">
+                          {tab.count}
+                        </span>
+                      )}
+                    </button>
+                  ))}
+                </nav>
 
                 {activeTab === "transactions" && (
-                  <div className="p-4">
-                    <div className="overflow-hidden rounded-2xl border border-slate-200">
-                      <div className="overflow-x-auto">
-                        <table className="w-full min-w-[1540px] border-collapse">
-                          <thead>
-                            <tr className="bg-slate-50">
-                              <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
-                                Vendor Name
-                              </th>
-                              <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
-                                Type
-                              </th>
-                              <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
-                                Payment Purpose
-                              </th>
-                              <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
-                                Project Name
-                              </th>
-                              <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
-                                Cheque Number
-                              </th>
-                              <th className="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-slate-500">
-                                Total Amount Paid
-                              </th>
-                              <th className="px-4 py-4 text-right text-xs font-bold uppercase tracking-wide text-slate-500">
-                                Remaining Amount
-                              </th>
-                              <th className="px-4 py-4 text-left text-xs font-bold uppercase tracking-wide text-slate-500">
-                                Payment Date
-                              </th>
-                              <th className="px-4 py-4 text-center text-xs font-bold uppercase tracking-wide text-slate-500">
-                                Payment Status
-                              </th>
-                              <th className="px-4 py-4 text-center text-xs font-bold uppercase tracking-wide text-slate-500">
-                                Action
-                              </th>
-                            </tr>
-                          </thead>
+                  <div className="grid grid-cols-2 gap-2 pb-3 sm:flex sm:flex-wrap sm:items-center [&>*]:min-w-0">
+                    <select
+                      value={typeFilter}
+                      onChange={(event) =>
+                        setTypeFilter(event.target.value as TypeFilter)
+                      }
+                      className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-slate-300"
+                    >
+                      <option value="all">All types</option>
+                      <option value="general">General</option>
+                      <option value="project">Project</option>
+                    </select>
 
-                          <tbody className="divide-y divide-slate-100 bg-white">
-                            {selectedTransactions.length === 0 ? (
-                              <tr>
-                                <td
-                                  colSpan={10}
-                                  className="px-4 py-14 text-center"
-                                >
-                                  <div className="mx-auto max-w-sm">
-                                    <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-3xl bg-slate-100 text-slate-400">
-                                      <FileText className="h-6 w-6" />
-                                    </div>
-                                    <p className="mt-4 text-sm font-semibold text-slate-700">
-                                      No transactions found
-                                    </p>
-                                    <p className="mt-1 text-sm text-slate-400">
-                                      Try adjusting your type, cheque number, or
-                                      date filter.
-                                    </p>
-                                  </div>
-                                </td>
-                              </tr>
-                            ) : (
-                              selectedTransactions.map((transaction) => (
-                                <tr
-                                  key={transaction.id}
-                                  className="transition hover:bg-slate-50"
-                                >
-                                  <td className="px-4 py-4">
-                                    <div className="text-sm font-bold text-slate-900">
-                                      {transaction.vendorName}
-                                    </div>
-                                    <div className="mt-1 text-xs text-slate-400">
-                                      {transaction.type}:{" "}
-                                      {transaction.billNo ||
-                                        transaction.requestId ||
-                                        "-"}
-                                    </div>
-                                  </td>
+                    <select
+                      value={datePreset}
+                      onChange={(event) =>
+                        setDatePreset(event.target.value as DatePreset)
+                      }
+                      className="h-9 rounded-lg border border-slate-200 bg-white px-3 text-sm text-slate-700 outline-none focus:border-slate-300"
+                    >
+                      <option value="last12">Last 12 months</option>
+                      <option value="last30">Last 30 days</option>
+                      <option value="thisMonth">This month</option>
+                      <option value="all">All dates</option>
+                    </select>
 
-                                  <td className="px-4 py-4">
-                                    <Badge
-                                      variant="outline"
-                                      className={`rounded-full px-3 py-1 text-xs font-semibold ${getTypeBadgeClass(
-                                        transaction.requestType,
-                                      )}`}
-                                    >
-                                      {transaction.requestType}
-                                    </Badge>
-                                  </td>
-
-                                  <td className="max-w-[320px] px-4 py-4 text-sm text-slate-700">
-                                    <p className="line-clamp-3 leading-5">
-                                      {transaction.purpose || "-"}
-                                    </p>
-                                  </td>
-
-                                  <td className="px-4 py-4 text-sm font-medium text-slate-700">
-                                    {transaction.projectName}
-                                  </td>
-
-                                  <td className="whitespace-nowrap px-4 py-4 text-sm font-semibold text-slate-800">
-                                    {transaction.chequeNumber || "-"}
-                                  </td>
-
-                                  <td className="whitespace-nowrap px-4 py-4 text-right text-sm font-bold text-slate-900">
-                                    {formatCurrency(transaction.paidAmount)}
-                                  </td>
-
-                                  <td className="whitespace-nowrap px-4 py-4 text-right text-sm font-bold text-slate-900">
-                                    {formatCurrency(
-                                      transaction.remainingBalance,
-                                    )}
-                                  </td>
-
-                                  <td className="whitespace-nowrap px-4 py-4 text-sm font-medium text-slate-700">
-                                    {formatDate(transaction.paymentDate)}
-                                  </td>
-
-                                  <td className="px-4 py-4 text-center">
-                                    <Badge
-                                      variant="outline"
-                                      className={`rounded-full px-3 py-1 text-xs font-semibold ${getStatusBadgeClass(
-                                        transaction.paymentStatus,
-                                      )}`}
-                                    >
-                                      {transaction.paymentStatus}
-                                    </Badge>
-                                  </td>
-
-                                  <td className="px-4 py-4 text-center">
-                                    {canReleasePayment &&
-                                    [
-                                      "invoice_request",
-                                      "purchase_order",
-                                    ].includes(transaction.sourceType || "") &&
-                                    transaction.paymentEligible !== false &&
-                                    transaction.remainingBalance > 0 ? (
-                                      <Button
-                                        type="button"
-                                        size="sm"
-                                        variant="outline"
-                                        className="rounded-xl border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
-                                        onClick={() =>
-                                          openPaymentRelease(transaction)
-                                        }
-                                      >
-                                        <HandCoins className="mr-1.5 h-4 w-4" />
-                                        Release Payment
-                                      </Button>
-                                    ) : (
-                                      <span className="text-slate-300">-</span>
-                                    )}
-                                  </td>
-                                </tr>
-                              ))
-                            )}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === "details" && (
-                  <div className="grid gap-4 p-5 md:grid-cols-2 xl:grid-cols-5">
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                      <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                        Supplier Name
-                      </p>
-                      <p className="mt-2 text-sm font-bold text-slate-900">
-                        {selectedVendor.vendorName}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                      <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                        Opening Balance
-                      </p>
-                      <p className="mt-2 text-sm font-bold text-slate-900">
-                        {formatCurrency(selectedVendor.openingBalance)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                      <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                        Total Amount Paid
-                      </p>
-                      <p className="mt-2 text-sm font-bold text-emerald-700">
-                        {formatCurrency(selectedVendor.paidAmount)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                      <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                        Remaining Amount
-                      </p>
-                      <p className="mt-2 text-sm font-bold text-amber-700">
-                        {formatCurrency(selectedVendor.openBalance)}
-                      </p>
-                    </div>
-
-                    <div className="rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                      <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                        Company
-                      </p>
-                      <p className="mt-2 text-sm font-bold text-slate-900">
-                        {selectedVendor.company || "-"}
-                      </p>
-                    </div>
-                  </div>
-                )}
-
-                {activeTab === "notes" && (
-                  <div className="p-5">
-                    <div className="max-w-3xl rounded-2xl border border-slate-200 bg-slate-50 p-5">
-                      <p className="text-xs font-bold uppercase tracking-wide text-slate-400">
-                        Notes
-                      </p>
-                      <p className="mt-3 text-sm leading-6 text-slate-700">
-                        {selectedVendor.notes ||
-                          "No notes available for this supplier."}
-                      </p>
+                    <div className="relative col-span-2 sm:col-span-1">
+                      <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                      <input
+                        value={chequeNumberSearch}
+                        onChange={(event) =>
+                          setChequeNumberSearch(event.target.value)
+                        }
+                        placeholder="Cheque no."
+                        className="h-9 w-full rounded-lg border border-slate-200 bg-white pl-9 pr-3 text-sm text-slate-700 outline-none placeholder:text-slate-400 focus:border-slate-300 sm:w-44"
+                      />
                     </div>
                   </div>
                 )}
               </div>
-            </div>
+
+              {activeTab === "transactions" &&
+                (selectedTransactions.length === 0 ? (
+                  <div className="px-6 py-16 text-center">
+                    <FileText className="mx-auto h-6 w-6 text-slate-300" />
+                    <p className="mt-3 text-sm font-medium text-slate-700">
+                      No transactions found
+                    </p>
+                    <p className="mt-1 text-sm text-slate-400">
+                      Try a different type, cheque number or date range.
+                    </p>
+                  </div>
+                ) : (
+                  <ul className="divide-y divide-slate-100">
+                    {selectedTransactions.map((transaction) => (
+                      <li
+                        key={transaction.id}
+                        className="flex flex-col gap-3 px-4 py-4 transition hover:bg-slate-50/70 sm:flex-row sm:items-start sm:justify-between sm:px-6"
+                      >
+                        <div className="min-w-0 flex-1">
+                          <p
+                            className="line-clamp-2 break-words text-sm font-medium text-slate-900"
+                            title={transaction.purpose}
+                          >
+                            {transaction.purpose || "-"}
+                          </p>
+
+                          <p className="mt-1 break-words text-xs text-slate-500">
+                            {[
+                              `${transaction.type} ${
+                                transaction.billNo || transaction.requestId || ""
+                              }`.trim(),
+                              transaction.projectName !== "-"
+                                ? transaction.projectName
+                                : transaction.requestType,
+                              transaction.chequeNumber
+                                ? `Cheque ${transaction.chequeNumber}`
+                                : "",
+                              formatDate(transaction.paymentDate) !== "-"
+                                ? formatDate(transaction.paymentDate)
+                                : "",
+                            ]
+                              .filter(Boolean)
+                              .join(" · ")}
+                          </p>
+
+                          <p className="mt-1.5 flex items-center gap-1.5 text-xs text-slate-500">
+                            <span
+                              className={`h-1.5 w-1.5 rounded-full ${getStatusDotClass(
+                                transaction.paymentStatus,
+                              )}`}
+                            />
+                            {transaction.paymentStatus}
+                          </p>
+                        </div>
+
+                        <div className="flex items-center justify-between gap-4 sm:flex-col sm:items-end sm:justify-start sm:gap-1.5 sm:text-right">
+                          <div>
+                            <p className="text-sm font-semibold tabular-nums text-slate-900">
+                              {formatCurrency(transaction.paidAmount)}
+                            </p>
+                            {transaction.remainingBalance > 0.009 && (
+                              <p className="text-xs tabular-nums text-amber-700">
+                                {formatCurrency(transaction.remainingBalance)}{" "}
+                                remaining
+                              </p>
+                            )}
+                          </div>
+
+                          {renderReleaseAction(transaction)}
+                        </div>
+                      </li>
+                    ))}
+                  </ul>
+                ))}
+
+              {activeTab === "details" && (
+                <dl className="grid gap-x-8 gap-y-5 p-4 sm:grid-cols-2 sm:p-6">
+                  {[
+                    { label: "Company", value: selectedVendor.company },
+                    {
+                      label: "Billing address",
+                      value: selectedVendor.billingAddress,
+                    },
+                    {
+                      label: "Bill Pay ACH info",
+                      value: selectedVendor.achInfo,
+                    },
+                    { label: "Notes", value: selectedVendor.notes },
+                  ].map((field) => (
+                    <div key={field.label} className="min-w-0">
+                      <dt className="text-xs text-slate-500">{field.label}</dt>
+                      <dd className="mt-1 whitespace-pre-line break-words text-sm text-slate-900">
+                        {field.value || "-"}
+                      </dd>
+                    </div>
+                  ))}
+                </dl>
+              )}
+            </>
           )}
         </main>
 
@@ -5468,8 +5655,59 @@ export default function VendorSummary() {
                 </div>
 
                 <div className="overflow-hidden rounded-2xl border border-slate-200">
-                  <div className="max-h-72 overflow-auto">
-                    <table className="w-full min-w-[760px] text-left text-sm">
+                  <div className="max-h-72 overflow-y-auto">
+                    {/* Below lg: one compact row per PO instead of a wide table. */}
+                    <div className="divide-y divide-slate-100 bg-white lg:hidden">
+                      {manualPaymentAllocations.length === 0 ? (
+                        <p className="px-4 py-8 text-center text-sm text-slate-400">
+                          Enter an amount to preview the FIFO allocation.
+                        </p>
+                      ) : (
+                        manualPaymentAllocations.map((allocation, index) => (
+                          <div key={allocation.po.id} className="px-4 py-3 text-sm">
+                            <div className="flex items-center justify-between gap-2">
+                              <p className="min-w-0 truncate font-bold text-slate-900">
+                                {index + 1}.{" "}
+                                {allocation.po.poNumber || allocation.po.id}
+                              </p>
+                              <span
+                                className={`shrink-0 text-xs font-semibold ${
+                                  allocation.remainingBalance <= 0.009
+                                    ? "text-emerald-700"
+                                    : "text-blue-700"
+                                }`}
+                              >
+                                {allocation.remainingBalance <= 0.009
+                                  ? "Paid & Closed"
+                                  : "Partially Paid"}
+                              </span>
+                            </div>
+                            <div className="mt-1 grid grid-cols-3 gap-2 text-xs">
+                              <div className="min-w-0">
+                                <p className="text-slate-400">Before</p>
+                                <p className="break-words font-medium">
+                                  {formatCurrency(allocation.openingBalance)}
+                                </p>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-slate-400">Applied</p>
+                                <p className="break-words font-bold text-emerald-700">
+                                  {formatCurrency(allocation.allocatedAmount)}
+                                </p>
+                              </div>
+                              <div className="min-w-0">
+                                <p className="text-slate-400">After</p>
+                                <p className="break-words font-bold">
+                                  {formatCurrency(allocation.remainingBalance)}
+                                </p>
+                              </div>
+                            </div>
+                          </div>
+                        ))
+                      )}
+                    </div>
+
+                    <table className="hidden w-full text-left text-sm lg:table [&_td]:px-3 [&_th]:px-3">
                       <thead className="sticky top-0 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                         <tr>
                           <th className="px-4 py-3">FIFO</th>
@@ -5581,6 +5819,12 @@ export default function VendorSummary() {
           onClose={closePaymentRelease}
           onSuccess={closePaymentRelease}
           invoice={paymentInvoice}
+        />
+
+        <VendorAccountStatement
+          open={statementOpen}
+          onOpenChange={setStatementOpen}
+          statement={vendorStatement}
         />
       </div>
     </div>
