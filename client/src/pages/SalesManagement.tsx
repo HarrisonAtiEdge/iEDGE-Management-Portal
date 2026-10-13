@@ -761,6 +761,24 @@ import {
 } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { SalesRecord } from "@shared/schema";
+import {
+  Award,
+  ChevronLeft,
+  ChevronRight,
+  Eye,
+  FileText,
+  FolderOpen,
+  Layers,
+  Loader2,
+  Lock,
+  MessageSquare,
+  MessagesSquare,
+  RotateCcw,
+  Search,
+  Trophy,
+  Wallet,
+  X,
+} from "lucide-react";
 
 const STATUS_OPTIONS = [
   "Lead",
@@ -846,8 +864,10 @@ export function SalesManagement() {
     return `₨ ${(Number(value) || 0).toLocaleString()}`;
   };
 
-  const listGridColumns =
-    "120px 150px 220px 160px 110px 300px 110px 95px 280px 110px";
+  // Fluid columns so the list always fits the content area. Applied at xl
+  // only; narrower screens render each record as a stacked card instead.
+  const listGridClass =
+    "xl:grid-cols-[minmax(0,1.3fr)_minmax(0,1.1fr)_minmax(0,1fr)_minmax(0,1.4fr)_minmax(0,1.4fr)_auto]";
 
   const getRecordField = (record: SalesRecord, keys: string[]) => {
     const data = record as unknown as Record<string, unknown>;
@@ -1383,7 +1403,7 @@ export function SalesManagement() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <i className="fas fa-lock mb-4 text-4xl text-gray-400"></i>
+          <Lock className="mx-auto mb-4 h-10 w-10 text-gray-400" />
           <p className="text-gray-500">
             Access denied. Only admins can view sales management.
           </p>
@@ -1396,89 +1416,116 @@ export function SalesManagement() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <i className="fas fa-spinner fa-spin mb-4 text-4xl text-gray-400"></i>
+          <Loader2 className="mx-auto mb-4 h-10 w-10 animate-spin text-gray-400" />
           <p className="text-gray-500">Loading sales records...</p>
         </div>
       </div>
     );
   }
 
+  const statCards = [
+    {
+      label: "Total Records",
+      value: String(totalRecords),
+      caption: "Sales records across the team",
+      icon: Layers,
+      tone: "bg-sky-50 text-sky-600",
+      testId: "text-total-sales-records",
+    },
+    {
+      label: "Total Value",
+      value: formatCurrency(totalValue),
+      caption: "Combined projected value",
+      icon: Wallet,
+      tone: "bg-emerald-50 text-emerald-600",
+      testId: "text-total-sales-value",
+    },
+    {
+      label: "Won Projects",
+      value: String(wonCount),
+      caption: "Projects marked as won",
+      icon: Trophy,
+      tone: "bg-amber-50 text-amber-600",
+      testId: "text-won-sales-count",
+    },
+    {
+      label: "Won Value",
+      value: formatCurrency(wonValue),
+      caption: "Value of all won projects",
+      icon: Award,
+      tone: "bg-violet-50 text-violet-600",
+      testId: "text-won-sales-value",
+    },
+  ];
+
+  const hasActiveFilters =
+    searchTerm.trim() !== "" ||
+    statusFilter !== "All" ||
+    projectOwnerFilter !== "All";
+
   return (
-    <div className="space-y-6 p-1">
+    <div className="mx-auto w-full min-w-0 max-w-[1600px] space-y-6">
       {/* Header */}
-      <div className="flex flex-col gap-2">
-        <h1 className="text-3xl font-bold tracking-tight text-slate-900">
+      <div className="min-w-0">
+        <h1 className="text-2xl font-bold tracking-tight text-slate-900 sm:text-3xl">
           Pipeline Management
         </h1>
-        <p className="text-sm text-slate-500">
+        <p className="mt-1 text-sm text-slate-500">
           View and manage all sales records across the team.
         </p>
       </div>
 
-      {/* Top Filter Pills Bar */}
-      <div className="rounded-[24px] border border-slate-200 bg-white px-4 py-3 shadow-sm">
-        <div className="flex flex-col gap-3 xl:flex-row xl:items-center xl:justify-between">
-          <div className="flex flex-wrap items-center gap-2">
-            <button
-              type="button"
-              onClick={() => setStatusFilter("All")}
-              className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all ${
-                statusFilter === "All"
-                  ? "bg-orange-500 text-white shadow-sm"
-                  : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-              }`}
+      {/* Stats Cards */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {statCards.map((stat) => (
+          <div
+            key={stat.label}
+            className="flex min-w-0 items-center gap-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+          >
+            <div
+              className={`flex h-12 w-12 shrink-0 items-center justify-center rounded-xl ${stat.tone}`}
             >
-              <span>All</span>
-              <span
-                className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-xs ${
-                  statusFilter === "All"
-                    ? "bg-white/20 text-white"
-                    : "bg-white text-slate-500"
-                }`}
+              <stat.icon className="h-5 w-5" />
+            </div>
+
+            <div className="min-w-0">
+              <p className="text-sm font-medium text-slate-500">
+                {stat.label}
+              </p>
+              <p
+                className="text-2xl font-bold tracking-tight text-slate-900 [overflow-wrap:anywhere]"
+                data-testid={stat.testId}
               >
-                {statusCounts.All}
-              </span>
-            </button>
+                {stat.value}
+              </p>
+              <p className="text-xs text-slate-400">{stat.caption}</p>
+            </div>
+          </div>
+        ))}
+      </div>
 
-            {STATUS_OPTIONS.map((status) => {
-              const active = statusFilter === status;
-
-              return (
-                <button
-                  key={status}
-                  type="button"
-                  onClick={() => setStatusFilter(status)}
-                  className={`inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-medium transition-all ${
-                    active
-                      ? "bg-orange-500 text-white shadow-sm"
-                      : "bg-slate-100 text-slate-700 hover:bg-slate-200"
-                  }`}
-                >
-                  <span>{status}</span>
-                  <span
-                    className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1 text-xs ${
-                      active
-                        ? "bg-white/20 text-white"
-                        : "bg-white text-slate-500"
-                    }`}
-                  >
-                    {statusCounts[status]}
-                  </span>
-                </button>
-              );
-            })}
+      {/* Filters */}
+      <div className="space-y-4 rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center">
+          <div className="relative min-w-0 flex-1">
+            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+            <Input
+              placeholder="Search by client, project, code, or project owner..."
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              data-testid="input-search-sales"
+              className="h-11 rounded-full border-slate-200 bg-slate-50 pl-10 shadow-none"
+            />
           </div>
 
-          <div className="flex items-center gap-3 xl:min-w-[280px]">
-            <div className="hidden h-8 w-px bg-slate-200 xl:block" />
-
+          <div className="flex flex-col gap-3 sm:flex-row">
             <Select
               value={projectOwnerFilter}
               onValueChange={setProjectOwnerFilter}
             >
               <SelectTrigger
                 data-testid="select-salesperson-filter"
-                className="h-11 rounded-full border-slate-200 bg-slate-50 text-slate-700 shadow-none xl:min-w-[220px]"
+                className="h-11 w-full rounded-full border-slate-200 bg-slate-50 text-slate-700 shadow-none sm:flex-1 lg:w-[240px] lg:flex-none"
               >
                 <SelectValue placeholder="All Project Owners" />
               </SelectTrigger>
@@ -1492,191 +1539,82 @@ export function SalesManagement() {
                 ))}
               </SelectContent>
             </Select>
-          </div>
-        </div>
-      </div>
-
-      {/* Search Row */}
-      <Card className="rounded-[24px] border-slate-200 shadow-sm">
-        <CardContent className="p-4">
-          <div className="flex flex-col gap-3 md:flex-row">
-            <div className="relative flex-1">
-              <i className="fas fa-search absolute left-4 top-1/2 -translate-y-1/2 text-sm text-slate-400" />
-              <Input
-                placeholder="Search by client, project, code, or project owner..."
-                value={searchTerm}
-                onChange={(e) => setSearchTerm(e.target.value)}
-                data-testid="input-search-sales"
-                className="h-11 rounded-full border-slate-200 bg-slate-50 pl-10 shadow-none"
-              />
-            </div>
 
             <Button
               type="button"
               variant="outline"
+              disabled={!hasActiveFilters}
               onClick={() => {
                 setSearchTerm("");
                 setStatusFilter("All");
                 setProjectOwnerFilter("All");
               }}
-              className="h-11 rounded-full border-slate-200 px-5 text-slate-700"
+              className="h-11 shrink-0 rounded-full border-slate-200 px-5 text-slate-700"
             >
+              <RotateCcw className="mr-2 h-3.5 w-3.5" />
               Reset Filters
             </Button>
           </div>
-        </CardContent>
-      </Card>
+        </div>
 
-      {/* Stats Cards */}
-      <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
-        <Card className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-          <CardContent className="p-0">
-            <div className="h-1 w-full bg-sky-500" />
-            <div className="p-5">
-              <div className="mb-4 flex items-start justify-between">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-slate-500">
-                    Total Records
-                  </p>
-                  <p
-                    className="text-3xl font-bold tracking-tight text-slate-900"
-                    data-testid="text-total-sales-records"
-                  >
-                    {totalRecords}
-                  </p>
-                </div>
+        <div className="flex flex-wrap items-center gap-2 border-t border-slate-100 pt-4">
+          {(["All", ...STATUS_OPTIONS] as string[]).map((status) => {
+            const active = statusFilter === status;
 
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-sky-50">
-                  <i className="fas fa-layer-group text-lg text-sky-600" />
-                </div>
-              </div>
-
-              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                Total number of sales records available
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-          <CardContent className="p-0">
-            <div className="h-1 w-full bg-emerald-500" />
-            <div className="p-5">
-              <div className="mb-4 flex items-start justify-between">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-slate-500">
-                    Total Value
-                  </p>
-                  <p
-                    className="text-3xl font-bold tracking-tight text-slate-900"
-                    data-testid="text-total-sales-value"
-                  >
-                    {formatCurrency(totalValue)}
-                  </p>
-                </div>
-
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-emerald-50">
-                  <i className="fas fa-wallet text-lg text-emerald-600" />
-                </div>
-              </div>
-
-              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                Combined projected value of all projects
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-          <CardContent className="p-0">
-            <div className="h-1 w-full bg-amber-500" />
-            <div className="p-5">
-              <div className="mb-4 flex items-start justify-between">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-slate-500">
-                    Won Projects
-                  </p>
-                  <p
-                    className="text-3xl font-bold tracking-tight text-slate-900"
-                    data-testid="text-won-sales-count"
-                  >
-                    {wonCount}
-                  </p>
-                </div>
-
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-50">
-                  <i className="fas fa-trophy text-lg text-amber-600" />
-                </div>
-              </div>
-
-              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                Projects currently marked as won
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-          <CardContent className="p-0">
-            <div className="h-1 w-full bg-violet-500" />
-            <div className="p-5">
-              <div className="mb-4 flex items-start justify-between">
-                <div className="space-y-1">
-                  <p className="text-sm font-medium text-slate-500">
-                    Won Value
-                  </p>
-                  <p
-                    className="text-3xl font-bold tracking-tight text-slate-900"
-                    data-testid="text-won-sales-value"
-                  >
-                    {formatCurrency(wonValue)}
-                  </p>
-                </div>
-
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-violet-50">
-                  <i className="fas fa-award text-lg text-violet-600" />
-                </div>
-              </div>
-
-              <div className="rounded-2xl bg-slate-50 px-3 py-2 text-xs text-slate-500">
-                Total value of all won projects
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+            return (
+              <button
+                key={status}
+                type="button"
+                onClick={() => setStatusFilter(status)}
+                className={`inline-flex items-center gap-2 rounded-full px-3.5 py-1.5 text-[13px] font-medium transition-colors ${
+                  active
+                    ? "bg-orange-500 text-white shadow-sm"
+                    : "bg-slate-100 text-slate-700 hover:bg-slate-200"
+                }`}
+              >
+                <span>{status}</span>
+                <span
+                  className={`inline-flex h-5 min-w-[20px] items-center justify-center rounded-full px-1.5 text-[11px] font-semibold ${
+                    active
+                      ? "bg-white/20 text-white"
+                      : "bg-white text-slate-500"
+                  }`}
+                >
+                  {statusCounts[status] ?? 0}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
 
-      {/* All Sales Records - List View */}
-      <Card className="overflow-hidden rounded-[24px] border border-slate-200 bg-white shadow-sm">
-        <CardHeader className="border-b border-slate-100 bg-white px-5 py-4">
-          <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
-            <div>
-              <CardTitle className="text-xl font-bold text-slate-900">
+      {/* All Sales Records */}
+      <Card className="min-w-0 overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <CardHeader className="border-b border-slate-100 px-5 py-4">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="min-w-0">
+              <CardTitle className="text-lg font-bold text-slate-900">
                 All Sales Records
               </CardTitle>
               <p className="mt-1 text-sm text-slate-500">
-                View project details, owner, status, latest update, and remarks.
+                Project details, owner, status, latest update and remarks.
               </p>
             </div>
 
-            <div className="rounded-full bg-slate-100 px-4 py-2 text-sm font-medium text-slate-700">
-              Showing{" "}
-              <span className="font-bold text-slate-900">{showingStart}</span>{" "}
-              to <span className="font-bold text-slate-900">{showingEnd}</span>{" "}
-              of{" "}
+            <span className="self-start rounded-full bg-slate-100 px-3 py-1.5 text-sm font-medium text-slate-700 sm:self-auto">
               <span className="font-bold text-slate-900">
                 {filteredRecords.length}
               </span>{" "}
               record(s)
-            </div>
+            </span>
           </div>
         </CardHeader>
 
-        <CardContent className="p-5">
+        <CardContent className="p-0">
           {filteredRecords.length === 0 ? (
-            <div className="flex min-h-[260px] flex-col items-center justify-center rounded-[24px] border border-dashed border-slate-200 bg-slate-50 text-center">
+            <div className="m-5 flex min-h-[260px] flex-col items-center justify-center rounded-2xl border border-dashed border-slate-200 bg-slate-50 px-4 text-center">
               <div className="mb-4 flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm">
-                <i className="fas fa-folder-open text-xl text-slate-400" />
+                <FolderOpen className="h-6 w-6 text-slate-400" />
               </div>
 
               <h3 className="text-lg font-semibold text-slate-900">
@@ -1691,235 +1629,273 @@ export function SalesManagement() {
             </div>
           ) : (
             <>
-              <div className="overflow-x-auto rounded-[18px] border border-slate-200 bg-white">
-                <div className="min-w-[1600px]">
-                  <div
-                    className="grid border-b border-slate-200 bg-slate-50 px-4 py-3 text-[13px] font-bold text-slate-950"
-                    style={{ gridTemplateColumns: listGridColumns }}
-                  >
-                    <div>Project Code</div>
-                    <div>Project Title</div>
-                    <div>Client</div>
-                    <div>Project Owner</div>
-                    <div className="text-center">Next FollowUp</div>
-                    <div>Last Comment</div>
-                    <div className="text-center">Last Update</div>
-                    <div className="text-center">Status</div>
-                    <div>Your Remark</div>
-                    <div className="text-center">Action</div>
-                  </div>
+              {/* Column headings: wide screens only. Below that each record
+                  is a stacked card with its own labels. */}
+              <div
+                className={`hidden gap-4 border-b border-slate-200 bg-slate-50 px-5 py-3 text-xs font-semibold uppercase tracking-wide text-slate-500 xl:grid ${listGridClass}`}
+              >
+                <div>Project</div>
+                <div>Client &amp; Owner</div>
+                <div>Status &amp; Dates</div>
+                <div>Last Comment</div>
+                <div>Your Remark</div>
+                <div className="w-[120px] text-center">Actions</div>
+              </div>
 
-                  <div className="divide-y divide-slate-100">
-                    {paginatedRecords.map((record) => {
-                      const latestRecordComment =
-                        getLatestRecordComment(record);
+              <div className="divide-y divide-slate-100">
+                {paginatedRecords.map((record) => {
+                  const latestRecordComment = getLatestRecordComment(record);
 
-                      const nextFollowUpDate = getRecordField(record, [
-                        "nextFollowUp",
-                        "nextFollowUpDate",
-                        "nextFollowUpAt",
-                        "followUpDate",
-                        "nextFollowup",
-                      ]);
+                  const nextFollowUpDate = getRecordField(record, [
+                    "nextFollowUp",
+                    "nextFollowUpDate",
+                    "nextFollowUpAt",
+                    "followUpDate",
+                    "nextFollowup",
+                  ]);
 
-                      const lastCommentDate =
-                        latestRecordComment?.timestamp ||
-                        getRecordField(record, [
-                          "lastCommentAt",
-                          "lastCommentDate",
-                          "latestCommentAt",
-                          "commentDate",
-                        ]) ||
-                        record.updatedAt;
+                  const lastCommentDate =
+                    latestRecordComment?.timestamp ||
+                    getRecordField(record, [
+                      "lastCommentAt",
+                      "lastCommentDate",
+                      "latestCommentAt",
+                      "commentDate",
+                    ]) ||
+                    record.updatedAt;
 
-                      const remarkDate =
-                        getRecordField(record, [
-                          "latestAdminRemarkAt",
-                          "yourRemarkAt",
-                          "remarkAt",
-                          "remarksAt",
-                          "lastRemarkAt",
-                          "adminRemarkAt",
-                        ]) || record.updatedAt;
+                  const remarkDate =
+                    getRecordField(record, [
+                      "latestAdminRemarkAt",
+                      "yourRemarkAt",
+                      "remarkAt",
+                      "remarksAt",
+                      "lastRemarkAt",
+                      "adminRemarkAt",
+                    ]) || record.updatedAt;
 
-                      const rawLastCommentText =
-                        latestRecordComment?.text ||
-                        getRecordText(
-                          record,
-                          [
-                            "lastComment",
-                            "latestComment",
-                            "comment",
-                            "comments",
-                            "lastCommentText",
-                            "customerComment",
-                          ],
-                          "",
-                        );
+                  const lastCommentText =
+                    latestRecordComment?.text ||
+                    getRecordText(
+                      record,
+                      [
+                        "lastComment",
+                        "latestComment",
+                        "comment",
+                        "comments",
+                        "lastCommentText",
+                        "customerComment",
+                      ],
+                      "",
+                    );
 
-                      const hasLastComment =
-                        rawLastCommentText.trim().length > 0;
-                      const lastCommentText = hasLastComment
-                        ? rawLastCommentText
-                        : "No comment";
+                  const remarkText = getRecordText(
+                    record,
+                    [
+                      "latestAdminRemark",
+                      "yourRemark",
+                      "yourRemarks",
+                      "remark",
+                      "remarks",
+                      "adminRemark",
+                      "salesRemark",
+                    ],
+                    "",
+                  );
 
-                      const rawRemarkText = getRecordText(
-                        record,
-                        [
-                          "latestAdminRemark",
-                          "yourRemark",
-                          "yourRemarks",
-                          "remark",
-                          "remarks",
-                          "adminRemark",
-                          "salesRemark",
-                        ],
-                        "",
-                      );
+                  const estimateText = getRecordText(
+                    record,
+                    [
+                      "estimateNumber",
+                      "estimateNo",
+                      "estimateTitle",
+                      "estimateName",
+                      "estimate",
+                    ],
+                    "",
+                  );
 
-                      const hasRemark = rawRemarkText.trim().length > 0;
-                      const remarkText = hasRemark
-                        ? rawRemarkText
-                        : "No remark";
+                  const estimateAmount = getRecordField(record, [
+                    "estimateAmount",
+                    "estimateValue",
+                    "quotedAmount",
+                    "estimateTotal",
+                  ]);
 
-                      const estimateText = getRecordText(
-                        record,
-                        [
-                          "estimateNumber",
-                          "estimateNo",
-                          "estimateTitle",
-                          "estimateName",
-                          "estimate",
-                        ],
-                        "",
-                      );
+                  const ownerName = record.salesPersonName || "N/A";
+                  const statusClass = getStatusColor(
+                    record.projectStatus || "",
+                  );
+                  const isSavingRemark =
+                    savingRemarkRecordId === String(record.id);
 
-                      const estimateAmount = getRecordField(record, [
-                        "estimateAmount",
-                        "estimateValue",
-                        "quotedAmount",
-                        "estimateTotal",
-                      ]);
+                  const noteBlocks = [
+                    {
+                      label: "Last Comment",
+                      text: lastCommentText.trim(),
+                      empty: "No comment",
+                      date: lastCommentDate,
+                    },
+                    {
+                      label: "Your Remark",
+                      text: remarkText.trim(),
+                      empty: "No remark",
+                      date: remarkDate,
+                    },
+                  ];
 
-                      return (
-                        <div
-                          key={record.id}
-                          className="grid items-start gap-0 px-4 py-4 text-[11px] leading-snug text-slate-900 transition-colors hover:bg-slate-50"
-                          style={{ gridTemplateColumns: listGridColumns }}
-                        >
-                          <div className="pr-4 text-[12px] font-medium">
+                  return (
+                    <div
+                      key={record.id}
+                      className={`grid grid-cols-1 gap-4 px-5 py-5 transition-colors hover:bg-slate-50/70 sm:grid-cols-2 xl:items-start xl:py-4 ${listGridClass}`}
+                    >
+                      {/* Project */}
+                      <div className="min-w-0 sm:col-span-2 xl:col-span-1">
+                        <div className="flex items-start justify-between gap-3">
+                          <span className="inline-flex max-w-full rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[11px] font-semibold text-slate-600 [overflow-wrap:anywhere]">
                             {record.projectCode || "N/A"}
-                          </div>
+                          </span>
 
-                          <div className="pr-4">
-                            <div className="text-[13px] font-medium">
-                              {record.projectName || "Untitled Project"}
-                            </div>
-
-                            {estimateText && (
-                              <div className="mt-8 text-[12px] font-bold text-slate-950">
-                                {estimateText}
-                                {estimateAmount
-                                  ? ` - ${formatCurrency(
-                                      String(estimateAmount),
-                                    )}`
-                                  : ""}
-                              </div>
-                            )}
-                          </div>
-
-                          <div
-                            className="pr-4 text-[13px]"
-                            data-testid={`text-client-admin-${record.id}`}
+                          <span
+                            className={`shrink-0 rounded-full border px-2.5 py-0.5 text-xs font-medium xl:hidden ${statusClass}`}
                           >
-                            {record.client || "N/A"}
-                          </div>
+                            {record.projectStatus || "N/A"}
+                          </span>
+                        </div>
 
-                          <div
-                            className="pr-4 text-[13px]"
+                        <p className="mt-2 text-sm font-semibold text-slate-900 [overflow-wrap:anywhere]">
+                          {record.projectName || "Untitled Project"}
+                        </p>
+
+                        {estimateText && (
+                          <p className="mt-1 text-xs font-medium text-slate-500 [overflow-wrap:anywhere]">
+                            <FileText className="mr-1 inline h-3.5 w-3.5 align-[-2px] text-slate-400" />
+                            {estimateText}
+                            {estimateAmount
+                              ? ` · ${formatCurrency(String(estimateAmount))}`
+                              : ""}
+                          </p>
+                        )}
+                      </div>
+
+                      {/* Client & owner */}
+                      <div className="min-w-0">
+                        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400 xl:hidden">
+                          Client &amp; Owner
+                        </p>
+
+                        <p
+                          className="text-sm font-medium text-slate-800 [overflow-wrap:anywhere]"
+                          data-testid={`text-client-admin-${record.id}`}
+                        >
+                          {record.client || "N/A"}
+                        </p>
+
+                        <div className="mt-2 flex min-w-0 items-center gap-2">
+                          <span className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-orange-100 text-[10px] font-bold text-orange-700">
+                            {getInitials(ownerName)}
+                          </span>
+                          <span
+                            className="truncate text-xs text-slate-600"
+                            title={ownerName}
                             data-testid={`text-sales-person-${record.id}`}
                           >
-                            {record.salesPersonName || "N/A"}
-                          </div>
-
-                          <div className="pr-4 text-center text-[11px]">
-                            {formatSmallDate(nextFollowUpDate)}
-                          </div>
-
-                          <div className="pr-5">
-                            <p className="line-clamp-3 text-[10px] leading-tight text-slate-800">
-                              {lastCommentText}
-                            </p>
-
-                            {hasLastComment && (
-                              <p className="mt-1 text-center text-[10px] font-bold text-slate-950">
-                                {formatSmallTime(lastCommentDate)}{" "}
-                                {formatSmallDate(lastCommentDate)}
-                              </p>
-                            )}
-                          </div>
-
-                          <div className="pr-4 text-center text-[10px] leading-tight">
-                            <div>{formatSmallTime(record.updatedAt)}</div>
-                            <div>{formatSmallDate(record.updatedAt)}</div>
-                          </div>
-
-                          <div className="pr-4 text-center">
-                            <span
-                              className={`inline-flex rounded-full border px-2 py-1 text-[10px] font-medium ${getStatusColor(
-                                record.projectStatus || "",
-                              )}`}
-                            >
-                              {record.projectStatus || "N/A"}
-                            </span>
-                          </div>
-
-                          <div className="pr-5">
-                            <p className="line-clamp-3 text-[10px] leading-tight text-slate-800">
-                              {remarkText}
-                            </p>
-
-                            {hasRemark && (
-                              <p className="mt-1 text-center text-[10px] font-bold text-slate-950">
-                                {formatSmallTime(remarkDate)}{" "}
-                                {formatSmallDate(remarkDate)}
-                              </p>
-                            )}
-
-                            <Button
-                              type="button"
-                              variant="outline"
-                              disabled={
-                                savingRemarkRecordId === String(record.id)
-                              }
-                              onClick={() => openProjectCommentsModal(record)}
-                              className="mt-2 h-7 rounded-full border-slate-300 px-3 text-[10px] font-medium"
-                            >
-                              {savingRemarkRecordId === String(record.id)
-                                ? "Saving..."
-                                : "Add Comment"}
-                            </Button>
-                          </div>
-
-                          <div className="flex justify-center">
-                            <Button
-                              type="button"
-                              variant="outline"
-                              onClick={() => handleViewDetails(record)}
-                              className="h-8 rounded-full border-slate-300 px-3 text-[11px] font-medium"
-                            >
-                              View Detail
-                            </Button>
-                          </div>
+                            {ownerName}
+                          </span>
                         </div>
-                      );
-                    })}
-                  </div>
-                </div>
+                      </div>
+
+                      {/* Status & dates */}
+                      <div className="min-w-0">
+                        <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400 xl:hidden">
+                          Dates
+                        </p>
+
+                        <span
+                          className={`mb-2 hidden rounded-full border px-2.5 py-0.5 text-xs font-medium xl:inline-flex ${statusClass}`}
+                        >
+                          {record.projectStatus || "N/A"}
+                        </span>
+
+                        <dl className="space-y-1 text-xs">
+                          <div className="flex flex-wrap gap-x-1.5">
+                            <dt className="text-slate-400">Follow-up:</dt>
+                            <dd className="font-medium text-slate-700">
+                              {formatSmallDate(nextFollowUpDate)}
+                            </dd>
+                          </div>
+                          <div className="flex flex-wrap gap-x-1.5">
+                            <dt className="text-slate-400">Updated:</dt>
+                            <dd className="font-medium text-slate-700">
+                              {formatSmallDate(record.updatedAt)}{" "}
+                              <span className="font-normal text-slate-500">
+                                {formatSmallTime(record.updatedAt)}
+                              </span>
+                            </dd>
+                          </div>
+                        </dl>
+                      </div>
+
+                      {/* Last comment & your remark */}
+                      {noteBlocks.map((note) => (
+                        <div
+                          key={note.label}
+                          className="min-w-0 rounded-xl bg-slate-50 px-3 py-2.5"
+                        >
+                          <p className="mb-1 text-[11px] font-semibold uppercase tracking-wide text-slate-400 xl:hidden">
+                            {note.label}
+                          </p>
+
+                          <p
+                            className={`line-clamp-3 text-xs leading-relaxed [overflow-wrap:anywhere] ${
+                              note.text
+                                ? "text-slate-700"
+                                : "italic text-slate-400"
+                            }`}
+                            title={note.text || undefined}
+                          >
+                            {note.text || note.empty}
+                          </p>
+
+                          {note.text && (
+                            <p className="mt-1.5 text-[11px] font-medium text-slate-400">
+                              {formatSmallTime(note.date)}{" "}
+                              {formatSmallDate(note.date)}
+                            </p>
+                          )}
+                        </div>
+                      ))}
+
+                      {/* Actions */}
+                      <div className="flex gap-2 sm:col-span-2 xl:col-span-1 xl:w-[120px] xl:flex-col">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => handleViewDetails(record)}
+                          className="h-9 flex-1 rounded-full border-slate-300 px-3 text-xs font-medium xl:flex-none"
+                        >
+                          <Eye className="mr-1.5 h-3.5 w-3.5" />
+                          View Detail
+                        </Button>
+
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={isSavingRemark}
+                          onClick={() => openProjectCommentsModal(record)}
+                          className="h-9 flex-1 rounded-full border-orange-200 bg-orange-50 px-3 text-xs font-medium text-orange-700 hover:bg-orange-100 hover:text-orange-800 xl:flex-none"
+                        >
+                          <MessageSquare className="mr-1.5 h-3.5 w-3.5" />
+                          {isSavingRemark ? "Saving..." : "Comment"}
+                        </Button>
+                      </div>
+                    </div>
+                  );
+                })}
               </div>
 
               {/* Pagination */}
-              <div className="mt-6 flex flex-col gap-4 rounded-[22px] border border-slate-200 bg-slate-50 px-4 py-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-3 border-t border-slate-100 bg-slate-50/60 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="text-sm text-slate-600">
                   Showing{" "}
                   <span className="font-semibold text-slate-900">
@@ -1936,7 +1912,7 @@ export function SalesManagement() {
                   records
                 </div>
 
-                <div className="flex flex-wrap items-center gap-2">
+                <div className="flex items-center justify-between gap-2 sm:justify-end">
                   <Button
                     type="button"
                     variant="outline"
@@ -1944,18 +1920,23 @@ export function SalesManagement() {
                     onClick={() =>
                       setCurrentPage((page) => Math.max(page - 1, 1))
                     }
-                    className="h-10 rounded-full border-slate-200 bg-white px-4 text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="h-9 rounded-full border-slate-200 bg-white px-4 text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                   >
+                    <ChevronLeft className="mr-1 h-4 w-4" />
                     Previous
                   </Button>
 
-                  <div className="flex items-center gap-1">
+                  <span className="text-sm font-medium text-slate-600 sm:hidden">
+                    Page {currentPage} of {totalPages}
+                  </span>
+
+                  <div className="hidden items-center gap-1 sm:flex">
                     {paginationItems.map((item) => {
                       if (typeof item === "string") {
                         return (
                           <span
                             key={item}
-                            className="flex h-10 min-w-10 items-center justify-center rounded-full px-2 text-sm font-semibold text-slate-400"
+                            className="flex h-9 min-w-9 items-center justify-center px-1 text-sm font-semibold text-slate-400"
                           >
                             ...
                           </span>
@@ -1969,7 +1950,7 @@ export function SalesManagement() {
                           key={item}
                           type="button"
                           onClick={() => setCurrentPage(item)}
-                          className={`flex h-10 min-w-10 items-center justify-center rounded-full px-3 text-sm font-semibold transition-all ${
+                          className={`flex h-9 min-w-9 items-center justify-center rounded-full px-3 text-sm font-semibold transition-colors ${
                             active
                               ? "bg-orange-500 text-white shadow-sm"
                               : "bg-white text-slate-600 hover:bg-slate-100"
@@ -1988,177 +1969,172 @@ export function SalesManagement() {
                     onClick={() =>
                       setCurrentPage((page) => Math.min(page + 1, totalPages))
                     }
-                    className="h-10 rounded-full border-slate-200 bg-white px-4 text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
+                    className="h-9 rounded-full border-slate-200 bg-white px-4 text-slate-700 disabled:cursor-not-allowed disabled:opacity-40"
                   >
                     Next
+                    <ChevronRight className="ml-1 h-4 w-4" />
                   </Button>
                 </div>
               </div>
             </>
           )}
-
-          {commentModalOpen &&
-            selectedCommentRecord &&
-            (() => {
-              const recordComments = getRecordCommentItems(
-                selectedCommentRecord,
-              );
-
-              return (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
-                  <div className="w-full max-w-2xl overflow-hidden rounded-[28px] bg-white shadow-2xl">
-                    <div className="flex items-start justify-between border-b border-slate-100 px-6 py-5">
-                      <div>
-                        <h2 className="text-xl font-bold text-slate-950">
-                          Project Comments
-                        </h2>
-
-                        <p className="mt-1 text-sm text-slate-500">
-                          {selectedCommentRecord.projectCode || "N/A"} —{" "}
-                          {selectedCommentRecord.projectName ||
-                            "Untitled Project"}
-                        </p>
-
-                        <p className="mt-1 text-xs text-slate-400">
-                          Project Owner:{" "}
-                          {selectedCommentRecord.salesPersonName || "N/A"}
-                        </p>
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={closeProjectCommentsModal}
-                        className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200 hover:text-slate-900"
-                      >
-                        <i className="fas fa-times text-sm" />
-                      </button>
-                    </div>
-
-                    <div className="max-h-[360px] overflow-y-auto px-6 py-5">
-                      {recordComments.length === 0 ? (
-                        <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center">
-                          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm">
-                            <i className="fas fa-comments text-slate-400" />
-                          </div>
-
-                          <p className="font-semibold text-slate-800">
-                            No project comments yet
-                          </p>
-
-                          <p className="mt-1 text-sm text-slate-500">
-                            Add the first comment for this project.
-                          </p>
-                        </div>
-                      ) : (
-                        <div className="space-y-4">
-                          {recordComments.map((commentItem) => (
-                            <div
-                              key={commentItem.id}
-                              className="rounded-3xl border border-slate-100 bg-slate-50 p-4"
-                            >
-                              <div className="flex items-start gap-3">
-                                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100 text-sm font-bold text-orange-700">
-                                  {getInitials(commentItem.userName)}
-                                </div>
-
-                                <div className="min-w-0 flex-1">
-                                  <div className="flex flex-wrap items-center justify-between gap-2">
-                                    <p className="font-semibold text-slate-900">
-                                      {commentItem.userName}
-                                    </p>
-
-                                    {toDate(commentItem.timestamp) && (
-                                      <p className="text-xs font-medium text-slate-500">
-                                        {formatSmallTime(commentItem.timestamp)}{" "}
-                                        {formatSmallDate(commentItem.timestamp)}
-                                      </p>
-                                    )}
-                                  </div>
-
-                                  <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700">
-                                    {commentItem.text}
-                                  </p>
-                                </div>
-                              </div>
-                            </div>
-                          ))}
-                        </div>
-                      )}
-                    </div>
-
-                    <div className="border-t border-slate-100 bg-white px-6 py-5">
-                      {commentModalMessage && (
-                        <div
-                          className={`mb-4 rounded-2xl border px-4 py-3 text-sm ${
-                            commentModalMessage.type === "success"
-                              ? "border-emerald-200 bg-emerald-50 text-emerald-700"
-                              : commentModalMessage.type === "warning"
-                                ? "border-amber-200 bg-amber-50 text-amber-700"
-                                : "border-rose-200 bg-rose-50 text-rose-700"
-                          }`}
-                        >
-                          {commentModalMessage.text}
-                        </div>
-                      )}
-
-                      <label className="mb-2 block text-sm font-semibold text-slate-900">
-                        Add new comment
-                      </label>
-
-                      <textarea
-                        value={newAdminRemark}
-                        onChange={(event) =>
-                          setNewAdminRemark(event.target.value)
-                        }
-                        placeholder={`Write a comment for ${
-                          selectedCommentRecord.salesPersonName ||
-                          "project owner"
-                        }...`}
-                        rows={4}
-                        className="w-full resize-none rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
-                      />
-
-                      <div className="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={closeProjectCommentsModal}
-                          className="h-10 rounded-full border-slate-200 px-5"
-                        >
-                          Cancel
-                        </Button>
-
-                        <Button
-                          type="button"
-                          disabled={
-                            !newAdminRemark.trim() ||
-                            savingRemarkRecordId ===
-                              String(selectedCommentRecord.id)
-                          }
-                          onClick={handleAddAdminRemark}
-                          className="h-10 rounded-full bg-orange-500 px-5 text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
-                        >
-                          {savingRemarkRecordId ===
-                          String(selectedCommentRecord.id)
-                            ? "Saving..."
-                            : "Save Comment"}
-                        </Button>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              );
-            })()}
-
-          {selectedRecord && (
-            <ViewDetailModal
-              isOpen={viewDetailModalOpen}
-              onClose={() => setViewDetailModalOpen(false)}
-              record={selectedRecord}
-            />
-          )}
         </CardContent>
       </Card>
+
+      {commentModalOpen &&
+        selectedCommentRecord &&
+        (() => {
+          const recordComments = getRecordCommentItems(selectedCommentRecord);
+
+          return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/50 p-4">
+              <div className="flex max-h-[90vh] w-full max-w-2xl flex-col overflow-hidden rounded-[28px] bg-white shadow-2xl">
+                <div className="flex items-start justify-between gap-4 border-b border-slate-100 px-6 py-5">
+                  <div className="min-w-0">
+                    <h2 className="text-xl font-bold text-slate-950">
+                      Project Comments
+                    </h2>
+
+                    <p className="mt-1 text-sm text-slate-500 [overflow-wrap:anywhere]">
+                      {selectedCommentRecord.projectCode || "N/A"} —{" "}
+                      {selectedCommentRecord.projectName || "Untitled Project"}
+                    </p>
+
+                    <p className="mt-1 text-xs text-slate-400">
+                      Project Owner:{" "}
+                      {selectedCommentRecord.salesPersonName || "N/A"}
+                    </p>
+                  </div>
+
+                  <button
+                    type="button"
+                    onClick={closeProjectCommentsModal}
+                    className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-slate-100 text-slate-500 transition hover:bg-slate-200 hover:text-slate-900"
+                  >
+                    <X className="h-4 w-4" />
+                  </button>
+                </div>
+
+                <div className="min-h-0 flex-1 overflow-y-auto px-6 py-5">
+                  {recordComments.length === 0 ? (
+                    <div className="rounded-3xl border border-dashed border-slate-200 bg-slate-50 px-5 py-8 text-center">
+                      <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white shadow-sm">
+                        <MessagesSquare className="h-5 w-5 text-slate-400" />
+                      </div>
+
+                      <p className="font-semibold text-slate-800">
+                        No project comments yet
+                      </p>
+
+                      <p className="mt-1 text-sm text-slate-500">
+                        Add the first comment for this project.
+                      </p>
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {recordComments.map((commentItem) => (
+                        <div
+                          key={commentItem.id}
+                          className="rounded-3xl border border-slate-100 bg-slate-50 p-4"
+                        >
+                          <div className="flex items-start gap-3">
+                            <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-orange-100 text-sm font-bold text-orange-700">
+                              {getInitials(commentItem.userName)}
+                            </div>
+
+                            <div className="min-w-0 flex-1">
+                              <div className="flex flex-wrap items-center justify-between gap-2">
+                                <p className="font-semibold text-slate-900">
+                                  {commentItem.userName}
+                                </p>
+
+                                {toDate(commentItem.timestamp) && (
+                                  <p className="text-xs font-medium text-slate-500">
+                                    {formatSmallTime(commentItem.timestamp)}{" "}
+                                    {formatSmallDate(commentItem.timestamp)}
+                                  </p>
+                                )}
+                              </div>
+
+                              <p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-slate-700 [overflow-wrap:anywhere]">
+                                {commentItem.text}
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+
+                <div className="border-t border-slate-100 bg-white px-6 py-5">
+                  {commentModalMessage && (
+                    <div
+                      className={`mb-4 rounded-2xl border px-4 py-3 text-sm ${
+                        commentModalMessage.type === "success"
+                          ? "border-emerald-200 bg-emerald-50 text-emerald-700"
+                          : commentModalMessage.type === "warning"
+                            ? "border-amber-200 bg-amber-50 text-amber-700"
+                            : "border-rose-200 bg-rose-50 text-rose-700"
+                      }`}
+                    >
+                      {commentModalMessage.text}
+                    </div>
+                  )}
+
+                  <label className="mb-2 block text-sm font-semibold text-slate-900">
+                    Add new comment
+                  </label>
+
+                  <textarea
+                    value={newAdminRemark}
+                    onChange={(event) => setNewAdminRemark(event.target.value)}
+                    placeholder={`Write a comment for ${
+                      selectedCommentRecord.salesPersonName || "project owner"
+                    }...`}
+                    rows={4}
+                    className="w-full resize-none rounded-3xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-900 outline-none transition placeholder:text-slate-400 focus:border-orange-400 focus:bg-white focus:ring-4 focus:ring-orange-100"
+                  />
+
+                  <div className="mt-4 flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
+                    <Button
+                      type="button"
+                      variant="outline"
+                      onClick={closeProjectCommentsModal}
+                      className="h-10 rounded-full border-slate-200 px-5"
+                    >
+                      Cancel
+                    </Button>
+
+                    <Button
+                      type="button"
+                      disabled={
+                        !newAdminRemark.trim() ||
+                        savingRemarkRecordId ===
+                          String(selectedCommentRecord.id)
+                      }
+                      onClick={handleAddAdminRemark}
+                      className="h-10 rounded-full bg-orange-500 px-5 text-white hover:bg-orange-600 disabled:cursor-not-allowed disabled:opacity-50"
+                    >
+                      {savingRemarkRecordId ===
+                      String(selectedCommentRecord.id)
+                        ? "Saving..."
+                        : "Save Comment"}
+                    </Button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
+
+      {selectedRecord && (
+        <ViewDetailModal
+          isOpen={viewDetailModalOpen}
+          onClose={() => setViewDetailModalOpen(false)}
+          record={selectedRecord}
+        />
+      )}
     </div>
   );
 }

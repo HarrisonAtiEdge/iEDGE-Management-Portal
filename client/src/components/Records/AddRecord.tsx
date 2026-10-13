@@ -1745,6 +1745,40 @@ const normalizeDescriptionLineBreaks = (value: string): string => {
   return value.replace(/\r\n?/g, "\n");
 };
 
+// Amounts are kept as plain digit strings in state; commas are only added for
+// display, so totals and saved values never have to strip them back out.
+const formatAmountInput = (value: string): string => {
+  if (!value) return "";
+
+  const [whole, decimal] = value.split(".");
+  const groupedWhole = whole.replace(/\B(?=(\d{3})+(?!\d))/g, ",");
+
+  return decimal === undefined ? groupedWhole : `${groupedWhole}.${decimal}`;
+};
+
+// Adding or removing commas re-renders the input and would throw the caret to
+// the end; put it back after the same number of digits it was behind.
+const keepAmountCaret = (input: HTMLInputElement) => {
+  const caret = input.selectionStart ?? input.value.length;
+  const charsBeforeCaret = input.value
+    .slice(0, caret)
+    .replace(/[^0-9.]/g, "").length;
+
+  requestAnimationFrame(() => {
+    if (document.activeElement !== input) return;
+
+    let position = 0;
+    let seen = 0;
+
+    while (position < input.value.length && seen < charsBeforeCaret) {
+      if (/[0-9.]/.test(input.value[position])) seen++;
+      position++;
+    }
+
+    input.setSelectionRange(position, position);
+  });
+};
+
 const PANEL_ID = "IEDGE-SYSTEM";
 
 const emptyItem: RecordItem = {
@@ -2340,8 +2374,12 @@ export default function Record() {
 
                 <Input
                   id="chequeAmount"
-                  value={chequeAmount}
-                  onChange={(e) => handleChequeAmountChange(e.target.value)}
+                  inputMode="decimal"
+                  value={formatAmountInput(chequeAmount)}
+                  onChange={(e) => {
+                    keepAmountCaret(e.target);
+                    handleChequeAmountChange(e.target.value);
+                  }}
                   placeholder="Enter cheque amount"
                   data-testid="input-cheque-amount"
                 />
@@ -2440,10 +2478,12 @@ export default function Record() {
                     <Label>Amount *</Label>
 
                     <Input
-                      value={item.amount}
-                      onChange={(e) =>
-                        handleItemChange(index, "amount", e.target.value)
-                      }
+                      inputMode="decimal"
+                      value={formatAmountInput(item.amount)}
+                      onChange={(e) => {
+                        keepAmountCaret(e.target);
+                        handleItemChange(index, "amount", e.target.value);
+                      }}
                       placeholder="Enter amount"
                       data-testid={`input-item-amount-${index}`}
                     />
