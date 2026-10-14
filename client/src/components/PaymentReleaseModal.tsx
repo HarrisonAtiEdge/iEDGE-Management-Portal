@@ -11581,6 +11581,7 @@
 import {
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -11644,9 +11645,23 @@ interface PaymentReleaseModalProps<T = any> {
   allowReceiptUpload?: boolean;
   initialPaymentMethod?: "cash" | "cheque" | "bank_transfer" | "wire";
   amountReadOnly?: boolean;
+
+  // Cheque numbers the caller already has loaded from places the modal does
+  // not scan itself (e.g. reimbursements on sales meeting updates).
+  knownChequeNumbers?: string[];
 }
 
 const PANEL_ID = "IEDGE-SYSTEM";
+
+const CHEQUE_SOURCE_COLLECTIONS = [
+  "invoiceRequests",
+  "Record",
+  "payments",
+  "claimReimbursements",
+  "accountStatementManualEntries",
+];
+
+const DUPLICATE_CHEQUE_MESSAGE = "This cheque number already exists.";
 
 type ExtendedPaymentReleaseFormValues = PaymentReleaseFormValues & {
   transactionName: string;
@@ -12130,6 +12145,7 @@ export default function PaymentReleaseModal<T = any>({
   allowReceiptUpload = true,
   initialPaymentMethod,
   amountReadOnly,
+  knownChequeNumbers,
 }: PaymentReleaseModalProps<T>) {
   const { userProfile, currentUser } = useAuth();
 
@@ -12686,18 +12702,35 @@ export default function PaymentReleaseModal<T = any>({
       try {
         setChequeValidationLoading(true);
 
-        const snapshots = await Promise.all([
-          getDocs(collection(db, "Panels", PANEL_ID, "invoiceRequests")),
+        // allSettled: a collection this user can't read shouldn't stop the
+        // others from being checked.
+        const results = await Promise.allSettled(
+          CHEQUE_SOURCE_COLLECTIONS.map((collectionName) =>
+            getDocs(collection(db, "Panels", PANEL_ID, collectionName)),
+          ),
+        );
 
-          getDocs(collection(db, "Panels", PANEL_ID, "Record")),
+        const failed = results.filter(
+          (result) => result.status === "rejected",
+        );
 
-          getDocs(collection(db, "Panels", PANEL_ID, "payments")),
-        ]);
+        if (failed.length === results.length) {
+          throw (failed[0] as PromiseRejectedResult).reason;
+        }
+
+        failed.forEach((result) =>
+          console.warn(
+            "Skipped a collection while loading existing cheque numbers:",
+            (result as PromiseRejectedResult).reason,
+          ),
+        );
 
         const chequeSet = new Set<string>();
 
-        snapshots.forEach((snapshot) => {
-          snapshot.docs.forEach((documentSnapshot) => {
+        results.forEach((result) => {
+          if (result.status !== "fulfilled") return;
+
+          result.value.docs.forEach((documentSnapshot) => {
             const source = {
               id: documentSnapshot.id,
               ...documentSnapshot.data(),
@@ -12741,22 +12774,90 @@ export default function PaymentReleaseModal<T = any>({
     };
   }, [isOpen, toast]);
 
+  const knownChequeNumbersKey = (knownChequeNumbers || []).join("\n");
+
+  const allExistingChequeNumbers = useMemo(() => {
+    const combined = new Set(existingChequeNumbers);
+
+    (knownChequeNumbers || []).forEach((chequeNumber) => {
+      const normalized = normalizeChequeNumber(chequeNumber);
+
+      if (normalized) combined.add(normalized);
+    });
+
+    return combined;
+    // knownChequeNumbersKey stands in for the array so a new array with the
+    // same contents on each parent render doesn't recompute this.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingChequeNumbers, knownChequeNumbersKey]);
+
   const duplicateChequeNumbers = useMemo(() => {
     return getDuplicateChequeNumbers(
       formData.chequeNumbers,
-      existingChequeNumbers,
+      allExistingChequeNumbers,
     );
-  }, [formData.chequeNumbers, existingChequeNumbers]);
+  }, [formData.chequeNumbers, allExistingChequeNumbers]);
 
   const hasDuplicateChequeNumbers = duplicateChequeNumbers.length > 0;
+
+  // Cheque numbers already warned about in this release, so the toast fires
+  // once per number rather than on every keystroke.
+  const notifiedDuplicateChequesRef = useRef<Set<string>>(new Set());
+
+  useEffect(() => {
+    if (isOpen) notifiedDuplicateChequesRef.current = new Set();
+  }, [isOpen]);
+
+  // Warn (without blocking the release) shortly after the user stops typing a
+  // cheque number that is already in the database.
+  useEffect(() => {
+    if (!isOpen || formData.paymentMethod !== "cheque") return;
+
+    const timer = window.setTimeout(() => {
+      const newDuplicates = cleanChequeNumbers(formData.chequeNumbers).filter(
+        (chequeNumber) => {
+          const normalized = normalizeChequeNumber(chequeNumber);
+
+          return (
+            allExistingChequeNumbers.has(normalized) &&
+            !notifiedDuplicateChequesRef.current.has(normalized)
+          );
+        },
+      );
+
+      if (newDuplicates.length === 0) return;
+
+      newDuplicates.forEach((chequeNumber) =>
+        notifiedDuplicateChequesRef.current.add(
+          normalizeChequeNumber(chequeNumber),
+        ),
+      );
+
+      toast({
+        title: "Duplicate cheque number",
+        description: `${DUPLICATE_CHEQUE_MESSAGE} (${newDuplicates.join(
+          ", ",
+        )}) You can still release this payment.`,
+        className: "border-amber-200 bg-amber-50 text-amber-700",
+      });
+    }, 600);
+
+    return () => window.clearTimeout(timer);
+  }, [
+    isOpen,
+    formData.paymentMethod,
+    formData.chequeNumbers,
+    allExistingChequeNumbers,
+    toast,
+  ]);
 
   const getChequeNumberWarning = (chequeNumber: string, index: number) => {
     const normalized = normalizeChequeNumber(chequeNumber);
 
     if (!normalized) return "";
 
-    if (existingChequeNumbers.has(normalized)) {
-      return "This cheque number already exists.";
+    if (allExistingChequeNumbers.has(normalized)) {
+      return DUPLICATE_CHEQUE_MESSAGE;
     }
 
     const appearsInCurrentForm = formData.chequeNumbers.some(
@@ -13339,15 +13440,17 @@ export default function PaymentReleaseModal<T = any>({
 
       const duplicateCheques = getDuplicateChequeNumbers(
         normalizedChequeNumbers,
-        existingChequeNumbers,
+        allExistingChequeNumbers,
       );
 
+      // A warning only: duplicate cheques are allowed, the release continues.
       if (duplicateCheques.length > 0) {
         toast({
           title: "Warning",
           description: `This cheque number already exists: ${duplicateCheques.join(
             ", ",
           )}. Payment will still be saved.`,
+          className: "border-amber-200 bg-amber-50 text-amber-700",
         });
       }
     }

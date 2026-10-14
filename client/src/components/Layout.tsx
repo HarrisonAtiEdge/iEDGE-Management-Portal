@@ -1906,6 +1906,11 @@
 //   );
 // }
 
+
+
+
+
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -1949,6 +1954,7 @@ import {
   WalletCards,
   BookUser,
   CalendarCheck,
+  ClipboardList,
   ReceiptText,
   Search,
   X,
@@ -1960,6 +1966,12 @@ import { NotificationBell } from "@/components/NotificationBell";
 import { useNotifications } from "@/hooks/useNotifications";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { getAllChequeNumbers } from "@/lib/chequeNumbers";
+import {
+  REQUEST_NOTIFICATION_TYPES,
+  getApprovalAccess,
+  subscribeToApprovers,
+  type RequestApprover,
+} from "@/lib/employeeRequests";
 
 const PANEL_ID = "IEDGE-SYSTEM";
 
@@ -2599,6 +2611,7 @@ const LUCIDE_ICONS: Record<string, LucideIcon> = {
   WalletCards,
   BookUser,
   CalendarCheck,
+  ClipboardList,
   ReceiptText,
   TrendingUp,
 };
@@ -2858,6 +2871,49 @@ function ensureReportsTab(items: SidebarItem[]): SidebarItem[] {
   return [reportsItem, ...updated];
 }
 
+// Every user can make requests (leave, salary advance, documents), so the tab
+// is added for all roles after Tasks (or Dashboard) unless the saved sidebar
+// already has it. Its label is set when rendering: "Employee Management" for
+// the main admin and anyone given approve or record access, "Self
+// Management" for everyone else. A saved entry for the old /leave page is
+// replaced.
+function ensureRequestsTab(items: SidebarItem[]): SidebarItem[] {
+  const safeItems = (Array.isArray(items) ? items : []).filter(
+    (item) => item.path !== "/leave",
+  );
+
+  const alreadyExists = safeItems.some(
+    (item) =>
+      item.path === "/requests" ||
+      item.children?.some((child) => child.path === "/requests"),
+  );
+
+  if (alreadyExists) {
+    return safeItems;
+  }
+
+  const requestsItem: SidebarItem = {
+    path: "/requests",
+    label: "Self Management",
+    icon: "ClipboardList",
+  };
+
+  const anchorIndex = [
+    safeItems.findIndex((item) => item.path === "/task-calendar"),
+    safeItems.findIndex((item) => item.path === "/dashboard"),
+  ].find((index) => index >= 0);
+
+  const updated = [...safeItems];
+
+  if (anchorIndex !== undefined) {
+    updated.splice(anchorIndex + 1, 0, requestsItem);
+    return updated;
+  }
+
+  updated.push(requestsItem);
+  return updated;
+}
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
@@ -2888,7 +2944,58 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const effectiveCollapsed = sidebarCollapsed && !sidebarHoverOpen;
 
-  const { unreadCount } = useNotifications();
+  const { notifications } = useNotifications();
+
+  // Unread request notifications (new requests for approvers, decisions for
+  // employees) light the dot on the requests tab; all other unread
+  // notifications keep lighting the Pipeline Management dot.
+  const requestUnreadCount = notifications.filter(
+    (notification) =>
+      !notification.read &&
+      REQUEST_NOTIFICATION_TYPES.includes(notification.type),
+  ).length;
+  const unreadCount = notifications.filter(
+    (notification) =>
+      !notification.read &&
+      !REQUEST_NOTIFICATION_TYPES.includes(notification.type),
+  ).length;
+
+  // Approver assignments decide whether the requests tab reads "Employee
+  // Management" (main admin, approvers and record-only users such as
+  // finance) or "Self Management" (everyone else).
+  const [requestApprovers, setRequestApprovers] = useState<RequestApprover[]>(
+    [],
+  );
+
+  useEffect(() => {
+    if (!searchUserId) {
+      setRequestApprovers([]);
+      return;
+    }
+
+    return subscribeToApprovers(setRequestApprovers);
+  }, [searchUserId]);
+
+  const managesEmployees = getApprovalAccess(
+    searchUserId || "",
+    role,
+    requestApprovers,
+  ).canRecord;
+
+  const navItems = useMemo(
+    () =>
+      sidebarItems.map((item) =>
+        item.path === "/requests"
+          ? {
+              ...item,
+              label: managesEmployees
+                ? "Employee Management"
+                : "Self Management",
+            }
+          : item,
+      ),
+    [sidebarItems, managesEmployees],
+  );
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -3014,6 +3121,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
               finalItems = ensureReportsTab(finalItems);
             }
 
+            finalItems = ensureRequestsTab(finalItems);
+
             setSidebarItems(finalItems);
             setLoading(false);
           },
@@ -3127,10 +3236,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   }, [searchUserId, role]);
 
   useEffect(() => {
-    const emptyChequeData = () =>
-      Object.fromEntries(
-        CHEQUE_SEARCH_SOURCES.map((source) => [source.key, []]),
-      ) as Pick<GlobalSearchData, ChequeSearchKind>;
+    const emptyChequeData = (): Pick<GlobalSearchData, ChequeSearchKind> => ({
+      record: [],
+      payment: [],
+      budgetRequest: [],
+      reimbursement: [],
+      statementEntry: [],
+    });
 
     if (!searchUserId || !role || !chequeSearchActivated) {
       setGlobalSearchData((previous) => ({
@@ -3318,7 +3430,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
     return "Dashboard";
   };
 
-  const pageTitle = getPageTitle(sidebarItems, location);
+  const pageTitle = getPageTitle(navItems, location);
 
   if (loading) {
     return (
@@ -3373,7 +3485,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
         </div>
 
         <nav className="space-y-2 overflow-y-auto">
-          {sidebarItems.map((item) => {
+          {navItems.map((item) => {
             const Icon = getSidebarIcon(item.icon);
             const hasChildren = !!item.children?.length;
             const dropdownKey = `${item.label}-${item.path}`;
@@ -3386,11 +3498,14 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             const isActive = location === item.path || hasActiveChild;
 
             const showDot =
-              unreadCount > 0 &&
-              (item.path === "/sales-management" ||
-                item.children?.some(
-                  (child) => child.path === "/sales-management",
-                ));
+              (unreadCount > 0 &&
+                (item.path === "/sales-management" ||
+                  item.children?.some(
+                    (child) => child.path === "/sales-management",
+                  ))) ||
+              (requestUnreadCount > 0 &&
+                (item.path === "/requests" ||
+                  item.children?.some((child) => child.path === "/requests")));
 
             if (hasChildren) {
               return (
@@ -3478,7 +3593,10 @@ export default function Layout({ children }: { children: React.ReactNode }) {
                         const ChildIcon = getSidebarIcon(child.icon);
 
                         const childShowDot =
-                          unreadCount > 0 && child.path === "/sales-management";
+                          (unreadCount > 0 &&
+                            child.path === "/sales-management") ||
+                          (requestUnreadCount > 0 &&
+                            child.path === "/requests");
 
                         return (
                           <Link key={child.path} href={child.path}>

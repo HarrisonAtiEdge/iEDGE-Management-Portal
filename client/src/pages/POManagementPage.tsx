@@ -17,6 +17,8 @@ import {
   AlertTriangle,
   Banknote,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   Eye,
   FileText,
@@ -30,16 +32,6 @@ import {
   Wallet,
   XCircle,
 } from "lucide-react";
-import {
-  ResponsiveContainer,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
@@ -105,6 +97,7 @@ import {
 
 const PANEL_ID = "IEDGE-SYSTEM";
 const CREATE_PO_ROUTE = "/create-po";
+const PO_RECORDS_PER_PAGE = 10;
 const PURCHASE_ORDER_WORKFLOW_CONFIG_ID = "purchase_order_approval";
 
 const PURCHASE_ORDER_FINANCE_ROLE_KEYS = new Set([
@@ -1203,6 +1196,7 @@ export default function POManagementPage() {
 
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [currentPage, setCurrentPage] = useState(1);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [viewingPO, setViewingPO] = useState<PurchaseOrder | null>(null);
   const [paymentReleaseOpen, setPaymentReleaseOpen] = useState(false);
@@ -1512,57 +1506,6 @@ export default function POManagementPage() {
     return { totalPayable, overDue, open, paid };
   }, [visiblePurchaseOrders]);
 
-  const chartData = useMemo(() => {
-    const grouped = new Map<
-      string,
-      {
-        date: string;
-        totalPayable: number;
-        overDue: number;
-        open: number;
-        paid: number;
-      }
-    >();
-
-    visiblePurchaseOrders.forEach((item) => {
-      const rawDate = item.issueDate || "No Date";
-
-      const label =
-        rawDate === "No Date"
-          ? rawDate
-          : new Date(rawDate).toLocaleDateString("en-GB", {
-              day: "2-digit",
-              month: "short",
-            });
-
-      const existing = grouped.get(label) || {
-        date: label,
-        totalPayable: 0,
-        overDue: 0,
-        open: 0,
-        paid: 0,
-      };
-
-      existing.totalPayable += safeNumber(item.totalAmount);
-
-      if (item.status === "Over Due") {
-        existing.overDue += safeNumber(item.totalAmount);
-      }
-
-      if (item.status === "Open" || item.status === "Draft") {
-        existing.open += safeNumber(item.totalAmount);
-      }
-
-      if (item.status === "Paid") {
-        existing.paid += safeNumber(item.totalAmount);
-      }
-
-      grouped.set(label, existing);
-    });
-
-    return Array.from(grouped.values()).slice(-8);
-  }, [visiblePurchaseOrders]);
-
   const filteredPurchaseOrders = useMemo(() => {
     const search = normalizeText(searchTerm);
     if (!search) return visiblePurchaseOrders;
@@ -1596,6 +1539,26 @@ export default function POManagementPage() {
       return haystack.includes(search);
     });
   }, [visiblePurchaseOrders, searchTerm]);
+
+  const totalPages =
+    Math.ceil(filteredPurchaseOrders.length / PO_RECORDS_PER_PAGE) || 1;
+
+  const paginatedPurchaseOrders = useMemo(
+    () =>
+      filteredPurchaseOrders.slice(
+        (currentPage - 1) * PO_RECORDS_PER_PAGE,
+        currentPage * PO_RECORDS_PER_PAGE,
+      ),
+    [filteredPurchaseOrders, currentPage],
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm]);
+
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
   const getPOWithResolvedWorkflow = (po: PurchaseOrder) => ({
     ...po,
@@ -2345,113 +2308,66 @@ export default function POManagementPage() {
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-        <div className="xl:col-span-5 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Card className="rounded-3xl">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Total Payable
-                    </p>
-                    <p className="text-xl font-bold mt-1">
-                      {formatCurrency(totals.totalPayable)}
-                    </p>
-                  </div>
-                  <Wallet className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-3xl">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Over Due</p>
-                    <p className="text-xl font-bold mt-1">
-                      {formatCurrency(totals.overDue)}
-                    </p>
-                  </div>
-                  <AlertTriangle className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-3xl">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Open / Draft
-                    </p>
-                    <p className="text-xl font-bold mt-1">
-                      {formatCurrency(totals.open)}
-                    </p>
-                  </div>
-                  <FileText className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-3xl">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Paid</p>
-                    <p className="text-xl font-bold mt-1">
-                      {formatCurrency(totals.paid)}
-                    </p>
-                  </div>
-                  <CheckCircle2 className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </Card>
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <Card className="rounded-3xl">
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">
+                Total Payable
+              </p>
+              <p className="text-xl font-bold mt-1">
+                {formatCurrency(totals.totalPayable)}
+              </p>
+            </div>
+            <Wallet className="h-5 w-5" />
           </div>
-        </div>
+        </CardContent>
+      </Card>
 
-        <div className="xl:col-span-7">
-          <Card className="rounded-3xl shadow-sm">
-            <CardHeader>
-              <CardTitle>PO Summary Graph</CardTitle>
-              <CardDescription>
-                Date-wise view of total payable, overdue, open and paid values.
-              </CardDescription>
-            </CardHeader>
+      <Card className="rounded-3xl">
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Over Due</p>
+              <p className="text-xl font-bold mt-1">
+                {formatCurrency(totals.overDue)}
+              </p>
+            </div>
+            <AlertTriangle className="h-5 w-5" />
+          </div>
+        </CardContent>
+      </Card>
 
-            <CardContent>
-              <div className="h-[320px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip
-                      formatter={(value: number) => formatCurrency(value)}
-                    />
-                    <Legend />
-                    <Bar
-                      dataKey="totalPayable"
-                      name="Total Payable"
-                      radius={[8, 8, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="overDue"
-                      name="Over Due"
-                      radius={[8, 8, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="open"
-                      name="Open / Draft"
-                      radius={[8, 8, 0, 0]}
-                    />
-                    <Bar dataKey="paid" name="Paid" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+      <Card className="rounded-3xl">
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">
+                Open / Draft
+              </p>
+              <p className="text-xl font-bold mt-1">
+                {formatCurrency(totals.open)}
+              </p>
+            </div>
+            <FileText className="h-5 w-5" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="rounded-3xl">
+        <CardContent className="p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm text-muted-foreground">Paid</p>
+              <p className="text-xl font-bold mt-1">
+                {formatCurrency(totals.paid)}
+              </p>
+            </div>
+            <CheckCircle2 className="h-5 w-5" />
+          </div>
+        </CardContent>
+      </Card>
       </div>
 
       <Card className="rounded-3xl shadow-sm">
@@ -2500,7 +2416,7 @@ export default function POManagementPage() {
 
               <TableBody>
                 {filteredPurchaseOrders.length > 0 ? (
-                  filteredPurchaseOrders.map((po) => (
+                  paginatedPurchaseOrders.map((po) => (
                     <TableRow key={po.id}>
                       <TableCell className="font-medium">
                         {po.poNumber}
@@ -2742,6 +2658,48 @@ export default function POManagementPage() {
               </TableBody>
             </Table>
           </div>
+
+          {filteredPurchaseOrders.length > 0 && (
+            <div className="mt-4 flex flex-col gap-3 md:flex-row md:items-center md:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Showing {(currentPage - 1) * PO_RECORDS_PER_PAGE + 1}–
+                {Math.min(
+                  currentPage * PO_RECORDS_PER_PAGE,
+                  filteredPurchaseOrders.length,
+                )}{" "}
+                of {filteredPurchaseOrders.length} · Page {currentPage} of{" "}
+                {totalPages}
+              </p>
+
+              <div className="flex items-center gap-2">
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={currentPage === 1}
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.max(prev - 1, 1))
+                  }
+                  className="rounded-xl"
+                >
+                  <ChevronLeft className="mr-1 h-4 w-4" />
+                  Previous
+                </Button>
+
+                <Button
+                  size="sm"
+                  variant="outline"
+                  disabled={currentPage === totalPages}
+                  onClick={() =>
+                    setCurrentPage((prev) => Math.min(prev + 1, totalPages))
+                  }
+                  className="rounded-xl"
+                >
+                  Next
+                  <ChevronRight className="ml-1 h-4 w-4" />
+                </Button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -4091,6 +4091,19 @@ export default function ReimbursementDashboard() {
     ).sort((a, b) => a.localeCompare(b));
   }, [data]);
 
+  // Cheques already used on reimbursements, so the release modal can warn
+  // about duplicates stored on sales meeting updates it doesn't scan itself.
+  const releasedChequeNumbers = useMemo(
+    () =>
+      data.flatMap((item) =>
+        String(item.chequeNumber || "")
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean),
+      ),
+    [data],
+  );
+
   const filteredData = useMemo(() => {
     const query = search.trim().toLowerCase();
     const chequeQuery = chequeFilter.trim().toLowerCase();
@@ -5759,6 +5772,7 @@ export default function ReimbursementDashboard() {
         partyLabel="Claimed By"
         parties={selectedItem?.personName ? [selectedItem.personName] : []}
         initialPaymentMethod="cash"
+        knownChequeNumbers={releasedChequeNumbers}
         buildUpdateData={({ formData, receiptUrl, selectedAccount, actor }) => {
           const chequeNumbers: string[] = Array.isArray(
             (formData as any).chequeNumbers,

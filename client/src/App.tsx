@@ -11,6 +11,7 @@
 // import Login from "@/pages/Login";
 // import Dashboard from "@/pages/Dashboard";
 // import InvoiceRequests from "@/pages/BudgetRequests";
+// import SundryAdjustments from "@/pages/SundryAdjustments";
 // import ExpenseSheets from "@/pages/ExpenseSheets";
 // import Records from "@/pages/Records";
 // import UserManagement from "@/pages/UserManagement";
@@ -52,6 +53,7 @@
 // import AccountStatement from "./pages/AccountStatement";
 // import VendorSummary from "./pages/VendorSummary";
 // import RTDManagement from "./pages/RTDManagement";
+// import Reports from "./pages/Reports";
 
 // function AuthenticatedApp() {
 //   const { currentUser } = useAuth();
@@ -95,6 +97,12 @@
 //         <Route path="/budget-requests">
 //           <ProtectedRoute>
 //             <InvoiceRequests />
+//           </ProtectedRoute>
+//         </Route>
+
+//         <Route path="/sundry-adjustments">
+//           <ProtectedRoute>
+//             <SundryAdjustments />
 //           </ProtectedRoute>
 //         </Route>
 
@@ -296,6 +304,12 @@
 //           </ProtectedRoute>
 //         </Route>
 
+//         <Route path="/reports">
+//           <ProtectedRoute>
+//             <Reports />
+//           </ProtectedRoute>
+//         </Route>
+
 //         <Route component={NotFound} />
 //       </Switch>
 //     </Layout>
@@ -373,6 +387,7 @@ import AccountStatement from "./pages/AccountStatement";
 import VendorSummary from "./pages/VendorSummary";
 import RTDManagement from "./pages/RTDManagement";
 import Reports from "./pages/Reports";
+import EmployeeRequests from "./pages/EmployeeRequests";
 
 function AuthenticatedApp() {
   const { currentUser } = useAuth();
@@ -627,6 +642,16 @@ function AuthenticatedApp() {
           <ProtectedRoute>
             <Reports />
           </ProtectedRoute>
+        </Route>
+
+        <Route path="/requests">
+          <ProtectedRoute>
+            <EmployeeRequests />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/leave">
+          <Redirect to="/requests" />
         </Route>
 
         <Route component={NotFound} />
