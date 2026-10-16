@@ -25,7 +25,6 @@ import {
   REQUEST_STATUS_STYLES,
   cancelRequest,
   canReviewRequest,
-  datesOverlap,
   describeRequest,
   formatDateRange,
   formatDateValue,
@@ -37,6 +36,7 @@ import {
   getLeaveType,
   getRequestTitle,
   isLeaveRecordUpdated,
+  isTimeOff,
   isPaidLeaveType,
   leaveCoversDay,
   mapRequest,
@@ -83,6 +83,8 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import ApproverSettings from "@/components/EmployeeRequests/ApproverSettings";
+import AttendancePanel from "@/components/EmployeeRequests/AttendancePanel";
+import { canManageAttendance } from "@/lib/attendance";
 import LeaveBalancePanel from "@/components/EmployeeRequests/LeaveBalancePanel";
 import LeaveCalendar from "@/components/EmployeeRequests/LeaveCalendar";
 import LeaveRecordsPanel from "@/components/EmployeeRequests/LeaveRecordsPanel";
@@ -96,7 +98,13 @@ import {
   fieldLabelClass,
 } from "@/components/EmployeeRequests/shared";
 
-type TabKey = "approvals" | "calendar" | "mine" | "absences" | "approvers";
+type TabKey =
+  | "approvals"
+  | "calendar"
+  | "mine"
+  | "attendance"
+  | "absences"
+  | "approvers";
 type KindFilter = RequestKind | "all";
 type StatusFilter = RequestStatus | "all";
 
@@ -347,7 +355,9 @@ export default function EmployeeRequests() {
 
     const approvedToday = teamLeave.filter(
       (request) =>
-        request.status === "approved" && leaveCoversDay(request, today),
+        request.status === "approved" &&
+        isTimeOff(request) &&
+        leaveCoversDay(request, today),
     );
 
     return {
@@ -423,20 +433,6 @@ export default function EmployeeRequests() {
     value === "all"
       ? requests.length
       : requests.filter((request) => key(request) === value).length;
-
-  // Teammates already approved off (not working from home) during the same
-  // dates as a leave request.
-  const getOverlapping = (request: EmployeeRequest) =>
-    request.kind === "leave"
-      ? teamLeave.filter(
-          (other) =>
-            other.id !== request.id &&
-            other.userId !== request.userId &&
-            other.status === "approved" &&
-            getLeaveType(other.leaveType).countsAsLeave &&
-            datesOverlap(request, other),
-        )
-      : [];
 
   // For a pending paid leave: the employee's balance before it, or why it
   // goes over.
@@ -570,7 +566,6 @@ export default function EmployeeRequests() {
       request={request}
       showUser={options.showUser}
       showKind={options.showKind}
-      overlapping={options.showUser ? getOverlapping(request) : []}
       balanceNote={options.showUser ? getBalanceNote(request) : undefined}
       canReview={canReview(request)}
       canCancel={request.userId === userId && request.status === "pending"}
@@ -604,6 +599,7 @@ export default function EmployeeRequests() {
       : []),
     { key: "calendar", label: "Calendar" },
     { key: "mine", label: "My Requests", count: myRequests.length },
+    { key: "attendance", label: "Attendance" },
     ...(canRecord
       ? [{ key: "absences" as const, label: "Leave Records" }]
       : []),
@@ -965,6 +961,17 @@ export default function EmployeeRequests() {
               </>
             )}
           </div>
+        )}
+
+        {/* Attendance: own check-ins, or everyone's for the main admin,
+            finance and financial admins */}
+        {activeTab === "attendance" && (
+          <AttendancePanel
+            userId={userId}
+            actor={actor}
+            canManage={canManageAttendance(role)}
+            leaveRequests={leaveRequests}
+          />
         )}
 
         {/* Approvers (main admin) */}

@@ -19,6 +19,7 @@ import {
 import {
   formatDateValue,
   isApproverActive,
+  hasBuiltInRequestAccess,
   isMainAdmin,
   normalizeDepartment,
   removeApprover,
@@ -156,8 +157,10 @@ export default function ApproverSettings({
       ? "all departments"
       : approver.departments.map(departmentName).join(", ");
 
-  // Main admins already review everything.
-  const selectableUsers = users.filter((user) => !isMainAdmin(user.role));
+  // Main admins, finance and financial admins already review everything.
+  const selectableUsers = users.filter(
+    (user) => !isMainAdmin(user.role) && !hasBuiltInRequestAccess(user.role),
+  );
   const today = toDateValue(new Date());
 
   const sortedApprovers = [...approvers].sort(
@@ -477,10 +480,11 @@ export default function ApproverSettings({
           </div>
           <div>
             <div className="text-sm font-bold text-slate-950">
-              Main admin · All departments
+              Main admin, Finance & Financial admin · All departments
             </div>
             <div className="text-xs text-slate-500">
-              Always receives and can approve every request.
+              Always receive and can approve every request and record
+              absences. Nobody but the main admin approves their own.
             </div>
           </div>
         </div>

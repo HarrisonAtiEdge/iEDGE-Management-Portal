@@ -17,7 +17,8 @@ export default function LeaveBalancePanel({
   const nothingYet =
     balance.leaveTaken === 0 &&
     PAID_LEAVE_TYPES.every((type) => balance.types[type].pending === 0);
-  const unpaidDays = balance.absentUnpaid + balance.unpaidTaken;
+  const unpaidDays =
+    balance.absentUnpaid + balance.lateUnpaid + balance.unpaidTaken;
 
   return (
     <div className={`${panelClass} p-5 md:p-6`}>
@@ -52,7 +53,8 @@ export default function LeaveBalancePanel({
                   {leaveType.label}
                 </span>
                 <span className="text-xs font-semibold text-slate-500">
-                  {item.approved + item.absent} / {item.entitlement} taken
+                  {item.approved + item.absent + item.late} /{" "}
+                  {item.entitlement} taken
                 </span>
               </div>
 
@@ -77,6 +79,11 @@ export default function LeaveBalancePanel({
                 {item.absent > 0 && (
                   <span className="font-medium text-red-700">
                     {item.absent} absent
+                  </span>
+                )}
+                {item.late > 0 && (
+                  <span className="font-medium text-stone-700">
+                    {item.late} late deduction
                   </span>
                 )}
                 {item.pending > 0 && <span>{item.pending} pending</span>}

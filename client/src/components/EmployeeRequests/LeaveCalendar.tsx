@@ -15,6 +15,7 @@ import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   LEAVE_TYPES,
+  isTimeOff,
   REQUEST_STATUS_STYLES,
   formatDateRange,
   formatDateValue,
@@ -50,7 +51,8 @@ export default function LeaveCalendar({
     () =>
       requests.filter(
         (request) =>
-          request.status === "approved" || request.status === "pending",
+          (request.status === "approved" || request.status === "pending") &&
+          isTimeOff(request),
       ),
     [requests],
   );
@@ -270,7 +272,7 @@ export default function LeaveCalendar({
         </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-x-5 gap-y-2 text-xs text-slate-500">
-          {LEAVE_TYPES.map((type) => (
+          {LEAVE_TYPES.filter((type) => !type.deductionOnly).map((type) => (
             <span key={type.value} className="inline-flex items-center gap-1.5">
               <span className={`h-2.5 w-2.5 rounded-full ${type.dot}`} />
               {type.label}

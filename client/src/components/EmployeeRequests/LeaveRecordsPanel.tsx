@@ -196,7 +196,8 @@ export default function LeaveRecordsPanel({
                         />
                         {getLeaveType(type).label.replace(" Leave", "")}{" "}
                         <span className="font-bold text-slate-900">
-                          {item.approved + item.absent}/{item.entitlement}
+                          {item.approved + item.absent + item.late}/
+                          {item.entitlement}
                         </span>
                       </span>
                     );

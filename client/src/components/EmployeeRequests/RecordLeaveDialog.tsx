@@ -59,7 +59,7 @@ function TakenSummary({ balance }: { balance: LeaveBalance }) {
       <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
         {PAID_LEAVE_TYPES.map((type) => {
           const item = balance.types[type];
-          const taken = item.approved + item.absent;
+          const taken = item.approved + item.absent + item.late;
 
           return (
             <div key={type} className="rounded-xl bg-slate-50 px-3 py-2.5">
@@ -89,7 +89,8 @@ function TakenSummary({ balance }: { balance: LeaveBalance }) {
             {balance.absentDays} absent
           </div>
           <div className="text-[11px] text-red-700">
-            {balance.absentUnpaid + balance.unpaidTaken} unpaid
+            {balance.absentUnpaid + balance.lateUnpaid + balance.unpaidTaken}{" "}
+            unpaid
           </div>
         </div>
       </div>

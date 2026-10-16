@@ -68,12 +68,13 @@ export const requestsCollection = (kind: RequestKind) =>
 // Approvers
 // ---------------------------------------------------------------------------
 
-// The main admin reviews every request. They can also give any other user
-// access for some departments, or all of them, optionally until a given date:
-// either to approve requests and record absences, or only to record absences
-// (e.g. finance, for payroll). A department is an employee's role (sales,
-// finance, operation, ...). Nobody can approve their own request except the
-// main admin.
+// The main admin reviews every request. Finance and financial admins do too,
+// for every department, as a built-in part of their role. The main admin can
+// also give any other user access for some departments, or all of them,
+// optionally until a given date: either to approve requests and record
+// absences, or only to record absences. A department is an employee's role
+// (sales, finance, operation, ...). Nobody can approve their own request
+// except the main admin.
 
 export const MAIN_ADMIN_ROLE = "main_admin";
 
@@ -84,6 +85,12 @@ export const normalizeDepartment = (value?: string | null) =>
 
 export const isMainAdmin = (role?: string | null) =>
   normalizeDepartment(role) === MAIN_ADMIN_ROLE;
+
+// Roles that approve requests and record absences for every department.
+export const BUILT_IN_APPROVER_ROLES = ["finance", "financial_admin"];
+
+export const hasBuiltInRequestAccess = (role?: string | null) =>
+  BUILT_IN_APPROVER_ROLES.includes(normalizeDepartment(role));
 
 export interface RequestApprover {
   userId: string;
@@ -150,14 +157,16 @@ export const approverCoversDepartment = (
   approver.allDepartments ||
   approver.departments.includes(normalizeDepartment(department));
 
-// What a user may do: everything for the main admin, otherwise what their
-// active assignment (if any) allows, for its departments.
+// What a user may do: everything for the main admin, finance and financial
+// admins, otherwise what their active assignment (if any) allows, for its
+// departments.
 export function getApprovalAccess(
   userId: string,
   role: string | null | undefined,
   approvers: RequestApprover[],
 ) {
   const mainAdmin = isMainAdmin(role);
+  const fullAccess = mainAdmin || hasBuiltInRequestAccess(role);
   const assignment = approvers.find(
     (approver) => approver.userId === userId && isApproverActive(approver),
   );
@@ -165,13 +174,13 @@ export function getApprovalAccess(
   return {
     isMainAdmin: mainAdmin,
     // Receives and approves requests.
-    isApprover: mainAdmin || Boolean(assignment?.canApprove),
+    isApprover: fullAccess || Boolean(assignment?.canApprove),
     // Records absences and past leave; sees the team in their departments.
-    canRecord: mainAdmin || Boolean(assignment),
+    canRecord: fullAccess || Boolean(assignment),
     assignment,
     // Whether employees in this department are in their scope.
     coversDepartment: (department?: string | null) =>
-      mainAdmin ||
+      fullAccess ||
       Boolean(assignment && approverCoversDepartment(assignment, department)),
   };
 }
@@ -313,6 +322,7 @@ export type LeaveType =
   | "unpaid"
   | "other"
   | "absent"
+  | "late_deduction"
   | "work_from_home"
   | "short_leave";
 
@@ -324,6 +334,9 @@ export const LEAVE_TYPES: Array<{
   countsAsLeave: boolean;
   // Only recorded by an admin, never requested by the employee.
   recordOnly?: boolean;
+  // Takes days from the balance without the employee being away (late
+  // coming deductions): not shown on the calendar, doesn't block leave.
+  deductionOnly?: boolean;
   chip: string;
   bar: string;
   dot: string;
@@ -379,6 +392,16 @@ export const LEAVE_TYPES: Array<{
     dot: "bg-red-700",
   },
   {
+    value: "late_deduction",
+    label: "Late Deduction",
+    countsAsLeave: false,
+    recordOnly: true,
+    deductionOnly: true,
+    chip: "bg-stone-100 text-stone-700 ring-stone-200",
+    bar: "bg-stone-500",
+    dot: "bg-stone-500",
+  },
+  {
     value: "short_leave",
     label: "Short Leave",
     countsAsLeave: false,
@@ -410,6 +433,11 @@ export const RECORDABLE_LEAVE_TYPES = LEAVE_TYPES.filter(
 export const getLeaveType = (value?: string) =>
   LEAVE_TYPES.find((type) => type.value === value) ||
   LEAVE_TYPES.find((type) => type.value === "other")!;
+
+// Whether the entry means the employee was actually away (everything except
+// late coming deductions).
+export const isTimeOff = (request: { leaveType: string }) =>
+  !getLeaveType(request.leaveType).deductionOnly;
 
 // A single-day leave can be taken as a half day.
 export type LeaveDayPortion = "full" | "first_half" | "second_half";
@@ -723,6 +751,7 @@ export function findLeaveClash(
     if (other.status !== "pending" && other.status !== "approved") {
       return false;
     }
+    if (!isTimeOff(other) || !isTimeOff(candidate)) return false;
     if (!datesOverlap(candidate, other)) return false;
 
     const candidateShort = candidate.leaveType === "short_leave";
@@ -778,12 +807,17 @@ export interface LeaveBalance {
       pending: number;
       // Absent days taken from this balance.
       absent: number;
+      // Late coming deductions taken from this balance.
+      late: number;
       remaining: number;
     }
   >;
   absentDays: number;
   // Absent days beyond the paid balances.
   absentUnpaid: number;
+  // Late coming deductions, and the part beyond casual leave (unpaid).
+  lateDays: number;
+  lateUnpaid: number;
   // Approved unpaid and other leave (not taken from paid leave).
   unpaidTaken: number;
   // Approved days off this year, absences included.
@@ -794,6 +828,7 @@ export interface LeaveBalance {
 
 // An employee's balances for a year (leave counts in the year it starts).
 // Absences come out of annual leave first, then casual, then are unpaid.
+// Late coming deductions come out of casual leave, then are unpaid.
 // excludeId leaves one entry out, e.g. the one being edited.
 export function getLeaveBalance(
   requests: LeaveRequest[],
@@ -834,6 +869,17 @@ export function getLeaveBalance(
     sick: 0,
   };
 
+  const lateDays = sum("late_deduction", "approved");
+  const lateFromCasual = Math.min(
+    lateDays,
+    Math.max(0, LEAVE_ENTITLEMENTS.casual - used("casual") - fromCasual),
+  );
+  const lateFrom: Record<PaidLeaveType, number> = {
+    annual: 0,
+    casual: lateFromCasual,
+    sick: 0,
+  };
+
   const types = {} as LeaveBalance["types"];
   PAID_LEAVE_TYPES.forEach((type) => {
     types[type] = {
@@ -841,9 +887,13 @@ export function getLeaveBalance(
       approved: sum(type, "approved"),
       pending: sum(type, "pending"),
       absent: absentFrom[type],
+      late: lateFrom[type],
       remaining: Math.max(
         0,
-        LEAVE_ENTITLEMENTS[type] - used(type) - absentFrom[type],
+        LEAVE_ENTITLEMENTS[type] -
+          used(type) -
+          absentFrom[type] -
+          lateFrom[type],
       ),
     };
   });
@@ -853,6 +903,8 @@ export function getLeaveBalance(
     types,
     absentDays,
     absentUnpaid: absentDays - fromAnnual - fromCasual,
+    lateDays,
+    lateUnpaid: lateDays - lateFromCasual,
     unpaidTaken: sum("unpaid", "approved") + sum("other", "approved"),
     leaveTaken: active
       .filter(
@@ -1154,8 +1206,8 @@ export type RequestActor = {
   role?: string;
 };
 
-// Main admins, plus active approvers whose departments include the
-// employee's, are told about a new request.
+// Main admins, finance and financial admins, plus active approvers whose
+// departments include the employee's, are told about a new request.
 async function notifyApprovers(
   actor: RequestActor,
   requestId: string,
@@ -1170,7 +1222,11 @@ async function notifyApprovers(
 
     const recipients = new Set<string>(
       users.docs
-        .filter((userDoc) => isMainAdmin(userDoc.data().role))
+        .filter(
+          (userDoc) =>
+            isMainAdmin(userDoc.data().role) ||
+            hasBuiltInRequestAccess(userDoc.data().role),
+        )
         .map((userDoc) => userDoc.id),
     );
 
