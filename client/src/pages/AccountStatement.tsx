@@ -4,10 +4,8 @@
 //   collection,
 //   deleteDoc,
 //   doc,
-//   getDoc,
 //   getDocs,
 //   serverTimestamp,
-//   setDoc,
 // } from "firebase/firestore";
 // import { db } from "@/lib/firebase";
 // import { useAuth } from "@/contexts/AuthContext";
@@ -34,11 +32,11 @@
 // import {
 //   ArrowDownCircle,
 //   ArrowUpCircle,
+//   CalendarDays,
 //   Download,
 //   Plus,
 //   RefreshCw,
 //   RotateCcw,
-//   Save,
 //   Search,
 //   Trash2,
 //   Wallet,
@@ -70,6 +68,9 @@
 //   balance?: number;
 //   sequenceValue?: number;
 //   manualDocId?: string;
+//   // Dated before its account's opening balance date (already included in
+//   // the opening balance); only shown when a date filter is used.
+//   beforeOpening?: boolean;
 // };
 
 // type ManualEntryForm = {
@@ -196,12 +197,21 @@
 //   b: StatementRow,
 //   order: ExportOrder,
 // ) => {
+//   // The opening balance sits after transactions from before it and ahead of
+//   // everything else.
 //   if (a.source === "opening" && b.source !== "opening") {
-//     return order === "ascending" ? -1 : 1;
+//     const openingFirst = !b.beforeOpening;
+//     return (order === "ascending") === openingFirst ? -1 : 1;
 //   }
 
 //   if (b.source === "opening" && a.source !== "opening") {
-//     return order === "ascending" ? 1 : -1;
+//     const openingFirst = !a.beforeOpening;
+//     return (order === "ascending") === openingFirst ? 1 : -1;
+//   }
+
+//   if (Boolean(a.beforeOpening) !== Boolean(b.beforeOpening)) {
+//     const beforeFirst = a.beforeOpening ? -1 : 1;
+//     return order === "ascending" ? beforeFirst : -beforeFirst;
 //   }
 
 //   const sequenceDiff = getRowSequenceValue(a) - getRowSequenceValue(b);
@@ -606,10 +616,12 @@
 //   title,
 //   value,
 //   icon,
+//   subtitle,
 // }: {
 //   title: string;
 //   value: string;
 //   icon: ReactNode;
+//   subtitle?: string;
 // }) {
 //   return (
 //     <Card className="border-slate-200 shadow-sm">
@@ -617,6 +629,9 @@
 //         <div>
 //           <p className="text-sm text-slate-500">{title}</p>
 //           <p className="mt-2 text-2xl font-semibold text-slate-950">{value}</p>
+//           {subtitle && (
+//             <p className="mt-1 text-xs text-slate-500">{subtitle}</p>
+//           )}
 //         </div>
 
 //         <div className="rounded-2xl bg-slate-100 p-3 text-slate-700">
@@ -631,17 +646,7 @@
 //   const { currentUser, userProfile } = useAuth();
 
 //   const [loading, setLoading] = useState(true);
-//   const [savingOpening, setSavingOpening] = useState(false);
 //   const [savingManual, setSavingManual] = useState(false);
-
-//   const [openingBalance, setOpeningBalance] = useState<OpeningBalance>({
-//     amount: 0,
-//     date: new Date().toISOString().slice(0, 10),
-//   });
-//   const [openingAmountInput, setOpeningAmountInput] = useState("0");
-//   const [openingDateInput, setOpeningDateInput] = useState(
-//     new Date().toISOString().slice(0, 10),
-//   );
 
 //   const [rows, setRows] = useState<StatementRow[]>([]);
 //   const [manualDialogOpen, setManualDialogOpen] = useState(false);
@@ -652,7 +657,9 @@
 //   const [dateTo, setDateTo] = useState("");
 //   const [projectCodeFilter, setProjectCodeFilter] = useState("");
 //   const [accounts, setAccounts] = useState<PaymentAccount[]>([]);
-//   const [accountFilter, setAccountFilter] = useState(ALL_ACCOUNTS);
+//   // null until the user picks an account: the statement then shows the
+//   // default account (the first one added).
+//   const [accountFilter, setAccountFilter] = useState<string | null>(null);
 //   const [pageOrder, setPageOrder] = useState<ExportOrder>("descending");
 //   const [exportDialogOpen, setExportDialogOpen] = useState(false);
 
@@ -674,28 +681,6 @@
 
 //     try {
 //       const projectCodeLookup: ProjectCodeLookup = new Map();
-
-//       const settingsRef = doc(
-//         db,
-//         "Panels",
-//         PANEL_ID,
-//         "accountStatementSettings",
-//         "main",
-//       );
-//       const settingsSnap = await getDoc(settingsRef);
-//       const settingsData = settingsSnap.exists() ? settingsSnap.data() : {};
-
-//       const savedOpening: OpeningBalance = {
-//         amount: toNumber(settingsData?.openingBalance),
-//         date:
-//           toDateInputValue(settingsData?.openingBalanceDate) ||
-//           String(settingsData?.openingBalanceDate || "") ||
-//           new Date().toISOString().slice(0, 10),
-//       };
-
-//       setOpeningBalance(savedOpening);
-//       setOpeningAmountInput(String(savedOpening.amount));
-//       setOpeningDateInput(savedOpening.date);
 
 //       // Accounts from the Accounts tab. Record cheques are saved against the
 //       // older cheque/online account collections, so those are matched back
@@ -1376,28 +1361,106 @@
 //     [accounts],
 //   );
 
-//   const selectedAccount =
-//     accountFilter === ALL_ACCOUNTS
-//       ? null
-//       : accountMap.get(accountFilter) || null;
+//   // The statement opens on the first account added (earliest createdAt);
+//   // "All accounts" is still available in the selector.
+//   const defaultAccountFilter = useMemo(() => {
+//     if (accounts.length === 0) return ALL_ACCOUNTS;
 
-//   // "All accounts" uses the company opening balance saved on this page; a
-//   // single account starts from the opening balance set in the Accounts tab.
+//     const [firstAdded] = [...accounts].sort((a, b) => {
+//       const aTime = toDateValue(a.createdAt) || Number.MAX_SAFE_INTEGER;
+//       const bTime = toDateValue(b.createdAt) || Number.MAX_SAFE_INTEGER;
+//       return aTime - bTime;
+//     });
+
+//     return firstAdded.id;
+//   }, [accounts]);
+
+//   const activeAccountFilter = accountFilter ?? defaultAccountFilter;
+
+//   const selectedAccount =
+//     activeAccountFilter === ALL_ACCOUNTS
+//       ? null
+//       : accountMap.get(activeAccountFilter) || null;
+
+//   // Opening balances are set per account in the Accounts tab. A single
+//   // account starts from its own; "All accounts" starts from their total,
+//   // dated from the earliest account opening.
 //   const effectiveOpening = useMemo<OpeningBalance>(() => {
-//     if (!selectedAccount) return openingBalance;
+//     const getOpeningDate = (account: PaymentAccount) =>
+//       account.openingBalanceDate || toDateInputValue(account.createdAt);
+
+//     if (selectedAccount) {
+//       return {
+//         amount: toNumber(selectedAccount.openingBalance),
+//         date: getOpeningDate(selectedAccount),
+//       };
+//     }
+
+//     const openingDates = accounts
+//       .map(getOpeningDate)
+//       .filter(Boolean)
+//       .sort((a, b) => a.localeCompare(b));
 
 //     return {
-//       amount: toNumber(selectedAccount.openingBalance),
-//       date: toDateInputValue(selectedAccount.createdAt),
+//       amount: accounts.reduce(
+//         (sum, account) => sum + toNumber(account.openingBalance),
+//         0,
+//       ),
+//       date: openingDates[0] || "",
 //     };
-//   }, [selectedAccount, openingBalance]);
+//   }, [selectedAccount, accounts]);
+
+//   // The opening balance date set in the Accounts tab (the earliest one across
+//   // accounts for "All accounts"); "" when none is set.
+//   const openingBalanceDate = useMemo(() => {
+//     const dates = (selectedAccount ? [selectedAccount] : accounts)
+//       .map((account) => account.openingBalanceDate || "")
+//       .filter(Boolean)
+//       .sort((a, b) => a.localeCompare(b));
+
+//     return dates[0] || "";
+//   }, [selectedAccount, accounts]);
 
 //   const balancedRows = useMemo(() => {
-//     const scopedRows = rows.filter((row) =>
+//     // An account's opening balance is its balance on the opening balance
+//     // date, so earlier transactions on that account are already included in
+//     // it (matching the balances on the Accounts Dashboard). Undated rows are
+//     // always kept.
+//     const isBeforeAccountOpening = (row: StatementRow) => {
+//       const openingDay = row.accountId
+//         ? accountMap.get(row.accountId)?.openingBalanceDate || ""
+//         : "";
+
+//       return Boolean(openingDay && row.date && row.date < openingDay);
+//     };
+
+//     const accountRows = rows.filter((row) =>
 //       selectedAccount
 //         ? row.accountId === selectedAccount.id
 //         : row.source !== "account_transfer",
 //     );
+//     const scopedRows = accountRows.filter(
+//       (row) => !isBeforeAccountOpening(row),
+//     );
+
+//     // Earlier transactions are only listed when a date filter is used to look
+//     // back past the opening date. Their balances are worked backwards from
+//     // the opening balance, which already includes them.
+//     const earlierRows: StatementRow[] = [];
+//     if (dateFrom || dateTo) {
+//       let balanceAfter = effectiveOpening.amount;
+//       const beforeOpening = accountRows.filter(isBeforeAccountOpening);
+
+//       for (let index = beforeOpening.length - 1; index >= 0; index -= 1) {
+//         const row = beforeOpening[index];
+//         earlierRows.unshift({
+//           ...row,
+//           beforeOpening: true,
+//           balance: balanceAfter,
+//         });
+//         balanceAfter -= toNumber(row.credit) - toNumber(row.debit);
+//       }
+//     }
 
 //     const openingRow: StatementRow = {
 //       id: "opening-balance",
@@ -1418,20 +1481,21 @@
 
 //     let runningBalance = effectiveOpening.amount;
 //     return [
+//       ...earlierRows,
 //       openingRow,
 //       ...scopedRows.map((row) => {
 //         runningBalance += toNumber(row.credit) - toNumber(row.debit);
 //         return { ...row, balance: runningBalance };
 //       }),
 //     ];
-//   }, [rows, selectedAccount, effectiveOpening]);
+//   }, [rows, selectedAccount, accountMap, effectiveOpening, dateFrom, dateTo]);
 
 //   const hasActiveFilters = Boolean(
 //     search.trim() ||
 //       dateFrom ||
 //       dateTo ||
 //       projectCodeFilter.trim() ||
-//       selectedAccount,
+//       activeAccountFilter !== defaultAccountFilter,
 //   );
 
 //   const filteredRows = useMemo(() => {
@@ -1597,41 +1661,11 @@
 //   }, [filteredRows, effectiveOpening.amount]);
 
 //   const resetFilters = () => {
-//     setAccountFilter(ALL_ACCOUNTS);
+//     setAccountFilter(null);
 //     setSearch("");
 //     setDateFrom("");
 //     setDateTo("");
 //     setProjectCodeFilter("");
-//   };
-
-//   const saveOpeningBalance = async () => {
-//     try {
-//       setSavingOpening(true);
-
-//       const amount = toNumber(openingAmountInput);
-//       const date = openingDateInput || new Date().toISOString().slice(0, 10);
-
-//       await setDoc(
-//         doc(db, "Panels", PANEL_ID, "accountStatementSettings", "main"),
-//         {
-//           openingBalance: amount,
-//           openingBalanceDate: date,
-//           updatedAt: serverTimestamp(),
-//           updatedBy:
-//             userProfile?.displayName || currentUser?.email || "Unknown",
-//           updatedById: currentUser?.uid || "",
-//         },
-//         { merge: true },
-//       );
-
-//       setOpeningBalance({ amount, date });
-//       await loadStatement();
-//     } catch (error) {
-//       console.error("Failed to save opening balance:", error);
-//       alert("Failed to save opening balance.");
-//     } finally {
-//       setSavingOpening(false);
-//     }
 //   };
 
 //   const saveManualEntry = async () => {
@@ -1768,7 +1802,19 @@
 //         </div>
 //       </div>
 
-//       <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+//       <div className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+//         <StatCard
+//           title="Opening Balance"
+//           value={`Rs ${formatCurrency(effectiveOpening.amount)}`}
+//           subtitle={
+//             openingBalanceDate
+//               ? `${selectedAccount ? "As of" : "Earliest:"} ${formatDate(
+//                   openingBalanceDate,
+//                 )}`
+//               : "No opening balance date set"
+//           }
+//           icon={<CalendarDays className="h-5 w-5" />}
+//         />
 //         <StatCard
 //           title={hasActiveFilters ? "Filtered Debit" : "Total Debit"}
 //           value={`Rs ${formatCurrency(totals.debit)}`}
@@ -1785,59 +1831,6 @@
 //           icon={<Wallet className="h-5 w-5" />}
 //         />
 //       </div>
-
-//       <Card className="border-slate-200 shadow-sm">
-//         <CardContent className="p-5">
-//           <div className="mb-4">
-//             <h2 className="text-base font-semibold text-slate-950">
-//               Opening Balance
-//             </h2>
-//             <p className="mt-1 text-sm text-slate-500">
-//               This value is saved in Firebase and used as the first balance in
-//               the statement.
-//             </p>
-//             {selectedAccount && (
-//               <p className="mt-1 text-sm text-amber-600">
-//                 Viewing {getAccountLabel(selectedAccount)}: its statement starts
-//                 from the opening balance set in the Accounts tab (Rs{" "}
-//                 {formatCurrency(effectiveOpening.amount)}), not this value.
-//               </p>
-//             )}
-//           </div>
-
-//           <div className="grid grid-cols-1 gap-4 md:grid-cols-[180px_1fr_auto] md:items-end">
-//             <div>
-//               <Label>Date</Label>
-//               <Input
-//                 type="date"
-//                 value={openingDateInput}
-//                 onChange={(event) => setOpeningDateInput(event.target.value)}
-//                 className="mt-2"
-//               />
-//             </div>
-
-//             <div>
-//               <Label>Opening Balance Amount</Label>
-//               <Input
-//                 type="number"
-//                 value={openingAmountInput}
-//                 onChange={(event) => setOpeningAmountInput(event.target.value)}
-//                 className="mt-2"
-//                 placeholder="Enter opening balance"
-//               />
-//             </div>
-
-//             <Button
-//               onClick={saveOpeningBalance}
-//               disabled={savingOpening}
-//               className="gap-2"
-//             >
-//               <Save className="h-4 w-4" />
-//               {savingOpening ? "Saving..." : "Save"}
-//             </Button>
-//           </div>
-//         </CardContent>
-//       </Card>
 
 //       <Card className="border-slate-200 shadow-sm">
 //         <CardContent className="p-5">
@@ -1867,7 +1860,10 @@
 //           <div className="mb-5 grid grid-cols-1 gap-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 md:grid-cols-2 lg:grid-cols-[1.4fr_1fr_1fr_1fr_auto] lg:items-end">
 //             <div>
 //               <Label>Account</Label>
-//               <Select value={accountFilter} onValueChange={setAccountFilter}>
+//               <Select
+//                 value={activeAccountFilter}
+//                 onValueChange={setAccountFilter}
+//               >
 //                 <SelectTrigger className="mt-2 bg-white">
 //                   <SelectValue placeholder="All Accounts" />
 //                 </SelectTrigger>
@@ -2051,6 +2047,11 @@
 //                               <span>
 //                                 {" · "}
 //                                 {getAccountLabel(accountMap.get(row.accountId))}
+//                               </span>
+//                             )}
+//                             {row.beforeOpening && (
+//                               <span className="ml-2 rounded-full bg-amber-50 px-2 py-0.5 font-medium text-amber-700">
+//                                 Before opening balance
 //                               </span>
 //                             )}
 //                           </div>
@@ -2366,6 +2367,7 @@ type StatementSource =
   | "opening"
   | "invoice_payment"
   | "budget_request"
+  | "purchase_order"
   | "reimbursement"
   | "record"
   | "manual"
@@ -3298,6 +3300,123 @@ export default function AccountStatement() {
         });
       });
 
+      // Purchase order payments (from the PO page and RTGS letters). Vendor
+      // manual payments also write one summary Record (listed below), so their
+      // per-PO entries are skipped here to avoid showing the payment twice.
+      const requestsById = new Map<string, any>();
+      const requestsByNumber = new Map<string, any>();
+      budgetSnap.forEach((requestDoc) => {
+        const request: any = { id: requestDoc.id, ...requestDoc.data() };
+        requestsById.set(requestDoc.id, request);
+        if (request.requestId) {
+          requestsByNumber.set(String(request.requestId).trim(), request);
+        }
+      });
+
+      // POs carry no project code of their own; it comes from their budget
+      // request or estimate.
+      const estimateProjectCodes = new Map<string, string>();
+      try {
+        const estimateSnap = await getDocs(
+          collection(db, "Panels", PANEL_ID, "estimates"),
+        );
+        estimateSnap.forEach((estimateDoc) => {
+          const estimate: any = estimateDoc.data();
+          const code = getProjectCodeValue(estimate);
+          if (!code) return;
+          [
+            estimateDoc.id,
+            estimate.estimateNumber,
+            estimate.estimateNo,
+            estimate.estimateCode,
+          ].forEach((key) => {
+            const cleanKey = String(key || "").trim();
+            if (cleanKey && !estimateProjectCodes.has(cleanKey)) {
+              estimateProjectCodes.set(cleanKey, code);
+            }
+          });
+        });
+      } catch (error) {
+        console.warn("Estimates not available for PO project codes:", error);
+      }
+
+      const poSnap = await getDocs(collection(db, "Panels", PANEL_ID, "PO"));
+
+      poSnap.forEach((poDoc) => {
+        const po: any = { id: poDoc.id, ...poDoc.data() };
+
+        if (
+          ["cancelled", "canceled", "deleted", "void"].includes(
+            String(po.status || "")
+              .trim()
+              .toLowerCase(),
+          )
+        ) {
+          return;
+        }
+
+        const sourceRequest =
+          requestsById.get(String(po.sourceInvoiceId || "").trim()) ||
+          requestsByNumber.get(String(po.sourceRequestId || "").trim());
+        const poProjectCode = getFirstValue(
+          getProjectCodeValue(po),
+          getProjectCodeValue(sourceRequest),
+          estimateProjectCodes.get(String(po.estimateId || "").trim()),
+          estimateProjectCodes.get(String(po.estimateNumber || "").trim()),
+        );
+
+        getPaymentReleaseHistory(po).forEach(
+          (paymentDetails: any, releaseIndex: number) => {
+            if (paymentDetails?.manualBatchPaymentId) return;
+
+            const amount = getPaymentReleaseAmount(paymentDetails);
+            if (amount <= 0) return;
+
+            statementRows.push({
+              id: `purchase-order-${poDoc.id}-${
+                paymentDetails?.id || releaseIndex
+              }`,
+              source: "purchase_order",
+              accountId: resolveAccountId(
+                paymentDetails.selectedAccountId,
+                paymentDetails.selectedAccount?.id,
+              ),
+              date:
+                toDateInputValue(paymentDetails.releasedAt) ||
+                toDateInputValue(paymentDetails.createdAt) ||
+                toDateInputValue(po.updatedAt) ||
+                "",
+              dateValue: toDateValue(
+                paymentDetails.releasedAt ||
+                  paymentDetails.createdAt ||
+                  po.updatedAt,
+              ),
+              sequenceValue: toDateValue(
+                paymentDetails.createdAt ||
+                  paymentDetails.releasedAt ||
+                  po.createdAt ||
+                  po.updatedAt,
+              ),
+              description: getFirstValue(
+                paymentDetails.transactionName,
+                paymentDetails.title,
+                `PO payment released - ${po.poNumber || po.id}${
+                  po.supplierName ? ` - ${po.supplierName}` : ""
+                }`,
+              ),
+              poNo: getFirstValue(po.poNumber),
+              projectCode: getFirstValue(
+                paymentDetails.rtgsProjectCode,
+                poProjectCode,
+              ),
+              chequeNumber: getReleaseChequeNumbers(paymentDetails).join(", "),
+              debit: amount,
+              credit: 0,
+            });
+          },
+        );
+      });
+
       const claimSnap = await getDocs(
         collection(db, "Panels", PANEL_ID, "claimReimbursements"),
       );
@@ -3588,7 +3707,8 @@ export default function AccountStatement() {
             sequenceValue: toDateValue(transferDate),
             poNo: "",
             projectCode: "",
-            chequeNumber: transfer.transferId || "",
+            // RTGS letter transfers carry the letter's cheque number.
+            chequeNumber: transfer.chequeNumber || transfer.transferId || "",
           };
 
           const fromAccountId = resolveAccountId(transfer.fromAccountId);

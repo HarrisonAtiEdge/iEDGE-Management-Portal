@@ -1906,11 +1906,6 @@
 //   );
 // }
 
-
-
-
-
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -1960,9 +1955,13 @@ import {
   X,
   ExternalLink,
   TrendingUp,
+  Banknote,
+  PenLine,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
+import { canAccessRtgs } from "@/components/RTGS/rtgsData";
 import { NotificationBell } from "@/components/NotificationBell";
+import { AttendanceCheckButton } from "@/components/EmployeeRequests/AttendanceCheckButton";
 import { useNotifications } from "@/hooks/useNotifications";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { getAllChequeNumbers } from "@/lib/chequeNumbers";
@@ -2614,6 +2613,8 @@ const LUCIDE_ICONS: Record<string, LucideIcon> = {
   ClipboardList,
   ReceiptText,
   TrendingUp,
+  Banknote,
+  PenLine,
 };
 
 // ✅ Backward compatibility for old FontAwesome names
@@ -2676,6 +2677,18 @@ const TRAVEL_DROPDOWN: SidebarItem = {
     { path: "/usertravel", label: "Book Hotel", icon: "BedDouble" },
     { path: "/booking", label: "Bookings", icon: "Hotel" },
     { path: "/travel/hotel", label: "+ Add Hotels", icon: "Hotel" },
+  ],
+};
+
+const RTGS_DROPDOWN: SidebarItem = {
+  path: "#",
+  label: "RTGS",
+  icon: "Banknote",
+  children: [
+    { path: "/RTGS/form", label: "RTGS Form", icon: "FileText" },
+    { path: "/RTGS/list", label: "RTGS List", icon: "Archive" },
+    { path: "/RTGS/vendors", label: "RTGS Vendors", icon: "BookUser" },
+    { path: "/RTGS/authorizers", label: "Authorizer", icon: "PenLine" },
   ],
 };
 
@@ -2914,6 +2927,23 @@ function ensureRequestsTab(items: SidebarItem[]): SidebarItem[] {
   return updated;
 }
 
+// RTGS is for the finance team and main admins only — added here rather than
+// in AVAILABLE_TABS so the sidebar config screen can't hand it to other roles.
+// Placed right after the Finance dropdown when the role has one.
+function applyRtgsAccess(items: SidebarItem[], userRole: string): SidebarItem[] {
+  const safeItems = Array.isArray(items) ? items : [];
+  const withoutRtgs = safeItems.filter((item) => item.label !== RTGS_DROPDOWN.label);
+
+  if (!canAccessRtgs(userRole)) {
+    return withoutRtgs;
+  }
+
+  const financeIndex = withoutRtgs.findIndex((item) => item.label === "Finance");
+  const updated = [...withoutRtgs];
+  updated.splice(financeIndex >= 0 ? financeIndex + 1 : updated.length, 0, RTGS_DROPDOWN);
+  return updated;
+}
+
 export default function Layout({ children }: { children: React.ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [role, setRole] = useState<string | null>(null);
@@ -3122,6 +3152,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             }
 
             finalItems = ensureRequestsTab(finalItems);
+
+            finalItems = applyRtgsAccess(finalItems, userRole);
 
             setSidebarItems(finalItems);
             setLoading(false);
@@ -3954,6 +3986,13 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
 
           <div className="flex shrink-0 flex-wrap items-center gap-4 lg:justify-end">
+            {searchUserId && (
+              <AttendanceCheckButton
+                userId={searchUserId}
+                userName={userName}
+                role={role || ""}
+              />
+            )}
             <ThemeToggle />
             <NotificationBell />
 

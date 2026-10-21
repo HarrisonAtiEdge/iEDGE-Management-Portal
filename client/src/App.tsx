@@ -54,6 +54,7 @@
 // import VendorSummary from "./pages/VendorSummary";
 // import RTDManagement from "./pages/RTDManagement";
 // import Reports from "./pages/Reports";
+// import EmployeeRequests from "./pages/EmployeeRequests";
 
 // function AuthenticatedApp() {
 //   const { currentUser } = useAuth();
@@ -310,6 +311,16 @@
 //           </ProtectedRoute>
 //         </Route>
 
+//         <Route path="/requests">
+//           <ProtectedRoute>
+//             <EmployeeRequests />
+//           </ProtectedRoute>
+//         </Route>
+
+//         <Route path="/leave">
+//           <Redirect to="/requests" />
+//         </Route>
+
 //         <Route component={NotFound} />
 //       </Switch>
 //     </Layout>
@@ -388,6 +399,7 @@ import VendorSummary from "./pages/VendorSummary";
 import RTDManagement from "./pages/RTDManagement";
 import Reports from "./pages/Reports";
 import EmployeeRequests from "./pages/EmployeeRequests";
+import { RTGSForm, RTGSList, RTGSVendors, RTGSAuthorizers } from "@/pages/RTGS";
 
 function AuthenticatedApp() {
   const { currentUser } = useAuth();
@@ -652,6 +664,30 @@ function AuthenticatedApp() {
 
         <Route path="/leave">
           <Redirect to="/requests" />
+        </Route>
+
+        <Route path="/RTGS">
+          <Redirect to="/RTGS/form" />
+        </Route>
+        <Route path="/RTGS/form">
+          <ProtectedRoute>
+            <RTGSForm />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/RTGS/list">
+          <ProtectedRoute>
+            <RTGSList />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/RTGS/vendors">
+          <ProtectedRoute>
+            <RTGSVendors />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/RTGS/authorizers">
+          <ProtectedRoute>
+            <RTGSAuthorizers />
+          </ProtectedRoute>
         </Route>
 
         <Route component={NotFound} />
