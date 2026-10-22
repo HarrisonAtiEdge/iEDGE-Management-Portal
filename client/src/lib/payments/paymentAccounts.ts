@@ -14,9 +14,11 @@ const COLLECTION_PATH = ["Panels", PANEL_ID, "paymentAccounts"] as const;
 
 export interface CreatePaymentAccountInput {
   accountName: string;
+  nickname?: string;
   accountNumber: string;
   bankName: string;
   iban?: string;
+  swiftCode?: string;
   branchName?: string;
   branchCode?: string;
   city?: string;
@@ -30,6 +32,17 @@ export interface CreatePaymentAccountInput {
 
 export const paymentAccountsCollection = () =>
   collection(db, ...COLLECTION_PATH);
+
+// "Nickname · Account Title" for account pickers, or just the title when the
+// account has no nickname. Letters and statements keep the bank's title.
+export function paymentAccountPickerName(
+  account: Pick<PaymentAccount, "nickname" | "accountName" | "bankName">,
+) {
+  const title = account.accountName || account.bankName || "Unnamed Account";
+  const nickname = String(account.nickname || "").trim();
+
+  return nickname && nickname !== title ? `${nickname} · ${title}` : title;
+}
 
 export function sortPaymentAccounts(accounts: PaymentAccount[]) {
   return [...accounts].sort((a, b) =>
@@ -53,9 +66,11 @@ export function mapPaymentAccount(id: string, data: any): PaymentAccount {
   return {
     id,
     accountName: data.accountName || "",
+    nickname: data.nickname || "",
     accountNumber: data.accountNumber || "",
     bankName: data.bankName || "",
     iban: data.iban || "",
+    swiftCode: data.swiftCode || "",
     branchName: data.branchName || "",
     branchCode: data.branchCode || "",
     city: data.city || "",
@@ -81,9 +96,11 @@ export function mapPaymentAccount(id: string, data: any): PaymentAccount {
 export async function createPaymentAccount(input: CreatePaymentAccountInput) {
   const payload = {
     accountName: input.accountName.trim(),
+    nickname: String(input.nickname || "").trim(),
     accountNumber: input.accountNumber.trim(),
     bankName: input.bankName.trim(),
     iban: String(input.iban || "").trim(),
+    swiftCode: String(input.swiftCode || "").trim(),
     branchName: String(input.branchName || "").trim(),
     branchCode: String(input.branchCode || "").trim(),
     city: String(input.city || "").trim(),
@@ -113,6 +130,9 @@ export async function updatePaymentAccount(
   if (input.accountName !== undefined) {
     payload.accountName = input.accountName.trim();
   }
+  if (input.nickname !== undefined) {
+    payload.nickname = String(input.nickname || "").trim();
+  }
   if (input.accountNumber !== undefined) {
     payload.accountNumber = input.accountNumber.trim();
   }
@@ -121,6 +141,9 @@ export async function updatePaymentAccount(
   }
   if (input.iban !== undefined) {
     payload.iban = String(input.iban || "").trim();
+  }
+  if (input.swiftCode !== undefined) {
+    payload.swiftCode = String(input.swiftCode || "").trim();
   }
   if (input.branchName !== undefined) {
     payload.branchName = String(input.branchName || "").trim();

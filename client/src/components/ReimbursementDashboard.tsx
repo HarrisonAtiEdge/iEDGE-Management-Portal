@@ -3452,6 +3452,7 @@ import {
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import PaymentReleaseModal from "@/components/PaymentReleaseModal";
+import { paymentMomentFor } from "@/lib/payments/dates";
 import {
   buildReimbursementPdfBlob,
   buildReimbursementReportPdfBlob,
@@ -4090,19 +4091,6 @@ export default function ReimbursementDashboard() {
       ),
     ).sort((a, b) => a.localeCompare(b));
   }, [data]);
-
-  // Cheques already used on reimbursements, so the release modal can warn
-  // about duplicates stored on sales meeting updates it doesn't scan itself.
-  const releasedChequeNumbers = useMemo(
-    () =>
-      data.flatMap((item) =>
-        String(item.chequeNumber || "")
-          .split(",")
-          .map((value) => value.trim())
-          .filter(Boolean),
-      ),
-    [data],
-  );
 
   const filteredData = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -5772,13 +5760,14 @@ export default function ReimbursementDashboard() {
         partyLabel="Claimed By"
         parties={selectedItem?.personName ? [selectedItem.personName] : []}
         initialPaymentMethod="cash"
-        knownChequeNumbers={releasedChequeNumbers}
         buildUpdateData={({ formData, receiptUrl, selectedAccount, actor }) => {
           const chequeNumbers: string[] = Array.isArray(
             (formData as any).chequeNumbers,
           )
             ? (formData as any).chequeNumbers.filter(Boolean)
             : [];
+          // The release date chosen on the form.
+          const paymentReleasedAt = paymentMomentFor(formData.paymentDate);
 
           if (selectedItem?.sourcePath === "claim") {
             return {
@@ -5790,7 +5779,8 @@ export default function ReimbursementDashboard() {
               transactionReference: formData.transactionReference,
               paymentNotes: formData.paymentNotes,
               paymentReceiptUrl: receiptUrl,
-              paymentReleasedAt: serverTimestamp(),
+              paymentReleasedAt,
+              paymentDate: formData.paymentDate,
               updatedAt: serverTimestamp(),
               ...(formData.chequeNumber
                 ? { chequeNumber: formData.chequeNumber }
@@ -5810,7 +5800,8 @@ export default function ReimbursementDashboard() {
             "reimbursement.transactionReference": formData.transactionReference,
             "reimbursement.paymentNotes": formData.paymentNotes,
             "reimbursement.paymentReceiptUrl": receiptUrl,
-            "reimbursement.paymentReleasedAt": serverTimestamp(),
+            "reimbursement.paymentReleasedAt": paymentReleasedAt,
+            "reimbursement.paymentDate": formData.paymentDate,
             "reimbursement.updatedAt": serverTimestamp(),
             ...(formData.chequeNumber
               ? { "reimbursement.chequeNumber": formData.chequeNumber }

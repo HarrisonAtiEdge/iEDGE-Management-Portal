@@ -11581,7 +11581,6 @@
 import {
   useEffect,
   useMemo,
-  useRef,
   useState,
   type ChangeEvent,
   type FormEvent,
@@ -11603,7 +11602,11 @@ import {
 import { useAuth } from "@/contexts/AuthContext";
 import { db } from "@/lib/firebase";
 import { releasePayment } from "@/lib/payments/releasePayment";
-import { fetchPaymentAccounts } from "@/lib/payments/paymentAccounts";
+import {
+  fetchPaymentAccounts,
+  paymentAccountPickerName,
+} from "@/lib/payments/paymentAccounts";
+import { localDateValue, paymentMomentFor } from "@/lib/payments/dates";
 import {
   PaymentAccount,
   PaymentReleaseFormValues,
@@ -11645,23 +11648,9 @@ interface PaymentReleaseModalProps<T = any> {
   allowReceiptUpload?: boolean;
   initialPaymentMethod?: "cash" | "cheque" | "bank_transfer" | "wire";
   amountReadOnly?: boolean;
-
-  // Cheque numbers the caller already has loaded from places the modal does
-  // not scan itself (e.g. reimbursements on sales meeting updates).
-  knownChequeNumbers?: string[];
 }
 
 const PANEL_ID = "IEDGE-SYSTEM";
-
-const CHEQUE_SOURCE_COLLECTIONS = [
-  "invoiceRequests",
-  "Record",
-  "payments",
-  "claimReimbursements",
-  "accountStatementManualEntries",
-];
-
-const DUPLICATE_CHEQUE_MESSAGE = "This cheque number already exists.";
 
 type ExtendedPaymentReleaseFormValues = PaymentReleaseFormValues & {
   transactionName: string;
@@ -12145,7 +12134,6 @@ export default function PaymentReleaseModal<T = any>({
   allowReceiptUpload = true,
   initialPaymentMethod,
   amountReadOnly,
-  knownChequeNumbers,
 }: PaymentReleaseModalProps<T>) {
   const { userProfile, currentUser } = useAuth();
 
@@ -12442,6 +12430,8 @@ export default function PaymentReleaseModal<T = any>({
     const paymentWorkflowBasePaymentStatus =
       getPaymentWorkflowBasePaymentStatus(sourceRecord);
 
+    const releasedAt = paymentMomentFor(extendedFormData.paymentDate);
+
     const releaseEntry: any = {
       id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
 
@@ -12480,7 +12470,12 @@ export default function PaymentReleaseModal<T = any>({
 
       releasedByEmail: actor.email || "",
 
-      releasedAt: new Date(),
+      // The release date chosen on the form; recordedAt is when it was entered.
+      releasedAt,
+
+      paymentDate: extendedFormData.paymentDate,
+
+      recordedAt: new Date(),
 
       paymentWorkflowBaseStatus,
       paymentWorkflowBasePaymentStatus,
@@ -12600,13 +12595,13 @@ export default function PaymentReleaseModal<T = any>({
     };
 
     if (isRequestFullyReleased) {
-      updateData.paymentReleasedAt = serverTimestamp();
+      updateData.paymentReleasedAt = releasedAt;
 
-      updateData.releasePaymentAt = serverTimestamp();
+      updateData.releasePaymentAt = releasedAt;
 
-      updateData.paymentFullyReleasedAt = serverTimestamp();
+      updateData.paymentFullyReleasedAt = releasedAt;
     } else {
-      updateData.partialPaymentReleasedAt = serverTimestamp();
+      updateData.partialPaymentReleasedAt = releasedAt;
     }
 
     return updateData;
@@ -12628,6 +12623,8 @@ export default function PaymentReleaseModal<T = any>({
     transactionReference: "",
 
     paymentNotes: "",
+
+    paymentDate: localDateValue(),
   });
 
   useEffect(() => {
@@ -12649,6 +12646,8 @@ export default function PaymentReleaseModal<T = any>({
       transactionReference: "",
 
       paymentNotes: "",
+
+      paymentDate: localDateValue(),
     });
 
     setSelectedAccount(null);
@@ -12702,35 +12701,18 @@ export default function PaymentReleaseModal<T = any>({
       try {
         setChequeValidationLoading(true);
 
-        // allSettled: a collection this user can't read shouldn't stop the
-        // others from being checked.
-        const results = await Promise.allSettled(
-          CHEQUE_SOURCE_COLLECTIONS.map((collectionName) =>
-            getDocs(collection(db, "Panels", PANEL_ID, collectionName)),
-          ),
-        );
+        const snapshots = await Promise.all([
+          getDocs(collection(db, "Panels", PANEL_ID, "invoiceRequests")),
 
-        const failed = results.filter(
-          (result) => result.status === "rejected",
-        );
+          getDocs(collection(db, "Panels", PANEL_ID, "Record")),
 
-        if (failed.length === results.length) {
-          throw (failed[0] as PromiseRejectedResult).reason;
-        }
-
-        failed.forEach((result) =>
-          console.warn(
-            "Skipped a collection while loading existing cheque numbers:",
-            (result as PromiseRejectedResult).reason,
-          ),
-        );
+          getDocs(collection(db, "Panels", PANEL_ID, "payments")),
+        ]);
 
         const chequeSet = new Set<string>();
 
-        results.forEach((result) => {
-          if (result.status !== "fulfilled") return;
-
-          result.value.docs.forEach((documentSnapshot) => {
+        snapshots.forEach((snapshot) => {
+          snapshot.docs.forEach((documentSnapshot) => {
             const source = {
               id: documentSnapshot.id,
               ...documentSnapshot.data(),
@@ -12774,90 +12756,22 @@ export default function PaymentReleaseModal<T = any>({
     };
   }, [isOpen, toast]);
 
-  const knownChequeNumbersKey = (knownChequeNumbers || []).join("\n");
-
-  const allExistingChequeNumbers = useMemo(() => {
-    const combined = new Set(existingChequeNumbers);
-
-    (knownChequeNumbers || []).forEach((chequeNumber) => {
-      const normalized = normalizeChequeNumber(chequeNumber);
-
-      if (normalized) combined.add(normalized);
-    });
-
-    return combined;
-    // knownChequeNumbersKey stands in for the array so a new array with the
-    // same contents on each parent render doesn't recompute this.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [existingChequeNumbers, knownChequeNumbersKey]);
-
   const duplicateChequeNumbers = useMemo(() => {
     return getDuplicateChequeNumbers(
       formData.chequeNumbers,
-      allExistingChequeNumbers,
+      existingChequeNumbers,
     );
-  }, [formData.chequeNumbers, allExistingChequeNumbers]);
+  }, [formData.chequeNumbers, existingChequeNumbers]);
 
   const hasDuplicateChequeNumbers = duplicateChequeNumbers.length > 0;
-
-  // Cheque numbers already warned about in this release, so the toast fires
-  // once per number rather than on every keystroke.
-  const notifiedDuplicateChequesRef = useRef<Set<string>>(new Set());
-
-  useEffect(() => {
-    if (isOpen) notifiedDuplicateChequesRef.current = new Set();
-  }, [isOpen]);
-
-  // Warn (without blocking the release) shortly after the user stops typing a
-  // cheque number that is already in the database.
-  useEffect(() => {
-    if (!isOpen || formData.paymentMethod !== "cheque") return;
-
-    const timer = window.setTimeout(() => {
-      const newDuplicates = cleanChequeNumbers(formData.chequeNumbers).filter(
-        (chequeNumber) => {
-          const normalized = normalizeChequeNumber(chequeNumber);
-
-          return (
-            allExistingChequeNumbers.has(normalized) &&
-            !notifiedDuplicateChequesRef.current.has(normalized)
-          );
-        },
-      );
-
-      if (newDuplicates.length === 0) return;
-
-      newDuplicates.forEach((chequeNumber) =>
-        notifiedDuplicateChequesRef.current.add(
-          normalizeChequeNumber(chequeNumber),
-        ),
-      );
-
-      toast({
-        title: "Duplicate cheque number",
-        description: `${DUPLICATE_CHEQUE_MESSAGE} (${newDuplicates.join(
-          ", ",
-        )}) You can still release this payment.`,
-        className: "border-amber-200 bg-amber-50 text-amber-700",
-      });
-    }, 600);
-
-    return () => window.clearTimeout(timer);
-  }, [
-    isOpen,
-    formData.paymentMethod,
-    formData.chequeNumbers,
-    allExistingChequeNumbers,
-    toast,
-  ]);
 
   const getChequeNumberWarning = (chequeNumber: string, index: number) => {
     const normalized = normalizeChequeNumber(chequeNumber);
 
     if (!normalized) return "";
 
-    if (allExistingChequeNumbers.has(normalized)) {
-      return DUPLICATE_CHEQUE_MESSAGE;
+    if (existingChequeNumbers.has(normalized)) {
+      return "This cheque number already exists.";
     }
 
     const appearsInCurrentForm = formData.chequeNumbers.some(
@@ -13403,6 +13317,26 @@ export default function PaymentReleaseModal<T = any>({
       return;
     }
 
+    if (!formData.paymentDate) {
+      toast({
+        title: "Error",
+        description: "Please select the payment date",
+        variant: "destructive",
+      });
+
+      return;
+    }
+
+    if (formData.paymentDate > localDateValue()) {
+      toast({
+        title: "Error",
+        description: "The payment date can't be in the future",
+        variant: "destructive",
+      });
+
+      return;
+    }
+
     if (invoice && requestedReleaseAmount > remainingReleaseAmount + 0.009) {
       toast({
         title: "Error",
@@ -13440,17 +13374,15 @@ export default function PaymentReleaseModal<T = any>({
 
       const duplicateCheques = getDuplicateChequeNumbers(
         normalizedChequeNumbers,
-        allExistingChequeNumbers,
+        existingChequeNumbers,
       );
 
-      // A warning only: duplicate cheques are allowed, the release continues.
       if (duplicateCheques.length > 0) {
         toast({
           title: "Warning",
           description: `This cheque number already exists: ${duplicateCheques.join(
             ", ",
           )}. Payment will still be saved.`,
-          className: "border-amber-200 bg-amber-50 text-amber-700",
         });
       }
     }
@@ -13821,6 +13753,31 @@ export default function PaymentReleaseModal<T = any>({
                     </SelectContent>
                   </Select>
                 </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="paymentDate" className="text-sm text-slate-700">
+                    Payment Date
+                  </Label>
+
+                  <Input
+                    id="paymentDate"
+                    type="date"
+                    max={localDateValue()}
+                    value={formData.paymentDate}
+                    className="h-11 rounded-2xl border-slate-200 bg-white"
+                    onChange={(event) =>
+                      setFormData((previous) => ({
+                        ...previous,
+                        paymentDate: event.target.value,
+                      }))
+                    }
+                  />
+
+                  <p className="text-xs text-slate-500">
+                    The day the money was released. Balances and statements use
+                    this date.
+                  </p>
+                </div>
               </div>
             </section>
 
@@ -13889,7 +13846,7 @@ export default function PaymentReleaseModal<T = any>({
                         ) : (
                           resolvedAccounts.map((account) => (
                             <SelectItem key={account.id} value={account.id}>
-                              {account.accountName || account.id}
+                              {paymentAccountPickerName(account)}
                             </SelectItem>
                           ))
                         )}

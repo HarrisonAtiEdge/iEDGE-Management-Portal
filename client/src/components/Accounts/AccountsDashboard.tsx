@@ -2159,6 +2159,7 @@ import { CalendarIcon } from "lucide-react";
 
 type AccountFormData = {
   accountName: string;
+  nickname: string;
   accountNumber: string;
   bankName: string;
   iban: string;
@@ -2174,6 +2175,7 @@ type AccountFormData = {
 
 const emptyForm: AccountFormData = {
   accountName: "",
+  nickname: "",
   accountNumber: "",
   bankName: "",
   iban: "",
@@ -2512,6 +2514,7 @@ export default function AccountsDashboard() {
     setEditingAccount(account);
     setFormData({
       accountName: account.accountName || "",
+      nickname: account.nickname || "",
       accountNumber: account.accountNumber || "",
       bankName: account.bankName || "",
       iban: account.iban || "",
@@ -2540,7 +2543,7 @@ export default function AccountsDashboard() {
     if (!formData.accountName.trim()) {
       toast({
         title: "Error",
-        description: "Account name is required",
+        description: "Account title (as per bank) is required",
         variant: "destructive",
       });
       return;
@@ -2569,6 +2572,7 @@ export default function AccountsDashboard() {
 
       await createPaymentAccount({
         accountName: formData.accountName,
+        nickname: formData.nickname,
         accountNumber: formData.accountNumber,
         bankName: formData.bankName,
         iban: formData.iban,
@@ -2610,7 +2614,7 @@ export default function AccountsDashboard() {
     if (!formData.accountName.trim()) {
       toast({
         title: "Error",
-        description: "Account name is required",
+        description: "Account title (as per bank) is required",
         variant: "destructive",
       });
       return;
@@ -2639,6 +2643,7 @@ export default function AccountsDashboard() {
 
       await updatePaymentAccount(editingAccount.id, {
         accountName: formData.accountName,
+        nickname: formData.nickname,
         accountNumber: formData.accountNumber,
         bankName: formData.bankName,
         iban: formData.iban,
@@ -2793,7 +2798,7 @@ export default function AccountsDashboard() {
         <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
           <div className="space-y-2">
             <Label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
-              Account Name *
+              Account Title (as per Bank) *
             </Label>
             <Input
               className="h-11 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none focus-visible:ring-blue-100"
@@ -2802,6 +2807,23 @@ export default function AccountsDashboard() {
                 setFormData((prev) => ({
                   ...prev,
                   accountName: e.target.value,
+                }))
+              }
+              placeholder="iEDGE (Pvt) Ltd"
+            />
+          </div>
+
+          <div className="space-y-2">
+            <Label className="text-xs font-semibold uppercase tracking-[0.2em] text-slate-500">
+              Account Nick Name
+            </Label>
+            <Input
+              className="h-11 rounded-2xl border-slate-200 bg-slate-50/80 shadow-none focus-visible:ring-blue-100"
+              value={formData.nickname}
+              onChange={(e) =>
+                setFormData((prev) => ({
+                  ...prev,
+                  nickname: e.target.value,
                 }))
               }
               placeholder="Meezan PKR Collection"
@@ -3370,10 +3392,15 @@ export default function AccountsDashboard() {
                     <div className="mb-4 flex items-start justify-between gap-3">
                       <div className="min-w-0">
                         <h3 className="truncate text-base font-bold text-slate-950">
-                          {account.accountName || "-"}
+                          {account.nickname || account.accountName || "-"}
                         </h3>
                         <p className="truncate text-sm text-slate-500">
-                          {account.bankName || "-"}
+                          {[
+                            account.nickname ? account.accountName : "",
+                            account.bankName,
+                          ]
+                            .filter(Boolean)
+                            .join(" · ") || "-"}
                         </p>
                       </div>
 

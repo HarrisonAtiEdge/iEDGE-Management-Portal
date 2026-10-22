@@ -7,11 +7,16 @@ export interface PaymentReleaseFormValues {
   chequeNumber: string;
   transactionReference: string;
   paymentNotes: string;
+  // The day the money was released, as YYYY-MM-DD.
+  paymentDate: string;
 }
 
 export interface PaymentAccount {
   id: string;
+  // Account title as per the bank.
   accountName?: string;
+  // Short internal name, shown first in account pickers.
+  nickname?: string;
   accountNumber?: string;
   bankName?: string;
   balance?: number;

@@ -3453,10 +3453,12 @@ import { getAuth } from "firebase/auth";
 import { db } from "@/lib/firebase";
 import {
   mapPaymentAccount,
+  paymentAccountPickerName,
   paymentAccountsCollection,
   sortPaymentAccounts,
 } from "@/lib/payments/paymentAccounts";
 import type { PaymentAccount } from "@/lib/payments/types";
+import { localDateValue } from "@/lib/payments/dates";
 
 import * as XLSX from "xlsx";
 import jsPDF from "jspdf";
@@ -3487,6 +3489,10 @@ interface AccountTransfer {
   id: string;
   transferName: string;
   createdAt: string;
+  // The day the transfer was made (YYYY-MM-DD); empty on older transfers,
+  // which are dated by createdAt.
+  transferDate: string;
+  chequeNumber: string;
   fromAccountId: string;
   fromAccountName: string;
   toAccountId: string;
@@ -3532,10 +3538,11 @@ const getBalanceInfo = (data: Record<string, unknown>): BalanceInfo | null => {
   return null;
 };
 
-// "Name · Bank · Account No" so similarly named accounts can be told apart.
+// "Nickname · Name · Bank · Account No" so similarly named accounts can be
+// told apart.
 const getAccountOptionLabel = (account: PaymentAccount) =>
   [
-    account.accountName || account.bankName || "Unnamed Account",
+    paymentAccountPickerName(account),
     account.accountName ? account.bankName : "",
     account.accountNumber,
   ]
@@ -3569,6 +3576,11 @@ const getTransferDisplayName = (
 
   return `Transfer: ${fromAccountName} → ${toAccountName}`;
 };
+
+const getTransferDay = (transfer: AccountTransfer) =>
+  transfer.transferDate
+    ? new Date(`${transfer.transferDate}T12:00:00`)
+    : new Date(transfer.createdAt);
 
 const normalizeFirestoreDate = (value: unknown) => {
   if (!value) return "";
@@ -3618,6 +3630,8 @@ export default function PaymentTransactions() {
   const [toAccountId, setToAccountId] = useState("");
   const [transferAmount, setTransferAmount] = useState("");
   const [transferDescription, setTransferDescription] = useState("");
+  const [transferChequeNumber, setTransferChequeNumber] = useState("");
+  const [transferDate, setTransferDate] = useState(() => localDateValue());
   const [transferSubmitting, setTransferSubmitting] = useState(false);
   const [transferError, setTransferError] = useState("");
   const [transferSuccess, setTransferSuccess] = useState("");
@@ -3729,6 +3743,8 @@ export default function PaymentTransactions() {
             createdAt: normalizeFirestoreDate(
               transfer.createdAt || transfer.createdAtISO,
             ),
+            transferDate: transfer.transferDate || "",
+            chequeNumber: transfer.chequeNumber || "",
             fromAccountId: transfer.fromAccountId || "",
             fromAccountName,
             toAccountId: transfer.toAccountId || "",
@@ -3980,6 +3996,7 @@ export default function PaymentTransactions() {
             transfer.fromAccountName,
             transfer.toAccountName,
             transfer.description,
+            transfer.chequeNumber,
             transfer.createdByName,
             transfer.createdByEmail,
           ]
@@ -4013,11 +4030,11 @@ export default function PaymentTransactions() {
         }
 
         if (fromBoundary || toBoundary) {
-          const transferDate = new Date(transfer.createdAt);
+          const transferDay = getTransferDay(transfer);
 
-          if (!Number.isNaN(transferDate.getTime())) {
-            if (fromBoundary && transferDate < fromBoundary) return false;
-            if (toBoundary && transferDate > toBoundary) return false;
+          if (!Number.isNaN(transferDay.getTime())) {
+            if (fromBoundary && transferDay < fromBoundary) return false;
+            if (toBoundary && transferDay > toBoundary) return false;
           }
         }
 
@@ -4025,6 +4042,7 @@ export default function PaymentTransactions() {
       })
       .sort(
         (a, b) =>
+          getTransferDay(b).getTime() - getTransferDay(a).getTime() ||
           new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime(),
       );
   }, [
@@ -4097,6 +4115,16 @@ export default function PaymentTransactions() {
       setTransferError(
         "Please enter a valid transfer amount greater than zero.",
       );
+      return;
+    }
+
+    if (!transferDate) {
+      setTransferError("Please select the transfer date.");
+      return;
+    }
+
+    if (transferDate > localDateValue()) {
+      setTransferError("The transfer date can't be in the future.");
       return;
     }
 
@@ -4210,6 +4238,8 @@ export default function PaymentTransactions() {
           toAccountName: destinationName,
           amount: numericAmount,
           description: transferDescription.trim(),
+          chequeNumber: transferChequeNumber.trim(),
+          transferDate,
           createdById: authUser.uid,
           createdByName:
             authUser.displayName || authUser.email || "Authenticated User",
@@ -4232,6 +4262,8 @@ export default function PaymentTransactions() {
 
       setTransferAmount("");
       setTransferDescription("");
+      setTransferChequeNumber("");
+      setTransferDate(localDateValue());
       setTransferSuccess(
         "The account transfer was completed and recorded successfully.",
       );
@@ -4249,6 +4281,13 @@ export default function PaymentTransactions() {
       setTransferSubmitting(false);
     }
   };
+
+  const formatTransferDate = (value: string) =>
+    new Date(`${value}T12:00:00`).toLocaleDateString("en-GB", {
+      day: "2-digit",
+      month: "short",
+      year: "numeric",
+    });
 
   const formatDateTime = (value: string) => {
     if (!value) return "-";
@@ -4544,7 +4583,43 @@ export default function PaymentTransactions() {
                 </div>
               </div>
 
-              <div className="mt-5 grid gap-5 lg:grid-cols-[320px_1fr]">
+              <div className="mt-5 grid gap-5 md:grid-cols-2 xl:grid-cols-[1fr_1fr_1fr_2fr]">
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Transfer Date
+                  </label>
+                  <input
+                    type="date"
+                    value={transferDate}
+                    max={localDateValue()}
+                    onChange={(event) => {
+                      setTransferDate(event.target.value);
+                      setTransferError("");
+                      setTransferSuccess("");
+                    }}
+                    className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-semibold outline-none transition focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                  />
+                </div>
+
+                <div>
+                  <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
+                    Cheque Number
+                    <span className="ml-1 normal-case text-slate-400">
+                      (optional)
+                    </span>
+                  </label>
+                  <input
+                    type="text"
+                    value={transferChequeNumber}
+                    onChange={(event) =>
+                      setTransferChequeNumber(event.target.value)
+                    }
+                    maxLength={50}
+                    placeholder="Enter cheque number"
+                    className="h-12 w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm outline-none transition focus:border-blue-300 focus:bg-white focus:ring-4 focus:ring-blue-50"
+                  />
+                </div>
+
                 <div>
                   <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-500">
                     Transfer Amount
@@ -4608,7 +4683,8 @@ export default function PaymentTransactions() {
                     accounts.length < 2 ||
                     !fromAccountId ||
                     !toAccountId ||
-                    !transferAmount
+                    !transferAmount ||
+                    !transferDate
                   }
                   className="h-12 rounded-2xl bg-slate-950 px-6 text-sm font-bold text-white shadow-sm transition hover:-translate-y-0.5 hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
                 >
@@ -5075,14 +5151,17 @@ export default function PaymentTransactions() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1250px] text-sm">
+              <table className="w-full min-w-[1350px] text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                     <th className="px-5 py-4 text-left font-bold">
                       Transfer Name
                     </th>
                     <th className="px-5 py-4 text-left font-bold">
-                      Date & Time
+                      Transfer Date
+                    </th>
+                    <th className="px-5 py-4 text-left font-bold">
+                      Cheque No
                     </th>
                     <th className="px-5 py-4 text-left font-bold">
                       From Account
@@ -5102,7 +5181,7 @@ export default function PaymentTransactions() {
                   {loading ? (
                     Array.from({ length: 4 }).map((_, rowIndex) => (
                       <tr key={`transfer-loading-${rowIndex}`}>
-                        {Array.from({ length: 8 }).map((__, cellIndex) => (
+                        {Array.from({ length: 9 }).map((__, cellIndex) => (
                           <td key={cellIndex} className="px-5 py-4">
                             <div className="h-4 animate-pulse rounded-full bg-slate-100" />
                           </td>
@@ -5121,7 +5200,12 @@ export default function PaymentTransactions() {
                           </span>
                         </td>
                         <td className="whitespace-nowrap px-5 py-4 font-medium text-slate-700">
-                          {formatDateTime(transfer.createdAt)}
+                          {transfer.transferDate
+                            ? formatTransferDate(transfer.transferDate)
+                            : formatDateTime(transfer.createdAt)}
+                        </td>
+                        <td className="whitespace-nowrap px-5 py-4 font-medium text-slate-700">
+                          {transfer.chequeNumber || "-"}
                         </td>
                         <td className="px-5 py-4">
                           <p className="font-semibold text-slate-950">
@@ -5169,7 +5253,7 @@ export default function PaymentTransactions() {
                     ))
                   ) : (
                     <tr>
-                      <td colSpan={8} className="px-5 py-14 text-center">
+                      <td colSpan={9} className="px-5 py-14 text-center">
                         <h4 className="font-bold text-slate-950">
                           No transfer records found
                         </h4>
