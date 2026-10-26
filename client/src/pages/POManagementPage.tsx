@@ -14,12 +14,14 @@ import {
   writeBatch,
 } from "firebase/firestore";
 import {
-  AlertTriangle,
   Banknote,
   CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
   Copy,
   Eye,
   FileText,
+  MoreHorizontal,
   Pencil,
   Plus,
   Receipt,
@@ -27,32 +29,22 @@ import {
   Search,
   ShieldCheck,
   Trash2,
-  Wallet,
   XCircle,
 } from "lucide-react";
-import {
-  ResponsiveContainer,
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Legend,
-  Tooltip,
-  XAxis,
-  YAxis,
-} from "recharts";
 
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import { useFirestoreQuery } from "@/hooks/useFirestore";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { Card, CardContent } from "@/components/ui/card";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 import {
   Dialog,
   DialogContent,
@@ -95,7 +87,7 @@ import {
   getCurrentApprovalLevel,
   getCurrentApproverRoleLabel,
   getPendingApprovalFields,
-  isCurrentRequestApprover,
+  isUserAssignedToApprovalLevel,
 } from "@/lib/budgetApprovalWorkflow";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -107,6 +99,7 @@ import {
 
 const PANEL_ID = "IEDGE-SYSTEM";
 const CREATE_PO_ROUTE = "/create-po";
+const PO_RECORDS_PER_PAGE = 10;
 const PURCHASE_ORDER_WORKFLOW_CONFIG_ID = "purchase_order_approval";
 
 const PURCHASE_ORDER_FINANCE_ROLE_KEYS = new Set([
@@ -119,6 +112,11 @@ const PURCHASE_ORDER_FINANCE_ROLE_KEYS = new Set([
   "head_of_finance",
   "finance_manager",
   "financial_manager",
+  // Same Accounts roles that can release payments on Vendor Summary.
+  "accounts",
+  "account",
+  "accountant",
+  "accounts_manager",
 ]);
 
 const PURCHASE_ORDER_OPERATION_HEAD_ROLE_KEYS = new Set([
@@ -135,6 +133,65 @@ const PURCHASE_ORDER_OPERATION_HEAD_ROLE_KEYS = new Set([
 const poCollectionRef = collection(db, "Panels", PANEL_ID, "PO");
 
 type PurchaseOrderStatus = "Draft" | "Open" | "Paid" | "Cancelled" | "Over Due";
+
+type POStatusFilter = "all" | PurchaseOrderStatus;
+
+const PO_STATUS_FILTERS: { value: POStatusFilter; label: string }[] = [
+  { value: "all", label: "All" },
+  { value: "Draft", label: "Draft" },
+  { value: "Open", label: "Open" },
+  { value: "Over Due", label: "Over Due" },
+  { value: "Paid", label: "Paid" },
+  { value: "Cancelled", label: "Cancelled" },
+];
+
+type PillTone = "neutral" | "success" | "warning" | "danger" | "info";
+
+const PILL_TONE_CLASSES: Record<PillTone, string> = {
+  neutral: "bg-slate-100 text-slate-600 ring-slate-500/10",
+  success: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
+  warning: "bg-amber-50 text-amber-700 ring-amber-600/20",
+  danger: "bg-rose-50 text-rose-700 ring-rose-600/20",
+  info: "bg-sky-50 text-sky-700 ring-sky-600/20",
+};
+
+function StatusPill({
+  tone,
+  title,
+  children,
+}: {
+  tone: PillTone;
+  title?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <span
+      title={title}
+      className={`inline-flex max-w-[180px] items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ring-1 ring-inset ${PILL_TONE_CLASSES[tone]}`}
+    >
+      <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-current" />
+      <span className="truncate">{children}</span>
+    </span>
+  );
+}
+
+// Page numbers to show around the current page, with "…" for the gaps.
+function getPageNumbers(currentPage: number, totalPages: number) {
+  if (totalPages <= 7) {
+    return Array.from({ length: totalPages }, (_, index) => index + 1);
+  }
+
+  const pages: (number | "…")[] = [1];
+  const start = Math.max(2, currentPage - 1);
+  const end = Math.min(totalPages - 1, currentPage + 1);
+
+  if (start > 2) pages.push("…");
+  for (let page = start; page <= end; page += 1) pages.push(page);
+  if (end < totalPages - 1) pages.push("…");
+  pages.push(totalPages);
+
+  return pages;
+}
 
 type EstimateLineItem = {
   service: string;
@@ -298,8 +355,13 @@ function getRoleKey(value: any) {
   return normalizeText(value).replace(/[\s-]+/g, "_");
 }
 
+// Custom roles created in User Management get an id derived from their name
+// (e.g. "Finance Team" -> "finance_team"), so also match on the word itself.
 function isFinancePurchaseOrderRole(role: any) {
-  return PURCHASE_ORDER_FINANCE_ROLE_KEYS.has(getRoleKey(role));
+  const roleKey = getRoleKey(role);
+  return (
+    PURCHASE_ORDER_FINANCE_ROLE_KEYS.has(roleKey) || roleKey.includes("financ")
+  );
 }
 
 function isOperationHeadPurchaseOrderRole(role: any) {
@@ -480,13 +542,30 @@ function getPORemainingAmount(source: any) {
   return roundMoney(Math.max(approvedAmount - releasedAmount, 0));
 }
 
-function getPOPaymentLabel(po: PurchaseOrder) {
-  const releasedAmount = getTotalReleasedAmount(po);
-  const remainingAmount = getPORemainingAmount(po);
+// Fully released through Payment Release, or marked paid on an older record
+// that has no release history to add up.
+function isPOPaymentCompleted(po: PurchaseOrder) {
+  if (getTotalReleasedAmount(po) > 0 && getPORemainingAmount(po) <= 0.009) {
+    return true;
+  }
 
-  if (releasedAmount <= 0) return "Unpaid";
-  if (remainingAmount <= 0.009) return "Fully Released";
-  return "Partially Released";
+  return (
+    po.status === "Paid" ||
+    po.paymentReleased === true ||
+    ["released", "paid", "completed"].includes(normalizeText(po.paymentStatus))
+  );
+}
+
+function getPOPaymentLabel(po: PurchaseOrder) {
+  if (isPOPaymentCompleted(po)) return "Payment Paid";
+  if (getTotalReleasedAmount(po) > 0) return "Partially Released";
+  return "Unpaid";
+}
+
+function getPOPaymentTone(po: PurchaseOrder): PillTone {
+  if (isPOPaymentCompleted(po)) return "success";
+  if (getTotalReleasedAmount(po) > 0) return "info";
+  return "neutral";
 }
 
 function getPaymentMethodLabel(method?: string) {
@@ -1087,17 +1166,11 @@ function PurchaseOrderView({ po }: { po: PurchaseOrder }) {
 
         <div>
           <p className="text-muted-foreground">Payment</p>
-          <Badge
-            variant={
-              remainingAmount <= 0.009 && releasedAmount > 0
-                ? "default"
-                : releasedAmount > 0
-                  ? "secondary"
-                  : "outline"
-            }
-          >
-            {getPOPaymentLabel(po)}
-          </Badge>
+          <div>
+            <StatusPill tone={getPOPaymentTone(po)}>
+              {getPOPaymentLabel(po)}
+            </StatusPill>
+          </div>
         </div>
       </div>
 
@@ -1222,6 +1295,8 @@ export default function POManagementPage() {
 
   const [purchaseOrders, setPurchaseOrders] = useState<PurchaseOrder[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
+  const [statusFilter, setStatusFilter] = useState<POStatusFilter>("all");
+  const [currentPage, setCurrentPage] = useState(1);
   const [viewDialogOpen, setViewDialogOpen] = useState(false);
   const [viewingPO, setViewingPO] = useState<PurchaseOrder | null>(null);
   const [paymentReleaseOpen, setPaymentReleaseOpen] = useState(false);
@@ -1408,6 +1483,10 @@ export default function POManagementPage() {
           continue;
         }
 
+        // Never reset a completed approval back to pending: that would take the
+        // PO out of Finance's reach for payment release.
+        if (isPurchaseOrderFinallyApproved(po)) continue;
+
         const existingWorkflow = po.approvalWorkflow;
         const workflowState = normalizeText(existingWorkflow?.state);
 
@@ -1512,82 +1591,56 @@ export default function POManagementPage() {
   ]);
 
   const totals = useMemo(() => {
-    const totalPayable = visiblePurchaseOrders.reduce(
-      (sum, item) => sum + safeNumber(item.totalAmount),
-      0,
+    const sumOf = (items: PurchaseOrder[]) =>
+      items.reduce((sum, item) => sum + safeNumber(item.totalAmount), 0);
+
+    const overDue = visiblePurchaseOrders.filter(
+      (item) => item.status === "Over Due",
     );
+    const open = visiblePurchaseOrders.filter(
+      (item) => item.status === "Open" || item.status === "Draft",
+    );
+    const paid = visiblePurchaseOrders.filter((item) => item.status === "Paid");
 
-    const overDue = visiblePurchaseOrders
-      .filter((item) => item.status === "Over Due")
-      .reduce((sum, item) => sum + safeNumber(item.totalAmount), 0);
-
-    const open = visiblePurchaseOrders
-      .filter((item) => item.status === "Open" || item.status === "Draft")
-      .reduce((sum, item) => sum + safeNumber(item.totalAmount), 0);
-
-    const paid = visiblePurchaseOrders
-      .filter((item) => item.status === "Paid")
-      .reduce((sum, item) => sum + safeNumber(item.totalAmount), 0);
-
-    return { totalPayable, overDue, open, paid };
+    return {
+      totalPayable: sumOf(visiblePurchaseOrders),
+      totalCount: visiblePurchaseOrders.length,
+      overDue: sumOf(overDue),
+      overDueCount: overDue.length,
+      open: sumOf(open),
+      openCount: open.length,
+      paid: sumOf(paid),
+      paidCount: paid.length,
+    };
   }, [visiblePurchaseOrders]);
 
-  const chartData = useMemo(() => {
-    const grouped = new Map<
-      string,
-      {
-        date: string;
-        totalPayable: number;
-        overDue: number;
-        open: number;
-        paid: number;
-      }
-    >();
+  const statusCounts = useMemo(() => {
+    const counts: Record<POStatusFilter, number> = {
+      all: visiblePurchaseOrders.length,
+      Draft: 0,
+      Open: 0,
+      "Over Due": 0,
+      Paid: 0,
+      Cancelled: 0,
+    };
 
-    visiblePurchaseOrders.forEach((item) => {
-      const rawDate = item.issueDate || "No Date";
-
-      const label =
-        rawDate === "No Date"
-          ? rawDate
-          : new Date(rawDate).toLocaleDateString("en-GB", {
-              day: "2-digit",
-              month: "short",
-            });
-
-      const existing = grouped.get(label) || {
-        date: label,
-        totalPayable: 0,
-        overDue: 0,
-        open: 0,
-        paid: 0,
-      };
-
-      existing.totalPayable += safeNumber(item.totalAmount);
-
-      if (item.status === "Over Due") {
-        existing.overDue += safeNumber(item.totalAmount);
-      }
-
-      if (item.status === "Open" || item.status === "Draft") {
-        existing.open += safeNumber(item.totalAmount);
-      }
-
-      if (item.status === "Paid") {
-        existing.paid += safeNumber(item.totalAmount);
-      }
-
-      grouped.set(label, existing);
+    visiblePurchaseOrders.forEach((po) => {
+      if (po.status in counts) counts[po.status] += 1;
     });
 
-    return Array.from(grouped.values()).slice(-8);
+    return counts;
   }, [visiblePurchaseOrders]);
 
   const filteredPurchaseOrders = useMemo(() => {
     const search = normalizeText(searchTerm);
-    if (!search) return visiblePurchaseOrders;
+    const byStatus =
+      statusFilter === "all"
+        ? visiblePurchaseOrders
+        : visiblePurchaseOrders.filter((po) => po.status === statusFilter);
 
-    return visiblePurchaseOrders.filter((po) => {
+    if (!search) return byStatus;
+
+    return byStatus.filter((po) => {
       const approvalText = normalizeText(
         po.approvalWorkflow?.state || po.approvalStatus,
       );
@@ -1615,7 +1668,37 @@ export default function POManagementPage() {
 
       return haystack.includes(search);
     });
-  }, [visiblePurchaseOrders, searchTerm]);
+  }, [visiblePurchaseOrders, searchTerm, statusFilter]);
+
+  const totalPages =
+    Math.ceil(filteredPurchaseOrders.length / PO_RECORDS_PER_PAGE) || 1;
+
+  const paginatedPurchaseOrders = useMemo(
+    () =>
+      filteredPurchaseOrders.slice(
+        (currentPage - 1) * PO_RECORDS_PER_PAGE,
+        currentPage * PO_RECORDS_PER_PAGE,
+      ),
+    [filteredPurchaseOrders, currentPage],
+  );
+
+  const pageStart =
+    filteredPurchaseOrders.length === 0
+      ? 0
+      : (currentPage - 1) * PO_RECORDS_PER_PAGE + 1;
+  const pageEnd = Math.min(
+    currentPage * PO_RECORDS_PER_PAGE,
+    filteredPurchaseOrders.length,
+  );
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [searchTerm, statusFilter]);
+
+  // Stay on a real page when rows disappear (e.g. after a delete).
+  useEffect(() => {
+    if (currentPage > totalPages) setCurrentPage(totalPages);
+  }, [currentPage, totalPages]);
 
   const getPOWithResolvedWorkflow = (po: PurchaseOrder) => ({
     ...po,
@@ -1667,6 +1750,18 @@ export default function POManagementPage() {
     );
   };
 
+  const getPOApprovalTone = (po: PurchaseOrder): PillTone => {
+    if (!isPOApprovalRequired()) return "neutral";
+    if (isPOApproved(po)) return "success";
+
+    const state = normalizeText(
+      po.approvalWorkflow?.state || po.approvalStatus,
+    );
+    if (state === "returned" || state === "rejected") return "danger";
+
+    return "warning";
+  };
+
   const canApprovePO = (po: PurchaseOrder) => {
     if (!hasPurchaseOrderAccess || !isPOApprovalRequired()) return false;
     if (isPOApproved(po)) return false;
@@ -1676,8 +1771,15 @@ export default function POManagementPage() {
     );
     if (state === "returned" || state === "rejected") return false;
 
-    return isCurrentRequestApprover(
-      getPOWithResolvedWorkflow(po),
+    // Not isCurrentRequestApprover: it also requires status "pending_approval",
+    // which POs never store (they keep Draft/Open), so it always returned false.
+    const resolvedPO = getPOWithResolvedWorkflow(po);
+    if (normalizeText(resolvedPO.approvalWorkflow?.state) !== "pending") {
+      return false;
+    }
+
+    return isUserAssignedToApprovalLevel(
+      getCurrentApprovalLevel(resolvedPO),
       effectiveUser,
     );
   };
@@ -1928,7 +2030,9 @@ export default function POManagementPage() {
       Object.assign(updatePayload, {
         // "Over Due" is only worked out for display; it's never stored.
         status:
-          po.status === "Draft" || po.status === "Over Due" ? "Open" : po.status,
+          po.status === "Draft" || po.status === "Over Due"
+            ? "Open"
+            : po.status,
         approvalStatus: "approved",
         approvalWorkflow: {
           ...workflow,
@@ -2132,7 +2236,7 @@ export default function POManagementPage() {
       return;
     }
 
-    if (remainingAmount <= 0.009) {
+    if (isPOPaymentCompleted(po) || remainingAmount <= 0.009) {
       toast({
         title: "Payment already released",
         description:
@@ -2356,240 +2460,218 @@ export default function POManagementPage() {
   }
 
   return (
-    <div className="p-6 space-y-6 bg-slate-50 min-h-screen">
-      <div className="flex items-center justify-between gap-4 flex-wrap">
+    <div className="min-h-screen space-y-6 bg-slate-50 p-4 sm:p-6 lg:p-8">
+      <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight">Purchase Orders</h1>
-          <p className="text-sm text-muted-foreground">
-            PO management only. Create PO now opens on a separate page instead
-            of a popup.
+          <h1 className="text-2xl font-semibold tracking-tight text-slate-900">
+            Purchase Orders
+          </h1>
+          <p className="mt-1 text-sm text-slate-500">
+            {userCanViewAllPurchaseOrders
+              ? "All purchase orders, including those created by other users."
+              : "Purchase orders you created or that are waiting for your approval."}
           </p>
         </div>
 
-        <Button className="rounded-2xl" onClick={handleCreatePO}>
-          <Plus className="h-4 w-4 mr-2" />
+        <Button className="h-10 rounded-xl px-4" onClick={handleCreatePO}>
+          <Plus className="mr-2 h-4 w-4" />
           Create PO
         </Button>
       </div>
 
-      <div className="grid grid-cols-1 xl:grid-cols-12 gap-6">
-        <div className="xl:col-span-5 space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <Card className="rounded-3xl">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Total Payable
-                    </p>
-                    <p className="text-xl font-bold mt-1">
-                      {formatCurrency(totals.totalPayable)}
-                    </p>
-                  </div>
-                  <Wallet className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-3xl">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Over Due</p>
-                    <p className="text-xl font-bold mt-1">
-                      {formatCurrency(totals.overDue)}
-                    </p>
-                  </div>
-                  <AlertTriangle className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-3xl">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">
-                      Open / Draft
-                    </p>
-                    <p className="text-xl font-bold mt-1">
-                      {formatCurrency(totals.open)}
-                    </p>
-                  </div>
-                  <FileText className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </Card>
-
-            <Card className="rounded-3xl">
-              <CardContent className="p-5">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-sm text-muted-foreground">Paid</p>
-                    <p className="text-xl font-bold mt-1">
-                      {formatCurrency(totals.paid)}
-                    </p>
-                  </div>
-                  <CheckCircle2 className="h-5 w-5" />
-                </div>
-              </CardContent>
-            </Card>
+      <div className="grid grid-cols-2 gap-px overflow-hidden rounded-2xl border border-slate-200 bg-slate-200 lg:grid-cols-4">
+        {[
+          {
+            label: "Total Payable",
+            value: totals.totalPayable,
+            count: totals.totalCount,
+          },
+          {
+            label: "Open / Draft",
+            value: totals.open,
+            count: totals.openCount,
+          },
+          {
+            label: "Over Due",
+            value: totals.overDue,
+            count: totals.overDueCount,
+            alert: totals.overDueCount > 0,
+          },
+          { label: "Paid", value: totals.paid, count: totals.paidCount },
+        ].map((stat) => (
+          <div key={stat.label} className="bg-white p-4 sm:p-5">
+            <p className="text-xs font-medium uppercase tracking-wider text-slate-500">
+              {stat.label}
+            </p>
+            <p
+              className={`mt-2 truncate text-lg font-semibold tabular-nums sm:text-xl ${
+                stat.alert ? "text-rose-600" : "text-slate-900"
+              }`}
+            >
+              {formatCurrency(stat.value)}
+            </p>
+            <p className="mt-1 text-xs text-slate-400">
+              {stat.count} {stat.count === 1 ? "order" : "orders"}
+            </p>
           </div>
-        </div>
-
-        <div className="xl:col-span-7">
-          <Card className="rounded-3xl shadow-sm">
-            <CardHeader>
-              <CardTitle>PO Summary Graph</CardTitle>
-              <CardDescription>
-                Date-wise view of total payable, overdue, open and paid values.
-              </CardDescription>
-            </CardHeader>
-
-            <CardContent>
-              <div className="h-[320px]">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={chartData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="date" />
-                    <YAxis />
-                    <Tooltip
-                      formatter={(value: number) => formatCurrency(value)}
-                    />
-                    <Legend />
-                    <Bar
-                      dataKey="totalPayable"
-                      name="Total Payable"
-                      radius={[8, 8, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="overDue"
-                      name="Over Due"
-                      radius={[8, 8, 0, 0]}
-                    />
-                    <Bar
-                      dataKey="open"
-                      name="Open / Draft"
-                      radius={[8, 8, 0, 0]}
-                    />
-                    <Bar dataKey="paid" name="Paid" radius={[8, 8, 0, 0]} />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
+        ))}
       </div>
 
-      <Card className="rounded-3xl shadow-sm">
-        <CardHeader className="space-y-4">
-          <div>
-            <CardTitle className="flex items-center gap-2">
-              <Receipt className="h-5 w-5" />
-              Purchase Order List
-            </CardTitle>
-            <CardDescription>
-              {userCanViewAllPurchaseOrders
-                ? "Showing all Purchase Orders, including orders created by other users."
-                : "Showing Purchase Orders created by you or currently assigned to you for approval."}
-            </CardDescription>
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+        <div className="flex flex-col gap-3 border-b border-slate-200 p-4 lg:flex-row lg:items-center lg:justify-between">
+          <div
+            className="-mx-1 flex gap-1 overflow-x-auto px-1"
+            role="tablist"
+            aria-label="Filter purchase orders by status"
+          >
+            {PO_STATUS_FILTERS.map((filter) => {
+              const active = statusFilter === filter.value;
+
+              return (
+                <button
+                  key={filter.value}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  onClick={() => setStatusFilter(filter.value)}
+                  className={`inline-flex shrink-0 items-center gap-1.5 rounded-lg px-3 py-1.5 text-sm font-medium transition-colors ${
+                    active
+                      ? "bg-slate-900 text-white"
+                      : "text-slate-600 hover:bg-slate-100 hover:text-slate-900"
+                  }`}
+                >
+                  {filter.label}
+                  <span
+                    className={`text-xs tabular-nums ${
+                      active ? "text-white/60" : "text-slate-400"
+                    }`}
+                  >
+                    {statusCounts[filter.value]}
+                  </span>
+                </button>
+              );
+            })}
           </div>
 
-          <div className="relative max-w-xl">
-            <Search className="pointer-events-none absolute left-4 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+          <div className="relative w-full lg:max-w-xs">
+            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
             <Input
               value={searchTerm}
               onChange={(event) => setSearchTerm(event.target.value)}
-              placeholder="Search PO, estimate, supplier, project, status..."
-              className="h-11 rounded-2xl border-slate-200 bg-slate-50 pl-11"
+              placeholder="Search PO, supplier, project..."
+              aria-label="Search purchase orders"
+              className="h-9 rounded-lg border-slate-200 bg-slate-50 pl-9 text-sm focus-visible:bg-white"
             />
           </div>
-        </CardHeader>
+        </div>
 
-        <CardContent>
-          <div className="overflow-x-auto rounded-2xl border bg-white">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>P.O.</TableHead>
-                  <TableHead>ESTIMATE #</TableHead>
-                  <TableHead>SUPPLIER</TableHead>
-                  <TableHead>DATE</TableHead>
-                  <TableHead className="text-right">TOTAL</TableHead>
-                  <TableHead className="text-right">RELEASED</TableHead>
-                  <TableHead className="text-right">REMAINING</TableHead>
-                  <TableHead>PAYMENT</TableHead>
-                  <TableHead>APPROVAL</TableHead>
-                  <TableHead>STATUS</TableHead>
-                  <TableHead>ACTION</TableHead>
-                </TableRow>
-              </TableHeader>
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-slate-200 bg-slate-50/80 hover:bg-slate-50/80">
+                <TableHead className="h-10 text-xs font-medium uppercase tracking-wider text-slate-500">
+                  Purchase Order
+                </TableHead>
+                <TableHead className="h-10 text-xs font-medium uppercase tracking-wider text-slate-500">
+                  Supplier
+                </TableHead>
+                <TableHead className="h-10 text-right text-xs font-medium uppercase tracking-wider text-slate-500">
+                  Total
+                </TableHead>
+                <TableHead className="h-10 text-right text-xs font-medium uppercase tracking-wider text-slate-500">
+                  Released
+                </TableHead>
+                <TableHead className="h-10 text-right text-xs font-medium uppercase tracking-wider text-slate-500">
+                  Balance
+                </TableHead>
+                <TableHead className="h-10 text-xs font-medium uppercase tracking-wider text-slate-500">
+                  Payment
+                </TableHead>
+                <TableHead className="h-10 text-xs font-medium uppercase tracking-wider text-slate-500">
+                  Approval
+                </TableHead>
+                <TableHead className="h-10 text-xs font-medium uppercase tracking-wider text-slate-500">
+                  Status
+                </TableHead>
+                <TableHead className="h-10 text-right">
+                  <span className="sr-only">Actions</span>
+                </TableHead>
+              </TableRow>
+            </TableHeader>
 
-              <TableBody>
-                {filteredPurchaseOrders.length > 0 ? (
-                  filteredPurchaseOrders.map((po) => (
-                    <TableRow key={po.id}>
-                      <TableCell className="font-medium">
-                        {po.poNumber}
+            <TableBody>
+              {paginatedPurchaseOrders.length > 0 ? (
+                paginatedPurchaseOrders.map((po) => {
+                  const releasedAmount = getTotalReleasedAmount(po);
+                  const remainingAmount = getPORemainingAmount(po);
+                  const isReturned =
+                    normalizeText(po.approvalWorkflow?.state) === "returned" ||
+                    normalizeText(po.approvalStatus) === "rejected";
+
+                  return (
+                    <TableRow
+                      key={po.id}
+                      className="border-slate-100 hover:bg-slate-50/60"
+                    >
+                      <TableCell className="py-3">
+                        <button
+                          type="button"
+                          onClick={() => handleViewPO(po)}
+                          className="whitespace-nowrap font-medium text-slate-900 hover:underline"
+                        >
+                          {po.poNumber || "-"}
+                        </button>
+                        <p className="whitespace-nowrap text-xs text-slate-500">
+                          {po.estimateNumber || "No estimate"}
+                        </p>
                       </TableCell>
 
-                      <TableCell>{po.estimateNumber || "-"}</TableCell>
-
-                      <TableCell>{po.supplierName || "-"}</TableCell>
-
-                      <TableCell>
-                        {formatDateDisplay(po.issueDate) || "-"}
+                      <TableCell className="py-3">
+                        <p
+                          className="max-w-[220px] truncate text-slate-700"
+                          title={po.supplierName}
+                        >
+                          {po.supplierName || "-"}
+                        </p>
+                        <p className="text-xs text-slate-500">
+                          {formatDateDisplay(po.issueDate) || "-"}
+                        </p>
                       </TableCell>
 
-                      <TableCell className="text-right">
+                      <TableCell className="whitespace-nowrap py-3 text-right font-medium tabular-nums text-slate-900">
                         {formatCurrency(po.totalAmount || 0)}
                       </TableCell>
 
-                      <TableCell className="text-right">
-                        {formatCurrency(getTotalReleasedAmount(po))}
+                      <TableCell className="whitespace-nowrap py-3 text-right tabular-nums text-slate-600">
+                        {formatCurrency(releasedAmount)}
                       </TableCell>
 
-                      <TableCell className="text-right">
-                        {formatCurrency(getPORemainingAmount(po))}
+                      <TableCell
+                        className={`whitespace-nowrap py-3 text-right tabular-nums ${
+                          remainingAmount > 0.009
+                            ? "text-slate-900"
+                            : "text-slate-400"
+                        }`}
+                      >
+                        {formatCurrency(remainingAmount)}
                       </TableCell>
 
-                      <TableCell>
-                        <Badge
-                          variant={
-                            getPORemainingAmount(po) <= 0.009 &&
-                            getTotalReleasedAmount(po) > 0
-                              ? "default"
-                              : getTotalReleasedAmount(po) > 0
-                                ? "secondary"
-                                : "outline"
-                          }
-                        >
+                      <TableCell className="py-3">
+                        <StatusPill tone={getPOPaymentTone(po)}>
                           {getPOPaymentLabel(po)}
-                        </Badge>
+                        </StatusPill>
                       </TableCell>
 
-                      <TableCell>
-                        <Badge
-                          variant={
-                            isPOApproved(po)
-                              ? "default"
-                              : normalizeText(
-                                    po.approvalWorkflow?.state ||
-                                      po.approvalStatus,
-                                  ) === "returned" ||
-                                  normalizeText(po.approvalStatus) ===
-                                    "rejected"
-                                ? "destructive"
-                                : "secondary"
-                          }
-                          className="max-w-[180px] truncate"
+                      <TableCell className="py-3">
+                        <StatusPill
+                          tone={getPOApprovalTone(po)}
                           title={getPOApprovalLabel(po)}
                         >
                           {getPOApprovalLabel(po)}
-                        </Badge>
+                        </StatusPill>
                       </TableCell>
 
-                      <TableCell>
+                      <TableCell className="py-3">
                         <Select
                           disabled={!isPOApproved(po)}
                           value={
@@ -2599,7 +2681,10 @@ export default function POManagementPage() {
                             handleStatusChange(po, value as PurchaseOrderStatus)
                           }
                         >
-                          <SelectTrigger className="w-[130px]">
+                          <SelectTrigger
+                            className="h-8 w-[118px] rounded-lg border-slate-200 text-xs"
+                            aria-label={`Status of ${po.poNumber || "purchase order"}`}
+                          >
                             <SelectValue />
                           </SelectTrigger>
 
@@ -2616,15 +2701,15 @@ export default function POManagementPage() {
                         </Select>
                       </TableCell>
 
-                      <TableCell>
-                        <div className="flex flex-wrap gap-2">
+                      <TableCell className="py-3">
+                        <div className="flex items-center justify-end gap-1">
                           {canApprovePO(po) && (
                             <>
                               <Button
                                 type="button"
                                 size="icon"
-                                variant="outline"
-                                className="h-9 w-9 rounded-xl border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100"
+                                variant="ghost"
+                                className="h-8 w-8 rounded-lg text-emerald-600 hover:bg-emerald-50 hover:text-emerald-700"
                                 title="Approve Purchase Order"
                                 aria-label="Approve Purchase Order"
                                 onClick={() => handleApprovePO(po)}
@@ -2634,8 +2719,8 @@ export default function POManagementPage() {
                               <Button
                                 type="button"
                                 size="icon"
-                                variant="outline"
-                                className="h-9 w-9 rounded-xl border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100"
+                                variant="ghost"
+                                className="h-8 w-8 rounded-lg text-rose-600 hover:bg-rose-50 hover:text-rose-700"
                                 title="Return Purchase Order"
                                 aria-label="Return Purchase Order"
                                 onClick={() => openRejectPO(po)}
@@ -2645,67 +2730,35 @@ export default function POManagementPage() {
                             </>
                           )}
 
-                          {(normalizeText(po.approvalWorkflow?.state) ===
-                            "returned" ||
-                            normalizeText(po.approvalStatus) ===
-                              "rejected") && (
+                          {isFinanceUser && (
                             <Button
                               type="button"
-                              size="icon"
+                              size="sm"
                               variant="outline"
-                              className="h-9 w-9 rounded-xl"
-                              title="Resubmit for approval"
-                              aria-label="Resubmit Purchase Order for approval"
-                              onClick={() => handleResubmitPO(po)}
+                              className="h-8 rounded-lg border-slate-200 px-2.5 text-xs"
+                              title={
+                                releasedAmount > 0
+                                  ? "Release more payment"
+                                  : "Release payment"
+                              }
+                              onClick={() => handleOpenPaymentRelease(po)}
+                              disabled={
+                                !isPOApproved(po) ||
+                                po.status === "Cancelled" ||
+                                isPOPaymentCompleted(po) ||
+                                remainingAmount <= 0.009
+                              }
                             >
-                              <RotateCcw className="h-4 w-4" />
+                              <Banknote className="mr-1.5 h-3.5 w-3.5" />
+                              Release
                             </Button>
                           )}
 
                           <Button
                             type="button"
                             size="icon"
-                            className="h-9 w-9 rounded-xl"
-                            title={
-                              getTotalReleasedAmount(po) > 0
-                                ? "Release More"
-                                : "Release Payment"
-                            }
-                            aria-label={
-                              getTotalReleasedAmount(po) > 0
-                                ? "Release more payment"
-                                : "Release payment"
-                            }
-                            onClick={() => handleOpenPaymentRelease(po)}
-                            disabled={
-                              !isFinanceUser ||
-                              !isPOApproved(po) ||
-                              po.status === "Cancelled" ||
-                              getPORemainingAmount(po) <= 0.009
-                            }
-                          >
-                            <Banknote className="h-4 w-4" />
-                          </Button>
-
-                          {canEditPO(po) && (
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="outline"
-                              className="h-9 w-9 rounded-xl"
-                              title="Edit"
-                              aria-label="Edit purchase order"
-                              onClick={() => handleEditPO(po)}
-                            >
-                              <Pencil className="h-4 w-4" />
-                            </Button>
-                          )}
-
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="h-9 w-9 rounded-xl"
+                            variant="ghost"
+                            className="h-8 w-8 rounded-lg text-slate-500 hover:text-slate-900"
                             title="View"
                             aria-label="View purchase order"
                             onClick={() => handleViewPO(po)}
@@ -2713,64 +2766,165 @@ export default function POManagementPage() {
                             <Eye className="h-4 w-4" />
                           </Button>
 
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="h-9 w-9 rounded-xl"
-                            title="Duplicate"
-                            aria-label="Duplicate purchase order"
-                            onClick={() => handleDuplicatePO(po)}
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
+                          <DropdownMenu modal={false}>
+                            <DropdownMenuTrigger asChild>
+                              <Button
+                                type="button"
+                                size="icon"
+                                variant="ghost"
+                                className="h-8 w-8 rounded-lg text-slate-500 hover:text-slate-900"
+                                aria-label="More actions"
+                              >
+                                <MoreHorizontal className="h-4 w-4" />
+                              </Button>
+                            </DropdownMenuTrigger>
 
-                          <Button
-                            type="button"
-                            size="icon"
-                            variant="outline"
-                            className="h-9 w-9 rounded-xl"
-                            title="Open PDF"
-                            aria-label="Open purchase order PDF"
-                            onClick={() => handleGeneratePOPdf(po)}
-                          >
-                            <FileText className="h-4 w-4" />
-                          </Button>
+                            <DropdownMenuContent align="end" className="w-44">
+                              {canEditPO(po) && (
+                                <DropdownMenuItem
+                                  onClick={() => handleEditPO(po)}
+                                >
+                                  <Pencil className="mr-2 h-4 w-4" />
+                                  Edit
+                                </DropdownMenuItem>
+                              )}
 
-                          {isAdminUser && (
-                            <Button
-                              type="button"
-                              size="icon"
-                              variant="outline"
-                              className="h-9 w-9 rounded-xl border-rose-200 text-rose-700 hover:bg-rose-50"
-                              title="Delete"
-                              aria-label="Delete purchase order"
-                              onClick={() => setDeletingPO(po)}
-                            >
-                              <Trash2 className="h-4 w-4" />
-                            </Button>
-                          )}
+                              {isReturned && (
+                                <DropdownMenuItem
+                                  onClick={() => handleResubmitPO(po)}
+                                >
+                                  <RotateCcw className="mr-2 h-4 w-4" />
+                                  Resubmit
+                                </DropdownMenuItem>
+                              )}
+
+                              <DropdownMenuItem
+                                onClick={() => handleDuplicatePO(po)}
+                              >
+                                <Copy className="mr-2 h-4 w-4" />
+                                Duplicate
+                              </DropdownMenuItem>
+
+                              <DropdownMenuItem
+                                onClick={() => handleGeneratePOPdf(po)}
+                              >
+                                <FileText className="mr-2 h-4 w-4" />
+                                Open PDF
+                              </DropdownMenuItem>
+
+                              {isAdminUser && (
+                                <>
+                                  <DropdownMenuSeparator />
+                                  <DropdownMenuItem
+                                    className="text-rose-600 focus:bg-rose-50 focus:text-rose-700"
+                                    onClick={() => setDeletingPO(po)}
+                                  >
+                                    <Trash2 className="mr-2 h-4 w-4" />
+                                    Delete
+                                  </DropdownMenuItem>
+                                </>
+                              )}
+                            </DropdownMenuContent>
+                          </DropdownMenu>
                         </div>
                       </TableCell>
                     </TableRow>
-                  ))
-                ) : (
-                  <TableRow>
-                    <TableCell
-                      colSpan={11}
-                      className="text-center text-muted-foreground py-8"
+                  );
+                })
+              ) : (
+                <TableRow className="hover:bg-transparent">
+                  <TableCell colSpan={9} className="py-16 text-center">
+                    <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-xl bg-slate-100 text-slate-400">
+                      <Receipt className="h-5 w-5" />
+                    </div>
+                    <p className="mt-3 text-sm font-medium text-slate-900">
+                      {searchTerm.trim() || statusFilter !== "all"
+                        ? "No matching purchase orders"
+                        : "No purchase orders yet"}
+                    </p>
+                    <p className="mt-1 text-sm text-slate-500">
+                      {searchTerm.trim() || statusFilter !== "all"
+                        ? "Try a different search or status filter."
+                        : "Create a PO to see it listed here."}
+                    </p>
+                  </TableCell>
+                </TableRow>
+              )}
+            </TableBody>
+          </Table>
+        </div>
+
+        {filteredPurchaseOrders.length > 0 && (
+          <div className="flex flex-col items-center justify-between gap-3 border-t border-slate-200 px-4 py-3 sm:flex-row">
+            <p className="text-sm text-slate-500">
+              Showing{" "}
+              <span className="font-medium tabular-nums text-slate-900">
+                {pageStart}–{pageEnd}
+              </span>{" "}
+              of{" "}
+              <span className="font-medium tabular-nums text-slate-900">
+                {filteredPurchaseOrders.length}
+              </span>
+            </p>
+
+            {totalPages > 1 && (
+              <nav
+                className="flex items-center gap-1"
+                aria-label="Purchase order pages"
+              >
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 rounded-lg"
+                  aria-label="Previous page"
+                  disabled={currentPage === 1}
+                  onClick={() => setCurrentPage((page) => page - 1)}
+                >
+                  <ChevronLeft className="h-4 w-4" />
+                </Button>
+
+                {getPageNumbers(currentPage, totalPages).map((page, index) =>
+                  page === "…" ? (
+                    <span
+                      key={`gap-${index}`}
+                      className="px-1 text-sm text-slate-400"
                     >
-                      {searchTerm.trim()
-                        ? "No matching purchase orders found."
-                        : "No purchase orders found."}
-                    </TableCell>
-                  </TableRow>
+                      …
+                    </span>
+                  ) : (
+                    <button
+                      key={page}
+                      type="button"
+                      onClick={() => setCurrentPage(page)}
+                      aria-current={page === currentPage ? "page" : undefined}
+                      className={`h-8 min-w-8 rounded-lg px-2 text-sm tabular-nums transition-colors ${
+                        page === currentPage
+                          ? "bg-slate-900 font-medium text-white"
+                          : "text-slate-600 hover:bg-slate-100"
+                      }`}
+                    >
+                      {page}
+                    </button>
+                  ),
                 )}
-              </TableBody>
-            </Table>
+
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="ghost"
+                  className="h-8 w-8 rounded-lg"
+                  aria-label="Next page"
+                  disabled={currentPage === totalPages}
+                  onClick={() => setCurrentPage((page) => page + 1)}
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Button>
+              </nav>
+            )}
           </div>
-        </CardContent>
-      </Card>
+        )}
+      </div>
 
       {paymentReleasePO && (
         // Explicit <PurchaseOrder> generic arg removed: esbuild's JSX parser
@@ -2838,8 +2992,8 @@ export default function POManagementPage() {
                   {deletingPO?.supplierName
                     ? ` for ${deletingPO.supplierName}`
                     : ""}{" "}
-                  ({formatCurrency(safeNumber(deletingPO?.totalAmount))}) will be
-                  permanently deleted. This cannot be undone.
+                  ({formatCurrency(safeNumber(deletingPO?.totalAmount))}) will
+                  be permanently deleted. This cannot be undone.
                 </p>
 
                 {deletingPO && hasPurchaseOrderPaymentReleased(deletingPO) && (
@@ -2862,7 +3016,9 @@ export default function POManagementPage() {
           </AlertDialogHeader>
 
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={deleteLoading}>Cancel</AlertDialogCancel>
+            <AlertDialogCancel disabled={deleteLoading}>
+              Cancel
+            </AlertDialogCancel>
             <Button
               type="button"
               variant="destructive"
