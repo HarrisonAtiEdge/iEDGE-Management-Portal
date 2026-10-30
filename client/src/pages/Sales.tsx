@@ -1063,7 +1063,7 @@ import { useMemo, useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
 import { SalesRecordModal } from "@/components/SalesRecordModal";
-import { collection, query, onSnapshot, orderBy } from "firebase/firestore";
+import { collection, query, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import type { SalesRecord } from "@shared/schema";
 import { mapSalesRecordForBackwardCompatibility } from "@shared/schema";
@@ -1113,6 +1113,18 @@ type SortOption = "newest" | "oldest" | "highestValue" | "lowestValue";
 
 const PANEL_ID = "IEDGE-SYSTEM";
 const PAGE_SIZE = 9;
+
+// Client filter values besides a client: every project, or those with no client.
+const ALL_CLIENTS = "All";
+const NO_CLIENT = "__no_client__";
+
+/** Projects store the client by name; match it ignoring case and spacing. */
+function clientKey(value: unknown) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
 
 const STATUS_OPTIONS: StatusFilter[] = [
   "All",
@@ -1323,6 +1335,7 @@ function getIconBoxClasses(status: ProjectStatus) {
 function getSalesRecordPermissions(
   record: any,
   currentUserId: string,
+  canViewAllProjects = false,
 ): SalesAccessPermissions {
   const projectCustodians = normalizeStringArray(record?.projectCustodians);
   const supervisors = normalizeStringArray(record?.supervisors);
@@ -1363,6 +1376,7 @@ function getSalesRecordPermissions(
     adminParticipantIds.includes(currentUserId);
 
   const canViewRecord =
+    canViewAllProjects ||
     isOwner ||
     isSupervisor ||
     isCustodian ||
@@ -1444,11 +1458,20 @@ export function Sales() {
   const [statusFilter, setStatusFilter] = useState<StatusFilter>("All");
   const [projectOwnerFilter, setProjectOwnerFilter] = useState("All");
   const [accessFilter, setAccessFilter] = useState("All");
+  const [clientFilter, setClientFilter] = useState(ALL_CLIENTS);
   const [sortBy, setSortBy] = useState<SortOption>("newest");
   const [showFilters, setShowFilters] = useState(false);
   const [currentPage, setCurrentPage] = useState(1);
 
   const actorId = currentUser?.uid || userProfile?.id || "";
+
+  const currentUserRole = normalizeRole(userProfile?.role);
+  const currentUserDepartment = normalizeRole((userProfile as any)?.department);
+
+  // Admins see every project; ones they aren't on open view-only. Everyone
+  // else sees the projects they have access to.
+  const canViewAllProjects =
+    currentUserRole.includes("admin") || currentUserDepartment.includes("admin");
 
   useEffect(() => {
     const clientQuery = query(collection(db, "Panels", PANEL_ID, "clients"));
@@ -1468,9 +1491,10 @@ export function Sales() {
   useEffect(() => {
     if (!userProfile || !actorId) return;
 
+    // No orderBy: Firestore leaves out documents missing the ordered field,
+    // which hid projects without updatedAt. The list is sorted below instead.
     const salesRecordsQuery = query(
       collection(db, "Panels", PANEL_ID, "salesRecords"),
-      orderBy("updatedAt", "desc"),
     );
 
     const unsubscribe = onSnapshot(
@@ -1482,7 +1506,11 @@ export function Sales() {
         }) as SalesRecord[];
 
         const visibleRecords = mappedRecords.filter((record: any) => {
-          const permissions = getSalesRecordPermissions(record, actorId);
+          const permissions = getSalesRecordPermissions(
+            record,
+            actorId,
+            canViewAllProjects,
+          );
           return permissions.canViewRecord;
         });
 
@@ -1496,7 +1524,7 @@ export function Sales() {
     );
 
     return () => unsubscribe();
-  }, [userProfile, actorId]);
+  }, [userProfile, actorId, canViewAllProjects]);
 
   const permissionsByRecordId = useMemo(() => {
     const nextMap: Record<string, SalesAccessPermissions> = {};
@@ -1504,20 +1532,21 @@ export function Sales() {
     if (!actorId) return nextMap;
 
     records.forEach((record: any) => {
-      nextMap[String(record.id)] = getSalesRecordPermissions(record, actorId);
+      nextMap[String(record.id)] = getSalesRecordPermissions(
+        record,
+        actorId,
+        canViewAllProjects,
+      );
     });
 
     return nextMap;
-  }, [records, actorId]);
+  }, [records, actorId, canViewAllProjects]);
 
   const editingPermissions =
     editingRecord && editingRecord.id
       ? permissionsByRecordId[String(editingRecord.id)] ||
-        getSalesRecordPermissions(editingRecord, actorId)
+        getSalesRecordPermissions(editingRecord, actorId, canViewAllProjects)
       : undefined;
-
-  const currentUserRole = normalizeRole(userProfile?.role);
-  const currentUserDepartment = normalizeRole((userProfile as any)?.department);
 
   const canCreateProject =
     !!userProfile &&
@@ -1556,13 +1585,42 @@ export function Sales() {
     return Array.from(owners).sort((a, b) => a.localeCompare(b));
   }, [records]);
 
+  // Every client in the system, kept live from the clients collection, plus
+  // any client name found only on a project (e.g. a client renamed since).
+  const clientFilterOptions = useMemo(() => {
+    const options = new Map<string, { name: string; count: number }>();
+
+    clients.forEach((client: any) => {
+      const name = String(client?.name || "").trim();
+      const key = clientKey(name);
+      if (key && !options.has(key)) options.set(key, { name, count: 0 });
+    });
+
+    records.forEach((record: any) => {
+      const key = clientKey(record?.client);
+      if (!key) return;
+      const option = options.get(key);
+      if (option) option.count += 1;
+      else options.set(key, { name: String(record.client).trim(), count: 1 });
+    });
+
+    return Array.from(options, ([key, option]) => ({ key, ...option })).sort(
+      (a, b) => a.name.localeCompare(b.name),
+    );
+  }, [clients, records]);
+
+  const projectsWithoutClient = useMemo(
+    () => records.filter((record: any) => !clientKey(record?.client)).length,
+    [records],
+  );
+
   const filteredRecords = useMemo(() => {
     const search = searchTerm.trim().toLowerCase();
 
     const nextRecords = records.filter((record: any) => {
       const permissions =
         permissionsByRecordId[String(record.id)] ||
-        getSalesRecordPermissions(record, actorId);
+        getSalesRecordPermissions(record, actorId, canViewAllProjects);
 
       const status = getProjectStatus(record);
       const accessLabel = getAccessLabel(permissions);
@@ -1590,8 +1648,19 @@ export function Sales() {
       const matchesAccess =
         accessFilter === "All" || accessLabel === accessFilter;
 
+      const recordClientKey = clientKey(record?.client);
+      const matchesClient =
+        clientFilter === ALL_CLIENTS ||
+        (clientFilter === NO_CLIENT
+          ? !recordClientKey
+          : recordClientKey === clientFilter);
+
       return (
-        matchesSearch && matchesStatus && matchesProjectOwner && matchesAccess
+        matchesSearch &&
+        matchesStatus &&
+        matchesProjectOwner &&
+        matchesAccess &&
+        matchesClient
       );
     });
 
@@ -1616,10 +1685,12 @@ export function Sales() {
     records,
     permissionsByRecordId,
     actorId,
+    canViewAllProjects,
     searchTerm,
     statusFilter,
     projectOwnerFilter,
     accessFilter,
+    clientFilter,
     sortBy,
   ]);
 
@@ -1632,7 +1703,14 @@ export function Sales() {
 
   useEffect(() => {
     setCurrentPage(1);
-  }, [searchTerm, statusFilter, projectOwnerFilter, accessFilter, sortBy]);
+  }, [
+    searchTerm,
+    statusFilter,
+    projectOwnerFilter,
+    accessFilter,
+    clientFilter,
+    sortBy,
+  ]);
 
   useEffect(() => {
     if (currentPage > totalPages) {
@@ -1655,6 +1733,7 @@ export function Sales() {
     setStatusFilter("All");
     setProjectOwnerFilter("All");
     setAccessFilter("All");
+    setClientFilter(ALL_CLIENTS);
     setSortBy("newest");
   };
 
@@ -1705,7 +1784,8 @@ export function Sales() {
               Filters
               {(statusFilter !== "All" ||
                 projectOwnerFilter !== "All" ||
-                accessFilter !== "All") && (
+                accessFilter !== "All" ||
+                clientFilter !== ALL_CLIENTS) && (
                 <span className="h-2 w-2 rounded-full bg-orange-600" />
               )}
             </button>
@@ -1798,11 +1878,59 @@ export function Sales() {
                 </option>
               ))}
             </select>
+
+            <select
+              value={clientFilter}
+              onChange={(event) => setClientFilter(event.target.value)}
+              aria-label="Filter by client"
+              className="h-10 max-w-[16rem] rounded-2xl border border-slate-200 bg-slate-50 px-4 text-sm font-medium text-slate-700 outline-none transition focus:border-orange-300 focus:ring-4 focus:ring-orange-100"
+            >
+              <option value={ALL_CLIENTS}>All Clients</option>
+
+              {clientFilterOptions.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.name} ({option.count})
+                </option>
+              ))}
+
+              {projectsWithoutClient > 0 && (
+                <option value={NO_CLIENT}>
+                  No client ({projectsWithoutClient})
+                </option>
+              )}
+            </select>
           </div>
         </div>
 
         {showFilters && (
-          <div className="grid gap-4 rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-4">
+          <div className="grid gap-4 rounded-[1.5rem] border border-slate-200 bg-white p-5 shadow-sm md:grid-cols-5">
+            <div>
+              <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-400">
+                Client
+              </label>
+
+              <select
+                value={clientFilter}
+                onChange={(event) => setClientFilter(event.target.value)}
+                aria-label="Filter by client"
+                className="h-11 w-full rounded-2xl border border-slate-200 bg-white px-4 text-sm text-slate-700 outline-none focus:border-orange-300 focus:ring-4 focus:ring-orange-100"
+              >
+                <option value={ALL_CLIENTS}>All Clients</option>
+
+                {clientFilterOptions.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.name} ({option.count})
+                  </option>
+                ))}
+
+                {projectsWithoutClient > 0 && (
+                  <option value={NO_CLIENT}>
+                    No client ({projectsWithoutClient})
+                  </option>
+                )}
+              </select>
+            </div>
+
             <div>
               <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-slate-400">
                 Project Owner
@@ -1933,7 +2061,11 @@ export function Sales() {
                 {paginatedRecords.map((record: any) => {
                   const permissions =
                     permissionsByRecordId[String(record.id)] ||
-                    getSalesRecordPermissions(record, actorId);
+                    getSalesRecordPermissions(
+                      record,
+                      actorId,
+                      canViewAllProjects,
+                    );
 
                   const status = getProjectStatus(record);
                   const accessLabel = getAccessLabel(permissions);
@@ -2049,8 +2181,8 @@ export function Sales() {
             </h3>
 
             <p className="mt-2 text-sm text-slate-500">
-              Try changing your search, status, project owner, or access
-              filters.
+              Try changing your search, status, client, project owner, or
+              access filters.
             </p>
 
             <button

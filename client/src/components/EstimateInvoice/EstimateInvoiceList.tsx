@@ -1200,6 +1200,31 @@ type Props = {
 
 const PANEL_ID = "IEDGE-SYSTEM";
 
+// Client filter value for invoices with no client; "" means every client.
+const NO_CLIENT = "__no_client__";
+
+/** Invoices store the client by name; match it ignoring case and spacing. */
+function clientKey(value: unknown) {
+  return String(value || "")
+    .trim()
+    .replace(/\s+/g, " ")
+    .toLowerCase();
+}
+
+// An invoice doesn't store its project: it links to its estimate
+// (sourceEstimateId), and the estimate to the project (salesRecordId, or
+// failing that its project code).
+type EstimateProjectLink = {
+  id: string;
+  estimateNo: string;
+  salesRecordId: string;
+  projectCode: string;
+};
+
+type ProjectInfo = { id: string; name: string; code: string };
+
+const text = (value: unknown) => String(value ?? "").trim();
+
 export default function EstimateInvoiceList({
   onEdit,
   onDuplicate,
@@ -1231,6 +1256,9 @@ export default function EstimateInvoiceList({
   const [companyFilter, setCompanyFilter] = useState("");
 
   const [usersMap, setUsersMap] = useState<Record<string, any>>({});
+  const [clients, setClients] = useState<any[]>([]);
+  const [estimateLinks, setEstimateLinks] = useState<EstimateProjectLink[]>([]);
+  const [projects, setProjects] = useState<ProjectInfo[]>([]);
 
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
@@ -1246,6 +1274,113 @@ export default function EstimateInvoiceList({
     () => collection(db, "Panels", PANEL_ID, "estimateInvoices"),
     [],
   );
+
+  // Live, so a client added elsewhere shows up in the Client filter at once.
+  useEffect(() => {
+    const unsubscribe = onSnapshot(
+      query(collection(db, "Panels", PANEL_ID, "clients")),
+      (snap) => {
+        setClients(snap.docs.map((d) => ({ id: d.id, ...(d.data() as any) })));
+      },
+      (error) => {
+        console.error("Failed to load clients for the filter:", error);
+      },
+    );
+
+    return () => unsubscribe();
+  }, []);
+
+  // Estimates and projects, for the Project column. Only the linking fields are kept.
+  useEffect(() => {
+    const unsubscribeEstimates = onSnapshot(
+      collection(db, "Panels", PANEL_ID, "estimates"),
+      (snap) => {
+        setEstimateLinks(
+          snap.docs.map((d) => {
+            const data = d.data() as any;
+            return {
+              id: d.id,
+              estimateNo: text(data.estimateNo),
+              salesRecordId: text(data.salesRecordId),
+              projectCode: text(
+                data.projectCode ||
+                  data.linkedProjectCode ||
+                  data.salesProjectCode,
+              ),
+            };
+          }),
+        );
+      },
+      (error) => {
+        console.error("Failed to load estimates for the Project column:", error);
+      },
+    );
+
+    const unsubscribeProjects = onSnapshot(
+      collection(db, "Panels", PANEL_ID, "salesRecords"),
+      (snap) => {
+        setProjects(
+          snap.docs.map((d) => {
+            const data = d.data() as any;
+            return {
+              id: d.id,
+              name: text(data.projectName),
+              code: text(data.projectCode),
+            };
+          }),
+        );
+      },
+      (error) => {
+        console.error("Failed to load projects for the Project column:", error);
+      },
+    );
+
+    return () => {
+      unsubscribeEstimates();
+      unsubscribeProjects();
+    };
+  }, []);
+
+  const projectLookup = useMemo(() => {
+    const estimatesById = new Map<string, EstimateProjectLink>();
+    const estimatesByNo = new Map<string, EstimateProjectLink>();
+    estimateLinks.forEach((estimate) => {
+      estimatesById.set(estimate.id, estimate);
+      if (estimate.estimateNo) {
+        estimatesByNo.set(estimate.estimateNo.toLowerCase(), estimate);
+      }
+    });
+
+    const projectsById = new Map<string, ProjectInfo>();
+    const projectsByCode = new Map<string, ProjectInfo>();
+    projects.forEach((project) => {
+      projectsById.set(project.id, project);
+      if (project.code) projectsByCode.set(project.code.toLowerCase(), project);
+    });
+
+    return { estimatesById, estimatesByNo, projectsById, projectsByCode };
+  }, [estimateLinks, projects]);
+
+  /** The invoice's project name and code; blank parts when not known. */
+  const getInvoiceProject = (inv: any) => {
+    const estimate =
+      projectLookup.estimatesById.get(text(inv.sourceEstimateId)) ||
+      projectLookup.estimatesByNo.get(
+        text(inv.sourceEstimateNo || inv.estimateNo).toLowerCase(),
+      );
+
+    const salesRecordId = text(inv.salesRecordId) || estimate?.salesRecordId;
+    const code = text(inv.projectCode) || estimate?.projectCode || "";
+    const project =
+      (salesRecordId && projectLookup.projectsById.get(salesRecordId)) ||
+      (code && projectLookup.projectsByCode.get(code.toLowerCase())) ||
+      undefined;
+
+    return {
+      name: text(inv.projectName) || project?.name || "",
+      code: project?.code || code,
+    };
+  };
 
   const companyList = [
     {
@@ -1608,6 +1743,35 @@ export default function EstimateInvoiceList({
     return true;
   };
 
+  // Every client in the system, plus any client name found only on an
+  // invoice (typed by hand, or a client renamed since), with invoice counts.
+  const clientFilterOptions = useMemo(() => {
+    const options = new Map<string, { name: string; count: number }>();
+
+    clients.forEach((client) => {
+      const name = String(client?.name || "").trim();
+      const key = clientKey(name);
+      if (key && !options.has(key)) options.set(key, { name, count: 0 });
+    });
+
+    invoices.forEach((inv) => {
+      const key = clientKey(inv.client);
+      if (!key) return;
+      const option = options.get(key);
+      if (option) option.count += 1;
+      else options.set(key, { name: String(inv.client).trim(), count: 1 });
+    });
+
+    return Array.from(options, ([key, option]) => ({ key, ...option })).sort(
+      (a, b) => a.name.localeCompare(b.name),
+    );
+  }, [clients, invoices]);
+
+  const invoicesWithoutClient = useMemo(
+    () => invoices.filter((inv) => !clientKey(inv.client)).length,
+    [invoices],
+  );
+
   const filteredInvoices = invoices.filter((inv) => {
     const invoiceNoMatch = String(
       inv.invoiceNo || "",
@@ -1640,11 +1804,12 @@ export default function EstimateInvoiceList({
       .toLowerCase()
       .includes(subjectFilter.toLowerCase());
 
-    const clientMatch = String(
-      inv.client || "",
-    )
-      .toLowerCase()
-      .includes(clientFilter.toLowerCase());
+    const invoiceClientKey = clientKey(inv.client);
+    const clientMatch = !clientFilter
+      ? true
+      : clientFilter === NO_CLIENT
+        ? !invoiceClientKey
+        : invoiceClientKey === clientFilter;
 
     const invDate = String(inv.invoiceDate || "");
 
@@ -1984,6 +2149,7 @@ export default function EstimateInvoiceList({
       const headers = [
         "Invoice Date",
         "Invoice No",
+        "Project",
         "Estimate No",
         "PO Number",
         "Subject",
@@ -2009,9 +2175,17 @@ export default function EstimateInvoiceList({
             const daysPending =
               getDaysPending(inv);
 
+            const project =
+              getInvoiceProject(inv);
+
             return [
               inv.invoiceDate || "",
               inv.invoiceNo || "",
+              project.name &&
+              project.code
+                ? `${project.name} (${project.code})`
+                : project.name ||
+                  project.code,
               inv.sourceEstimateNo ||
                 inv.estimateNo ||
                 "",
@@ -2426,11 +2600,11 @@ export default function EstimateInvoiceList({
               Client
             </label>
 
-            <input
+            <select
               className={
-                inputClass
+                selectClass
               }
-              placeholder="Search client"
+              aria-label="Filter by client"
               value={
                 clientFilter
               }
@@ -2440,7 +2614,34 @@ export default function EstimateInvoiceList({
                     .value,
                 )
               }
-            />
+            >
+              <option value="">
+                All Clients
+              </option>
+
+              {clientFilterOptions.map(
+                (option) => (
+                  <option
+                    key={option.key}
+                    value={option.key}
+                  >
+                    {option.name} (
+                    {option.count})
+                  </option>
+                ),
+              )}
+
+              {invoicesWithoutClient >
+                0 && (
+                <option
+                  value={NO_CLIENT}
+                >
+                  No client (
+                  {invoicesWithoutClient}
+                  )
+                </option>
+              )}
+            </select>
           </div>
 
           <div>
@@ -2780,7 +2981,7 @@ export default function EstimateInvoiceList({
         </div>
 
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[1450px] text-xs">
+          <table className="w-full min-w-[1600px] text-xs">
             <thead>
               <tr className="border-b border-slate-100 bg-slate-50/80 text-left">
                 {/* Invoice Date moved to first column */}
@@ -2790,6 +2991,10 @@ export default function EstimateInvoiceList({
 
                 <th className="px-4 py-3 font-black uppercase tracking-[0.12em] text-slate-400">
                   Invoice No
+                </th>
+
+                <th className="px-4 py-3 font-black uppercase tracking-[0.12em] text-slate-400">
+                  Project
                 </th>
 
                 <th className="px-4 py-3 font-black uppercase tracking-[0.12em] text-slate-400">
@@ -2867,6 +3072,11 @@ export default function EstimateInvoiceList({
                       inv,
                     );
 
+                  const project =
+                    getInvoiceProject(
+                      inv,
+                    );
+
                   return (
                     <tr
                       key={
@@ -2903,6 +3113,28 @@ export default function EstimateInvoiceList({
                             </span>
                           )}
                         </div>
+                      </td>
+
+                      {/* Project, from the invoice's estimate */}
+
+                      <td className="max-w-[200px] px-4 py-3">
+                        {project.name ? (
+                          <>
+                            <span className="line-clamp-2 font-semibold text-slate-800">
+                              {project.name}
+                            </span>
+                            {project.code && (
+                              <span className="mt-0.5 block text-[11px] font-medium text-slate-400">
+                                {project.code}
+                              </span>
+                            )}
+                          </>
+                        ) : (
+                          <span className="font-medium text-slate-600">
+                            {project.code ||
+                              "-"}
+                          </span>
+                        )}
                       </td>
 
                       {/* Estimate Number */}
@@ -3115,7 +3347,7 @@ export default function EstimateInvoiceList({
                 <tr>
                   <td
                     colSpan={
-                      12
+                      13
                     }
                     className="px-4 py-14 text-center"
                   >
