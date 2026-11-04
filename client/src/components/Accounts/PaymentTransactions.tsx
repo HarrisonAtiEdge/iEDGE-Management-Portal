@@ -5151,7 +5151,7 @@ export default function PaymentTransactions() {
             </div>
 
             <div className="overflow-x-auto">
-              <table className="w-full min-w-[1350px] text-sm">
+              <table className="w-full min-w-[1100px] text-sm">
                 <thead>
                   <tr className="border-b border-slate-100 bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                     <th className="px-5 py-4 text-left font-bold">
@@ -5194,8 +5194,12 @@ export default function PaymentTransactions() {
                         key={transfer.id}
                         className="transition hover:bg-slate-50/80"
                       >
-                        <td className="whitespace-nowrap px-5 py-4">
-                          <span className="rounded-full bg-violet-50 px-3 py-1 text-xs font-bold text-violet-700">
+                        <td className="max-w-[240px] px-5 py-4">
+                          {/* Long names wrap onto up to 3 lines; the full name is in the tooltip. */}
+                          <span
+                            className="line-clamp-3 w-fit break-words rounded-2xl bg-violet-50 px-3 py-1 text-xs font-bold leading-snug text-violet-700"
+                            title={transfer.transferName}
+                          >
                             {transfer.transferName}
                           </span>
                         </td>
@@ -5240,7 +5244,7 @@ export default function PaymentTransactions() {
                           <p className="font-semibold text-slate-900">
                             {transfer.createdByName}
                           </p>
-                          <p className="mt-1 text-xs text-slate-400">
+                          <p className="mt-1 break-all text-xs text-slate-400">
                             {transfer.createdByEmail || "-"}
                           </p>
                         </td>

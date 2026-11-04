@@ -98,8 +98,6 @@
 //   { path: "/sales-management", label: "Sales Management", icon: "PieChart" },
 //   { path: "/travel/hotel", label: "Travel", icon: "PlaneTakeoff" },
 //   { path: "/invoice-estimate", label: "Invoice Estimates", icon: "ScrollText" },
-
-//   { path: "/rtd-management", label: "RTD Management", icon: "FileText" },
 //   { path: "/usertravel", label: "Book Hotel", icon: "BedDouble" },
 //   { path: "/booking", label: "Bookings", icon: "Hotel" },
 //   { path: "/suppliers", label: "Suppliers", icon: "BookUser" },
@@ -2993,8 +2991,12 @@ import {
   updateDoc,
   where,
 } from "firebase/firestore";
-import { createUserWithEmailAndPassword, updateProfile } from "firebase/auth";
-import { db, secondaryAuth } from "@/lib/firebase";
+import { db } from "@/lib/firebase";
+import { createEmployeeWithAccount } from "@/lib/employeeProfiles";
+import {
+  employeeProfileToDraft,
+  initialEmployeeProfile,
+} from "@/lib/employeeProfileModel";
 import { useAuth } from "@/contexts/AuthContext";
 import { useToast } from "@/hooks/use-toast";
 import {
@@ -4092,38 +4094,29 @@ export default function UserManagement() {
     setCreating(true);
 
     try {
-      const credential = await createUserWithEmailAndPassword(
-        secondaryAuth,
-        newUser.email.trim(),
-        newUser.password,
-      );
-
-      await updateProfile(credential.user, {
-        displayName: newUser.displayName,
-      });
-
-      await setDoc(doc(db, "Panels", PANEL_ID, "users", credential.user.uid), {
+      const profile = initialEmployeeProfile({
+        id: "",
         displayName: newUser.displayName.trim(),
         email: newUser.email.trim(),
         role: newUser.role,
-        accountStatus: "approved",
-        isActive: true,
-        createdAt: new Date(),
         mobileCountryCode: newUser.mobileCountryCode.trim(),
         mobileNo: newUser.mobileNo.trim(),
         region: newUser.region.trim(),
         reportingTo: newUser.reportingTo.trim(),
-        financialLimit: financialLimitNumber,
         designation: newUser.designation.trim(),
+      });
+      await createEmployeeWithAccount(employeeProfileToDraft(profile), {
+        role: newUser.role,
+        password: newUser.password,
+        mobileCountryCode: newUser.mobileCountryCode.trim(),
+        financialLimit: financialLimitNumber,
         budgetRequestVisibility: newUser.budgetRequestVisibility,
-        canViewAllBudgetRequests: newUser.budgetRequestVisibility === "all",
         purchaseOrderVisibility: newUser.purchaseOrderVisibility,
-        canViewAllPurchaseOrders: newUser.purchaseOrderVisibility === "all",
       });
 
       toast({
         title: "User Created",
-        description: `${newUser.displayName} created successfully.`,
+        description: `${newUser.displayName}'s login account and employee profile were created successfully.`,
       });
 
       setShowCreateUser(false);

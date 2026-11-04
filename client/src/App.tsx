@@ -55,6 +55,7 @@
 // import RTDManagement from "./pages/RTDManagement";
 // import Reports from "./pages/Reports";
 // import EmployeeRequests from "./pages/EmployeeRequests";
+// import { RTGSForm, RTGSList, RTGSVendors, RTGSAuthorizers } from "@/pages/RTGS";
 
 // function AuthenticatedApp() {
 //   const { currentUser } = useAuth();
@@ -321,6 +322,30 @@
 //           <Redirect to="/requests" />
 //         </Route>
 
+//         <Route path="/RTGS">
+//           <Redirect to="/RTGS/form" />
+//         </Route>
+//         <Route path="/RTGS/form">
+//           <ProtectedRoute>
+//             <RTGSForm />
+//           </ProtectedRoute>
+//         </Route>
+//         <Route path="/RTGS/list">
+//           <ProtectedRoute>
+//             <RTGSList />
+//           </ProtectedRoute>
+//         </Route>
+//         <Route path="/RTGS/vendors">
+//           <ProtectedRoute>
+//             <RTGSVendors />
+//           </ProtectedRoute>
+//         </Route>
+//         <Route path="/RTGS/authorizers">
+//           <ProtectedRoute>
+//             <RTGSAuthorizers />
+//           </ProtectedRoute>
+//         </Route>
+
 //         <Route component={NotFound} />
 //       </Switch>
 //     </Layout>
@@ -399,6 +424,7 @@ import VendorSummary from "./pages/VendorSummary";
 import RTDManagement from "./pages/RTDManagement";
 import Reports from "./pages/Reports";
 import EmployeeRequests from "./pages/EmployeeRequests";
+import EmployeeProfile from "./pages/EmployeeProfile";
 import { RTGSForm, RTGSList, RTGSVendors, RTGSAuthorizers } from "@/pages/RTGS";
 
 function AuthenticatedApp() {
@@ -479,6 +505,14 @@ function AuthenticatedApp() {
         <Route path="/users">
           <ProtectedRoute>
             <UserManagement />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/employee-profile">
+          <ProtectedRoute
+            allowedRoles={["main_admin", "financial_admin", "finance"]}
+          >
+            <EmployeeProfile />
           </ProtectedRoute>
         </Route>
 
