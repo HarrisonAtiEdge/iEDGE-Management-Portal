@@ -1,0 +1,15 @@
+{
+  "components": [
+    { "id": "basic", "name": "Basic salary", "percentage": 64.52, "taxable": true },
+    { "id": "housing", "name": "House rent", "percentage": 29.03, "taxable": true },
+    { "id": "utility", "name": "Utility allowance", "percentage": 6.45, "taxable": true }
+  ],
+  "brackets": [
+    { "lower": 0, "upper": 600000, "fixedTax": 0, "rate": 0 },
+    { "lower": 600000, "upper": 1200000, "fixedTax": 0, "rate": 1 },
+    { "lower": 1200000, "upper": 2200000, "fixedTax": 6000, "rate": 11 },
+    { "lower": 2200000, "upper": 3200000, "fixedTax": 116000, "rate": 23 },
+    { "lower": 3200000, "upper": 4100000, "fixedTax": 346000, "rate": 30 },
+    { "lower": 4100000, "upper": null, "fixedTax": 616000, "rate": 35 }
+  ]
+}

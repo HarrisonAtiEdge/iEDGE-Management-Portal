@@ -3452,7 +3452,16 @@ import {
 import { db } from "@/lib/firebase";
 import { useAuth } from "@/contexts/AuthContext";
 import PaymentReleaseModal from "@/components/PaymentReleaseModal";
+import ReimbursementPaymentEditModal, {
+  PaymentEditHistory,
+} from "@/components/ReimbursementPaymentEditModal";
 import { paymentMomentFor } from "@/lib/payments/dates";
+import {
+  getPaymentEditHistory,
+  readPaymentValues,
+  type PaymentEditEntry,
+  type ReimbursementPaymentValues,
+} from "@/lib/payments/reimbursementPaymentEdit";
 import {
   buildReimbursementPdfBlob,
   buildReimbursementReportPdfBlob,
@@ -3554,6 +3563,8 @@ interface Reimbursement {
   chequeNumber?: string;
   transactionReference?: string;
   paymentReleasedAt?: any;
+  paymentValues: ReimbursementPaymentValues;
+  paymentEditHistory: PaymentEditEntry[];
 
   claimFor?: "project" | "general";
   claimType?: "fuel" | "food";
@@ -3762,6 +3773,10 @@ export default function ReimbursementDashboard() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [detailItem, setDetailItem] = useState<Reimbursement | null>(null);
 
+  const [paymentEditItem, setPaymentEditItem] = useState<Reimbursement | null>(
+    null,
+  );
+
   const [pdfBusyKey, setPdfBusyKey] = useState<string | null>(null);
   const [pdfPreviewMeta, setPdfPreviewMeta] = useState<{
     title: string;
@@ -3961,6 +3976,8 @@ export default function ReimbursementDashboard() {
                 chequeNumber: getChequeNumbersText(reimbursement),
                 transactionReference: reimbursement.transactionReference || "",
                 paymentReleasedAt: reimbursement.paymentReleasedAt || null,
+                paymentValues: readPaymentValues(reimbursement),
+                paymentEditHistory: getPaymentEditHistory(reimbursement),
               } as Reimbursement;
             })
             .filter(Boolean) as Reimbursement[];
@@ -4056,6 +4073,8 @@ export default function ReimbursementDashboard() {
             chequeNumber: getChequeNumbersText(claim),
             transactionReference: claim.transactionReference || "",
             paymentReleasedAt: claim.paymentReleasedAt || null,
+            paymentValues: readPaymentValues(claim),
+            paymentEditHistory: getPaymentEditHistory(claim),
           };
         });
       } catch (claimError) {
@@ -5192,6 +5211,15 @@ export default function ReimbursementDashboard() {
                                   Cheque # {item.chequeNumber}
                                 </p>
                               )}
+
+                              {item.paymentEditHistory.length > 0 && (
+                                <p className="text-xs text-amber-700">
+                                  Payment edited{" "}
+                                  {item.paymentEditHistory.length === 1
+                                    ? "once"
+                                    : `${item.paymentEditHistory.length} times`}
+                                </p>
+                              )}
                             </div>
                           </td>
 
@@ -5304,6 +5332,17 @@ export default function ReimbursementDashboard() {
                                       : item.status === "rejected"
                                         ? "Rejected"
                                         : "Awaiting Approval"}
+                                </button>
+                              )}
+
+                              {canReleasePayments && isPaidItem(item) && (
+                                <button
+                                  onClick={() => setPaymentEditItem(item)}
+                                  className="inline-flex h-9 items-center gap-1.5 rounded-lg border px-3 text-sm font-medium transition hover:bg-muted"
+                                  data-testid={`button-edit-payment-${item.recordId}-${item.id}`}
+                                >
+                                  <Pencil className="h-4 w-4" />
+                                  Edit Payment
                                 </button>
                               )}
                             </div>
@@ -5482,7 +5521,7 @@ export default function ReimbursementDashboard() {
       </Dialog>
 
       <Dialog open={showDetailModal} onOpenChange={setShowDetailModal}>
-        <DialogContent className="max-w-lg">
+        <DialogContent className="max-h-[90vh] max-w-lg overflow-y-auto">
           <DialogHeader>
             <DialogTitle>Reimbursement Detail</DialogTitle>
           </DialogHeader>
@@ -5638,6 +5677,35 @@ export default function ReimbursementDashboard() {
                 </div>
               )}
 
+              {isPaidItem(detailItem) && (
+                <>
+                  <div className="grid grid-cols-2 gap-3">
+                    <div className="rounded-xl border p-3">
+                      <p className="text-xs text-muted-foreground">
+                        Paid Amount
+                      </p>
+                      <p className="font-semibold text-foreground">
+                        {getPaidAmountLabel(detailItem)}
+                      </p>
+                    </div>
+
+                    <div className="rounded-xl border p-3">
+                      <p className="text-xs text-muted-foreground">
+                        Payment Date
+                      </p>
+                      <p className="text-sm text-foreground">
+                        {formatDate(detailItem.paymentReleasedAt)}
+                      </p>
+                    </div>
+                  </div>
+
+                  <PaymentEditHistory
+                    entries={detailItem.paymentEditHistory}
+                    releasedBy={detailItem.paidBy}
+                  />
+                </>
+              )}
+
               {detailItem.billUrl && (
                 <a
                   href={detailItem.billUrl}
@@ -5729,6 +5797,20 @@ export default function ReimbursementDashboard() {
           </div>
         </DialogContent>
       </Dialog>
+
+      {paymentEditItem && canReleasePayments && (
+        <ReimbursementPaymentEditModal
+          docRef={getReimbursementDocRef(paymentEditItem)}
+          nested={paymentEditItem.sourcePath !== "claim"}
+          values={paymentEditItem.paymentValues}
+          claimant={paymentEditItem.personName || "Unknown"}
+          approvedAmount={Number(
+            paymentEditItem.approvedAmount ?? paymentEditItem.amount ?? 0,
+          )}
+          onClose={() => setPaymentEditItem(null)}
+          onSaved={() => fetchData(true)}
+        />
+      )}
 
       <PaymentReleaseModal
         isOpen={showPaymentModal && canReleasePayments}

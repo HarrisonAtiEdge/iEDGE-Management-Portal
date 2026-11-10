@@ -74,7 +74,6 @@ async function setupVite(app2, server) {
       ...viteLogger,
       error: (msg, options) => {
         viteLogger.error(msg, options);
-        process.exit(1);
       }
     },
     server: serverOptions,

@@ -39,6 +39,7 @@ const WATCHED_COLLECTIONS = {
   records: "Record",
   transfers: "accountTransfers",
   manualEntries: "accountStatementManualEntries",
+  salaryPayments: "salaryPayments",
 } as const;
 
 type WatchedKey = keyof typeof WATCHED_COLLECTIONS;
@@ -53,6 +54,7 @@ const SOURCE_LABELS: Record<SourceKey, string> = {
   records: "Cheque records",
   transfers: "Account transfers",
   manualEntries: "Manual statement entries",
+  salaryPayments: "Salary payments",
   meetingUpdates: "Sales reimbursements",
 };
 
@@ -67,6 +69,7 @@ const EMPTY_DATA: AccountLedgerData = {
   records: [],
   transfers: [],
   manualEntries: [],
+  salaryPayments: [],
   salesRecords: [],
   meetingUpdates: [],
 };

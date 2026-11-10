@@ -41,28 +41,15 @@
 //   WalletCards,
 //   BookUser,
 //   CalendarCheck,
-//   ClipboardList,
 //   ReceiptText,
 //   Search,
 //   X,
 //   ExternalLink,
-//   TrendingUp,
-//   Banknote,
-//   PenLine,
 // } from "lucide-react";
 // import { Link, useLocation } from "wouter";
-// import { canAccessRtgs } from "@/components/RTGS/rtgsData";
 // import { NotificationBell } from "@/components/NotificationBell";
-// import { AttendanceCheckButton } from "@/components/EmployeeRequests/AttendanceCheckButton";
 // import { useNotifications } from "@/hooks/useNotifications";
 // import { ThemeToggle } from "@/components/theme-toggle";
-// import { getAllChequeNumbers } from "@/lib/chequeNumbers";
-// import {
-//   REQUEST_NOTIFICATION_TYPES,
-//   getApprovalAccess,
-//   subscribeToApprovers,
-//   type RequestApprover,
-// } from "@/lib/employeeRequests";
 
 // const PANEL_ID = "IEDGE-SYSTEM";
 
@@ -73,14 +60,7 @@
 //   children?: SidebarItem[];
 // }
 
-// type ChequeSearchKind =
-//   | "record"
-//   | "payment"
-//   | "budgetRequest"
-//   | "reimbursement"
-//   | "statementEntry";
-
-// type GlobalSearchKind = "estimate" | "invoice" | "po" | ChequeSearchKind;
+// type GlobalSearchKind = "estimate" | "invoice" | "po";
 
 // type GlobalSearchRecord = {
 //   id: string;
@@ -122,96 +102,6 @@
 //     route: "/purchase-orders",
 //   },
 // ];
-
-// // Collections that hold cheques. Unlike the sources above, these are matched
-// // on cheque numbers only, so a general keyword search is not flooded with
-// // payments and ledger entries. ownerField is the field holding the creator's
-// // uid, used to limit non-admin users to their own records; null means the
-// // collection has no owner field and is only searchable by admin/finance roles.
-// const CHEQUE_SEARCH_SOURCES: Array<{
-//   key: ChequeSearchKind;
-//   collectionName: string;
-//   label: string;
-//   route: string;
-//   ownerField: string | null;
-// }> = [
-//   {
-//     key: "record",
-//     collectionName: "Record",
-//     label: "Cheque Record",
-//     route: "/records",
-//     ownerField: "createdBy",
-//   },
-//   {
-//     key: "payment",
-//     collectionName: "payments",
-//     label: "Payment",
-//     route: "/account-statement",
-//     ownerField: null,
-//   },
-//   {
-//     key: "budgetRequest",
-//     collectionName: "invoiceRequests",
-//     label: "Budget Request",
-//     route: "/budget-requests",
-//     ownerField: "createdBy",
-//   },
-//   {
-//     key: "reimbursement",
-//     collectionName: "claimReimbursements",
-//     label: "Reimbursement",
-//     route: "/reimbursement",
-//     ownerField: "createdBy",
-//   },
-//   {
-//     key: "statementEntry",
-//     collectionName: "accountStatementManualEntries",
-//     label: "Statement Entry",
-//     route: "/account-statement",
-//     ownerField: "createdById",
-//   },
-// ];
-
-// const GLOBAL_SEARCH_VIEW_ALL_ROLES = [
-//   "main_admin",
-//   "admin",
-//   "operational_admin",
-//   "financial_admin",
-//   "finance",
-// ];
-
-// const createEmptyGlobalSearchData = (): GlobalSearchData => ({
-//   estimate: [],
-//   invoice: [],
-//   po: [],
-//   record: [],
-//   payment: [],
-//   budgetRequest: [],
-//   reimbursement: [],
-//   statementEntry: [],
-// });
-
-// // The stored cheque number that best matches the search, or "" if none does.
-// function getMatchingChequeNumber(
-//   record: GlobalSearchRecord,
-//   searchTerm: string,
-// ): string {
-//   const compactSearch = normalizeGlobalSearchValue(searchTerm);
-//   if (!compactSearch) return "";
-
-//   const chequeNumbers = getAllChequeNumbers(record);
-
-//   return (
-//     chequeNumbers.find(
-//       (chequeNumber) =>
-//         normalizeGlobalSearchValue(chequeNumber) === compactSearch,
-//     ) ||
-//     chequeNumbers.find((chequeNumber) =>
-//       normalizeGlobalSearchValue(chequeNumber).includes(compactSearch),
-//     ) ||
-//     ""
-//   );
-// }
 
 // function getGlobalSearchModuleRoute(result: GlobalSearchResult): string {
 //   if (result.kind === "estimate") {
@@ -477,9 +367,7 @@
 //       record?.title,
 //       record?.project,
 //       record?.description,
-//       record?.statementTitle,
 //     ),
-//     chequeNumbers: getAllChequeNumbers(record).join(", "),
 //     company: firstNonEmpty(record?.company, record?.companyName),
 //     status: firstNonEmpty(record?.status),
 //     date: formatGlobalSearchDate(
@@ -487,18 +375,13 @@
 //         record?.poDate ??
 //         record?.date ??
 //         record?.createdAt ??
-//         record?.submittedAt ??
-//         record?.selectedDate ??
-//         record?.chequeDate,
+//         record?.submittedAt,
 //     ),
 //     amount: formatGlobalSearchAmount(
 //       record?.total ??
 //         record?.totalAmount ??
 //         record?.grandTotal ??
 //         record?.netTotal ??
-//         record?.chequeAmount ??
-//         record?.claimAmount ??
-//         record?.amount ??
 //         0,
 //     ),
 //     createdBy: firstNonEmpty(
@@ -702,11 +585,7 @@
 //   WalletCards,
 //   BookUser,
 //   CalendarCheck,
-//   ClipboardList,
 //   ReceiptText,
-//   TrendingUp,
-//   Banknote,
-//   PenLine,
 // };
 
 // // ✅ Backward compatibility for old FontAwesome names
@@ -772,22 +651,9 @@
 //   ],
 // };
 
-// const RTGS_DROPDOWN: SidebarItem = {
-//   path: "#",
-//   label: "RTGS",
-//   icon: "Banknote",
-//   children: [
-//     { path: "/RTGS/form", label: "RTGS Form", icon: "FileText" },
-//     { path: "/RTGS/list", label: "RTGS List", icon: "Archive" },
-//     { path: "/RTGS/vendors", label: "RTGS Vendors", icon: "BookUser" },
-//     { path: "/RTGS/authorizers", label: "Authorizer", icon: "PenLine" },
-//   ],
-// };
-
 // // ✅ Main admin fallback tabs
 // const AVAILABLE_TABS: SidebarItem[] = [
 //   { path: "/dashboard", label: "Dashboard", icon: "LayoutDashboard" },
-//   { path: "/reports", label: "Reports", icon: "TrendingUp" },
 //   { path: "/sales-dashboard", label: "Sales Dashboard", icon: "LineChart" },
 //   { path: "/project", label: "Projects", icon: "BarChart3" },
 //   { path: "/task-calendar", label: "Tasks", icon: "CalendarCheck" },
@@ -947,95 +813,6 @@
 //   return updated;
 // }
 
-// function ensureReportsTab(items: SidebarItem[]): SidebarItem[] {
-//   const safeItems = Array.isArray(items) ? items : [];
-
-//   const alreadyExists = safeItems.some((item) => item.path === "/reports");
-
-//   if (alreadyExists) {
-//     return safeItems;
-//   }
-
-//   const dashboardIndex = safeItems.findIndex(
-//     (item) => item.path === "/dashboard",
-//   );
-
-//   const reportsItem: SidebarItem = {
-//     path: "/reports",
-//     label: "Reports",
-//     icon: "TrendingUp",
-//   };
-
-//   const updated = [...safeItems];
-
-//   if (dashboardIndex >= 0) {
-//     updated.splice(dashboardIndex + 1, 0, reportsItem);
-//     return updated;
-//   }
-
-//   return [reportsItem, ...updated];
-// }
-
-// // Every user can make requests (leave, salary advance, documents), so the tab
-// // is added for all roles after Tasks (or Dashboard) unless the saved sidebar
-// // already has it. Its label is set when rendering: "Employee Management" for
-// // the main admin and anyone given approve or record access, "Self
-// // Management" for everyone else. A saved entry for the old /leave page is
-// // replaced.
-// function ensureRequestsTab(items: SidebarItem[]): SidebarItem[] {
-//   const safeItems = (Array.isArray(items) ? items : []).filter(
-//     (item) => item.path !== "/leave",
-//   );
-
-//   const alreadyExists = safeItems.some(
-//     (item) =>
-//       item.path === "/requests" ||
-//       item.children?.some((child) => child.path === "/requests"),
-//   );
-
-//   if (alreadyExists) {
-//     return safeItems;
-//   }
-
-//   const requestsItem: SidebarItem = {
-//     path: "/requests",
-//     label: "Self Management",
-//     icon: "ClipboardList",
-//   };
-
-//   const anchorIndex = [
-//     safeItems.findIndex((item) => item.path === "/task-calendar"),
-//     safeItems.findIndex((item) => item.path === "/dashboard"),
-//   ].find((index) => index >= 0);
-
-//   const updated = [...safeItems];
-
-//   if (anchorIndex !== undefined) {
-//     updated.splice(anchorIndex + 1, 0, requestsItem);
-//     return updated;
-//   }
-
-//   updated.push(requestsItem);
-//   return updated;
-// }
-
-// // RTGS is for the finance team and main admins only — added here rather than
-// // in AVAILABLE_TABS so the sidebar config screen can't hand it to other roles.
-// // Placed right after the Finance dropdown when the role has one.
-// function applyRtgsAccess(items: SidebarItem[], userRole: string): SidebarItem[] {
-//   const safeItems = Array.isArray(items) ? items : [];
-//   const withoutRtgs = safeItems.filter((item) => item.label !== RTGS_DROPDOWN.label);
-
-//   if (!canAccessRtgs(userRole)) {
-//     return withoutRtgs;
-//   }
-
-//   const financeIndex = withoutRtgs.findIndex((item) => item.label === "Finance");
-//   const updated = [...withoutRtgs];
-//   updated.splice(financeIndex >= 0 ? financeIndex + 1 : updated.length, 0, RTGS_DROPDOWN);
-//   return updated;
-// }
-
 // export default function Layout({ children }: { children: React.ReactNode }) {
 //   const [loading, setLoading] = useState(true);
 //   const [role, setRole] = useState<string | null>(null);
@@ -1046,13 +823,11 @@
 //   const [globalSearch, setGlobalSearch] = useState("");
 //   const [globalSearchOpen, setGlobalSearchOpen] = useState(false);
 //   const [globalSearchLoading, setGlobalSearchLoading] = useState(false);
-//   // Cheque collections load only once the search box is first used, so pages
-//   // don't keep five extra live listeners open for users who never search.
-//   const [chequeSearchActivated, setChequeSearchActivated] = useState(false);
-//   const [chequeSearchLoading, setChequeSearchLoading] = useState(false);
-//   const [globalSearchData, setGlobalSearchData] = useState<GlobalSearchData>(
-//     createEmptyGlobalSearchData,
-//   );
+//   const [globalSearchData, setGlobalSearchData] = useState<GlobalSearchData>({
+//     estimate: [],
+//     invoice: [],
+//     po: [],
+//   });
 //   const [selectedGlobalSearchResult, setSelectedGlobalSearchResult] =
 //     useState<GlobalSearchResult | null>(null);
 
@@ -1066,58 +841,7 @@
 
 //   const effectiveCollapsed = sidebarCollapsed && !sidebarHoverOpen;
 
-//   const { notifications } = useNotifications();
-
-//   // Unread request notifications (new requests for approvers, decisions for
-//   // employees) light the dot on the requests tab; all other unread
-//   // notifications keep lighting the Pipeline Management dot.
-//   const requestUnreadCount = notifications.filter(
-//     (notification) =>
-//       !notification.read &&
-//       REQUEST_NOTIFICATION_TYPES.includes(notification.type),
-//   ).length;
-//   const unreadCount = notifications.filter(
-//     (notification) =>
-//       !notification.read &&
-//       !REQUEST_NOTIFICATION_TYPES.includes(notification.type),
-//   ).length;
-
-//   // Approver assignments decide whether the requests tab reads "Employee
-//   // Management" (main admin, approvers and record-only users such as
-//   // finance) or "Self Management" (everyone else).
-//   const [requestApprovers, setRequestApprovers] = useState<RequestApprover[]>(
-//     [],
-//   );
-
-//   useEffect(() => {
-//     if (!searchUserId) {
-//       setRequestApprovers([]);
-//       return;
-//     }
-
-//     return subscribeToApprovers(setRequestApprovers);
-//   }, [searchUserId]);
-
-//   const managesEmployees = getApprovalAccess(
-//     searchUserId || "",
-//     role,
-//     requestApprovers,
-//   ).canRecord;
-
-//   const navItems = useMemo(
-//     () =>
-//       sidebarItems.map((item) =>
-//         item.path === "/requests"
-//           ? {
-//               ...item,
-//               label: managesEmployees
-//                 ? "Employee Management"
-//                 : "Self Management",
-//             }
-//           : item,
-//       ),
-//     [sidebarItems, managesEmployees],
-//   );
+//   const { unreadCount } = useNotifications();
 
 //   const handleLogout = async () => {
 //     await signOut(auth);
@@ -1164,8 +888,11 @@
 //         setGlobalSearch("");
 //         setGlobalSearchOpen(false);
 //         setSelectedGlobalSearchResult(null);
-//         setChequeSearchActivated(false);
-//         setGlobalSearchData(createEmptyGlobalSearchData());
+//         setGlobalSearchData({
+//           estimate: [],
+//           invoice: [],
+//           po: [],
+//         });
 //         setLoading(false);
 //         setLocation("/login");
 //         return;
@@ -1232,21 +959,6 @@
 //               finalItems = ensureRTDManagementTab(finalItems);
 //             }
 
-//             // Reports shows company-wide profit figures, so it's limited to
-//             // the same roles that already see financial data (Finance
-//             // dropdown / RTD).
-//             if (
-//               userRole === "admin" ||
-//               userRole === "main_admin" ||
-//               userRole === "finance"
-//             ) {
-//               finalItems = ensureReportsTab(finalItems);
-//             }
-
-//             finalItems = ensureRequestsTab(finalItems);
-
-//             finalItems = applyRtgsAccess(finalItems, userRole);
-
 //             setSidebarItems(finalItems);
 //             setLoading(false);
 //           },
@@ -1279,17 +991,22 @@
 
 //   useEffect(() => {
 //     if (!searchUserId || !role) {
-//       setGlobalSearchData((previous) => ({
-//         ...previous,
+//       setGlobalSearchData({
 //         estimate: [],
 //         invoice: [],
 //         po: [],
-//       }));
+//       });
 //       setGlobalSearchLoading(false);
 //       return;
 //     }
 
-//     const canViewAllSearchRecords = GLOBAL_SEARCH_VIEW_ALL_ROLES.includes(role);
+//     const canViewAllSearchRecords = [
+//       "main_admin",
+//       "admin",
+//       "operational_admin",
+//       "financial_admin",
+//       "finance",
+//     ].includes(role);
 
 //     setGlobalSearchLoading(true);
 
@@ -1359,103 +1076,6 @@
 //     };
 //   }, [searchUserId, role]);
 
-//   useEffect(() => {
-//     const emptyChequeData = (): Pick<GlobalSearchData, ChequeSearchKind> => ({
-//       record: [],
-//       payment: [],
-//       budgetRequest: [],
-//       reimbursement: [],
-//       statementEntry: [],
-//     });
-
-//     if (!searchUserId || !role || !chequeSearchActivated) {
-//       setGlobalSearchData((previous) => ({
-//         ...previous,
-//         ...emptyChequeData(),
-//       }));
-//       setChequeSearchLoading(false);
-//       return;
-//     }
-
-//     const canViewAllSearchRecords = GLOBAL_SEARCH_VIEW_ALL_ROLES.includes(role);
-
-//     const sources = CHEQUE_SEARCH_SOURCES.filter(
-//       (source) => canViewAllSearchRecords || source.ownerField,
-//     );
-
-//     if (sources.length === 0) {
-//       setChequeSearchLoading(false);
-//       return;
-//     }
-
-//     setChequeSearchLoading(true);
-
-//     let initializedSources = 0;
-
-//     const unsubscribers = sources.map((source) => {
-//       const sourceRef = collection(
-//         db,
-//         "Panels",
-//         PANEL_ID,
-//         source.collectionName,
-//       );
-
-//       const sourceQuery =
-//         canViewAllSearchRecords || !source.ownerField
-//           ? query(sourceRef)
-//           : query(sourceRef, where(source.ownerField, "==", searchUserId));
-
-//       let initialized = false;
-
-//       const markOnce = () => {
-//         if (initialized) return;
-//         initialized = true;
-//         initializedSources += 1;
-
-//         if (initializedSources >= sources.length) {
-//           setChequeSearchLoading(false);
-//         }
-//       };
-
-//       return onSnapshot(
-//         sourceQuery,
-//         (snapshot) => {
-//           // Only documents that actually carry a cheque number are kept.
-//           const records = snapshot.docs
-//             .map((snapshotDoc) => ({
-//               id: snapshotDoc.id,
-//               ...snapshotDoc.data(),
-//             }))
-//             .filter((record) => getAllChequeNumbers(record).length > 0);
-
-//           setGlobalSearchData((previous) => ({
-//             ...previous,
-//             [source.key]: records,
-//           }));
-
-//           markOnce();
-//         },
-//         (error) => {
-//           console.warn(
-//             `Global cheque search could not read ${source.collectionName}:`,
-//             error,
-//           );
-
-//           setGlobalSearchData((previous) => ({
-//             ...previous,
-//             [source.key]: [],
-//           }));
-
-//           markOnce();
-//         },
-//       );
-//     });
-
-//     return () => {
-//       unsubscribers.forEach((unsubscribe) => unsubscribe());
-//     };
-//   }, [searchUserId, role, chequeSearchActivated]);
-
 //   const globalSearchResults = useMemo(() => {
 //     const searchValue = String(globalSearch || "").trim();
 
@@ -1463,7 +1083,7 @@
 //       return [];
 //     }
 
-//     const keywordResults: GlobalSearchResult[] = GLOBAL_SEARCH_SOURCES.flatMap(
+//     const results: GlobalSearchResult[] = GLOBAL_SEARCH_SOURCES.flatMap(
 //       (source) =>
 //         globalSearchData[source.key]
 //           .filter((record) => recordMatchesGlobalSearch(record, searchValue))
@@ -1475,30 +1095,6 @@
 //             primaryNumber: getPrimarySearchNumber(source.key, record),
 //           })),
 //     );
-
-//     const chequeResults: GlobalSearchResult[] = CHEQUE_SEARCH_SOURCES.flatMap(
-//       (source) =>
-//         globalSearchData[source.key].flatMap((record) => {
-//           const matchedChequeNumber = getMatchingChequeNumber(
-//             record,
-//             searchValue,
-//           );
-
-//           return matchedChequeNumber
-//             ? [
-//                 {
-//                   kind: source.key,
-//                   label: source.label,
-//                   route: source.route,
-//                   record,
-//                   primaryNumber: matchedChequeNumber,
-//                 },
-//               ]
-//             : [];
-//         }),
-//     );
-
-//     const results = [...keywordResults, ...chequeResults];
 
 //     return results
 //       .sort((a, b) => {
@@ -1554,7 +1150,7 @@
 //     return "Dashboard";
 //   };
 
-//   const pageTitle = getPageTitle(navItems, location);
+//   const pageTitle = getPageTitle(sidebarItems, location);
 
 //   if (loading) {
 //     return (
@@ -1609,7 +1205,7 @@
 //         </div>
 
 //         <nav className="space-y-2 overflow-y-auto">
-//           {navItems.map((item) => {
+//           {sidebarItems.map((item) => {
 //             const Icon = getSidebarIcon(item.icon);
 //             const hasChildren = !!item.children?.length;
 //             const dropdownKey = `${item.label}-${item.path}`;
@@ -1622,14 +1218,11 @@
 //             const isActive = location === item.path || hasActiveChild;
 
 //             const showDot =
-//               (unreadCount > 0 &&
-//                 (item.path === "/sales-management" ||
-//                   item.children?.some(
-//                     (child) => child.path === "/sales-management",
-//                   ))) ||
-//               (requestUnreadCount > 0 &&
-//                 (item.path === "/requests" ||
-//                   item.children?.some((child) => child.path === "/requests")));
+//               unreadCount > 0 &&
+//               (item.path === "/sales-management" ||
+//                 item.children?.some(
+//                   (child) => child.path === "/sales-management",
+//                 ));
 
 //             if (hasChildren) {
 //               return (
@@ -1717,10 +1310,7 @@
 //                         const ChildIcon = getSidebarIcon(child.icon);
 
 //                         const childShowDot =
-//                           (unreadCount > 0 &&
-//                             child.path === "/sales-management") ||
-//                           (requestUnreadCount > 0 &&
-//                             child.path === "/requests");
+//                           unreadCount > 0 && child.path === "/sales-management";
 
 //                         return (
 //                           <Link key={child.path} href={child.path}>
@@ -1838,18 +1428,14 @@
 //             <input
 //               type="text"
 //               value={globalSearch}
-//               onFocus={() => {
-//                 setGlobalSearchOpen(true);
-//                 setChequeSearchActivated(true);
-//               }}
+//               onFocus={() => setGlobalSearchOpen(true)}
 //               onChange={(event) => {
 //                 setGlobalSearch(event.target.value);
 //                 setGlobalSearchOpen(true);
-//                 setChequeSearchActivated(true);
 //               }}
-//               placeholder="Search any keyword in Estimate, PO, or Invoice records, or a cheque number"
+//               placeholder="Search any keyword in Estimate, PO, or Invoice records"
 //               className="h-10 w-full rounded-xl border border-border bg-background pl-9 pr-10 text-sm outline-none transition placeholder:text-muted-foreground focus:border-primary/40 focus:ring-4 focus:ring-primary/10"
-//               aria-label="Search all Estimate, PO, and Invoice record data, or any cheque number"
+//               aria-label="Search all Estimate, PO, and Invoice record data"
 //             />
 
 //             {globalSearch && (
@@ -1874,7 +1460,7 @@
 //                       Global Search
 //                     </p>
 //                     <p className="mt-0.5 text-sm font-medium text-foreground">
-//                       {globalSearchLoading || chequeSearchLoading
+//                       {globalSearchLoading
 //                         ? "Loading records..."
 //                         : `${globalSearchResults.length} result${
 //                             globalSearchResults.length === 1 ? "" : "s"
@@ -1887,9 +1473,7 @@
 //                   </span>
 //                 </div>
 
-//                 {!globalSearchLoading &&
-//                 !chequeSearchLoading &&
-//                 globalSearchResults.length === 0 ? (
+//                 {!globalSearchLoading && globalSearchResults.length === 0 ? (
 //                   <div className="rounded-xl bg-secondary/50 px-4 py-8 text-center">
 //                     <Search className="mx-auto h-5 w-5 text-muted-foreground" />
 //                     <p className="mt-2 text-sm font-semibold text-foreground">
@@ -1897,8 +1481,8 @@
 //                     </p>
 //                     <p className="mt-1 text-xs text-muted-foreground">
 //                       Search any saved value such as number, client, vendor,
-//                       subject, company, status, description, item, amount,
-//                       reference, or cheque number.
+//                       subject, company, status, description, item, amount, or
+//                       reference.
 //                     </p>
 //                   </div>
 //                 ) : (
@@ -1959,17 +1543,6 @@
 //                                     </span>{" "}
 //                                     <span className="font-semibold text-foreground">
 //                                       {details.invoiceNo}
-//                                     </span>
-//                                   </div>
-//                                 )}
-
-//                                 {details.chequeNumbers && (
-//                                   <div className="min-w-0">
-//                                     <span className="text-muted-foreground">
-//                                       Cheque No:
-//                                     </span>{" "}
-//                                     <span className="break-all font-semibold text-foreground">
-//                                       {details.chequeNumbers}
 //                                     </span>
 //                                   </div>
 //                                 )}
@@ -2078,13 +1651,6 @@
 //           </div>
 
 //           <div className="flex shrink-0 flex-wrap items-center gap-4 lg:justify-end">
-//             {searchUserId && (
-//               <AttendanceCheckButton
-//                 userId={searchUserId}
-//                 userName={userName}
-//                 role={role || ""}
-//               />
-//             )}
 //             <ThemeToggle />
 //             <NotificationBell />
 
@@ -2394,10 +1960,8 @@ import {
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { canAccessRtgs } from "@/components/RTGS/rtgsData";
-import {
-  canManageEmployeeProfiles,
-  EMPLOYEE_PROFILE_PATH,
-} from "@/lib/employeeProfileModel";
+import { canManageEmployeeProfiles, EMPLOYEE_PROFILE_PATH } from "@/lib/employeeProfileModel";
+import { canAccessSalary, SALARY_PATH } from "@/lib/salaryModel";
 import { NotificationBell } from "@/components/NotificationBell";
 import { AttendanceCheckButton } from "@/components/EmployeeRequests/AttendanceCheckButton";
 import { useNotifications } from "@/hooks/useNotifications";
@@ -3368,56 +2932,44 @@ function ensureRequestsTab(items: SidebarItem[]): SidebarItem[] {
 // RTGS is for the finance team and main admins only — added here rather than
 // in AVAILABLE_TABS so the sidebar config screen can't hand it to other roles.
 // Placed right after the Finance dropdown when the role has one.
-function applyRtgsAccess(
-  items: SidebarItem[],
-  userRole: string,
-): SidebarItem[] {
+function applyRtgsAccess(items: SidebarItem[], userRole: string): SidebarItem[] {
   const safeItems = Array.isArray(items) ? items : [];
-  const withoutRtgs = safeItems.filter(
-    (item) => item.label !== RTGS_DROPDOWN.label,
-  );
+  const withoutRtgs = safeItems.filter((item) => item.label !== RTGS_DROPDOWN.label);
 
   if (!canAccessRtgs(userRole)) {
     return withoutRtgs;
   }
 
-  const financeIndex = withoutRtgs.findIndex(
-    (item) => item.label === "Finance",
-  );
+  const financeIndex = withoutRtgs.findIndex((item) => item.label === "Finance");
   const updated = [...withoutRtgs];
-  updated.splice(
-    financeIndex >= 0 ? financeIndex + 1 : updated.length,
-    0,
-    RTGS_DROPDOWN,
-  );
+  updated.splice(financeIndex >= 0 ? financeIndex + 1 : updated.length, 0, RTGS_DROPDOWN);
   return updated;
 }
 
 // Always include the profile tab for its three authorized roles, including
 // roles with an older saved sidebar configuration. Remove stale assignments
 // from every other role, including entries nested inside dropdowns.
-function applyEmployeeProfileAccess(
-  items: SidebarItem[],
-  userRole: string | null,
-): SidebarItem[] {
-  const removeProfiles = (entries: SidebarItem[]): SidebarItem[] =>
-    entries
-      .filter((item) => item.path !== EMPLOYEE_PROFILE_PATH)
-      .map((item) =>
-        item.children
-          ? { ...item, children: removeProfiles(item.children) }
-          : item,
-      );
+function applyEmployeeProfileAccess(items: SidebarItem[], userRole: string | null): SidebarItem[] {
+  const removeProfiles = (entries: SidebarItem[]): SidebarItem[] => entries
+    .filter((item) => item.path !== EMPLOYEE_PROFILE_PATH)
+    .map((item) => item.children ? { ...item, children: removeProfiles(item.children) } : item);
   const result = removeProfiles(items);
   if (!canManageEmployeeProfiles(userRole)) return result;
-  const anchor = result.findIndex(
-    (item) => item.path === "/users" || item.path === "/requests",
-  );
+  const anchor = result.findIndex((item) => item.path === "/users" || item.path === "/requests");
   result.splice(anchor >= 0 ? anchor + 1 : result.length, 0, {
-    path: EMPLOYEE_PROFILE_PATH,
-    label: "Employee Profile",
-    icon: "UserRound",
+    path: EMPLOYEE_PROFILE_PATH, label: "Employee Profile", icon: "UserRound",
   });
+  return result;
+}
+
+function applySalaryAccess(items: SidebarItem[], userRole: string | null): SidebarItem[] {
+  const removeSalary = (entries: SidebarItem[]): SidebarItem[] => entries
+    .filter((item) => item.path !== SALARY_PATH)
+    .map((item) => item.children ? { ...item, children: removeSalary(item.children) } : item);
+  const result = removeSalary(items);
+  if (!canAccessSalary(userRole)) return result;
+  const anchor = result.findIndex((item) => item.path === EMPLOYEE_PROFILE_PATH);
+  result.splice(anchor >= 0 ? anchor + 1 : result.length, 0, { path: SALARY_PATH, label: "Salary", icon: "Banknote" });
   return result;
 }
 
@@ -3491,7 +3043,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
 
   const navItems = useMemo(
     () =>
-      applyEmployeeProfileAccess(sidebarItems, role).map((item) =>
+      applySalaryAccess(applyEmployeeProfileAccess(sidebarItems, role), role).map((item) =>
         item.path === "/requests"
           ? {
               ...item,

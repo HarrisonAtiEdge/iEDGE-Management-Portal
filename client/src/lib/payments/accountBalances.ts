@@ -326,6 +326,8 @@ export type AccountLedgerData = {
   transfers: any[];
   // Panels/IEDGE-SYSTEM/accountStatementManualEntries.
   manualEntries: any[];
+  // Panels/IEDGE-SYSTEM/salaryPayments: written when a payroll run is paid.
+  salaryPayments: any[];
   // Sales records at the panel path and the legacy root path.
   salesRecords: SalesRecordDoc[];
   // Sales meeting updates with a reimbursement, from both paths.
@@ -340,6 +342,7 @@ export type AccountLedgerKind =
   | "meeting_reimbursement"
   | "record"
   | "manual"
+  | "salary"
   | "transfer_out"
   | "transfer_in";
 
@@ -698,6 +701,20 @@ export function getManualEntryMovement(entry: any): AccountMovement | null {
 // A budget request marked as released but with no release amount recorded.
 // The statement lists it under "All accounts" with the request's released or
 // total amount; it is not charged to any account.
+export function getSalaryPaymentMovement(entry: any): AccountMovement | null {
+  if (isVoided(entry)) return null;
+
+  const debit = toAmount(entry?.amount);
+  if (!(debit > 0)) return null;
+
+  return {
+    accountId: String(entry?.accountId || "").trim(),
+    credit: 0,
+    debit,
+    date: toAccountDate(entry?.date, entry?.createdAt),
+  };
+}
+
 function getUnrecordedRelease(request: any) {
   if (isVoided(request)) return null;
 
@@ -858,6 +875,13 @@ export function buildAccountLedger(
     }
   });
 
+  data.salaryPayments.forEach((entry) => {
+    const movement = getSalaryPaymentMovement(entry);
+    if (movement) {
+      add(`salary-${entry.id}`, "salary", movement, { document: entry });
+    }
+  });
+
   // Transfers move money between two of our own accounts, so a side is only
   // listed when it is a Payment Account.
   data.transfers.forEach((transfer) => {
@@ -918,6 +942,7 @@ export function calculateAccountBalances(
       case "purchase_order":
       case "claim_reimbursement":
       case "meeting_reimbursement":
+      case "salary":
         balance.released += entry.debit;
         break;
       case "record":
