@@ -526,18 +526,14 @@ export function getAccountReleaseEntries(source: any): any[] {
   return [];
 }
 
-// Payments saved before actualReceivedAmount existed hold the gross payment in
-// `amount`, and the bank received it less the WHT/SST withheld. Newer payments
-// record the amount actually received in the bank; their WHT/SST is for
-// reporting only.
+// The WHT/SST withheld from an invoice payment. `amount` is the gross payment
+// settled against the invoice (the Receive Payment modal also copies it into
+// actualReceivedAmount), and the bank received it less this tax.
 export const getPaymentTaxWithheld = (payment: any) =>
-  payment?.actualReceivedAmount === undefined ||
-  payment?.actualReceivedAmount === null
-    ? toAmount(payment?.whtAmount) + toAmount(payment?.sstAmount)
-    : 0;
+  toAmount(payment?.whtAmount) + toAmount(payment?.sstAmount);
 
-// An invoice payment received: the payment is credited and any tax withheld
-// from it is debited.
+// An invoice payment received: the gross payment is credited and the tax
+// withheld from it is debited, so the account moves by what reached the bank.
 export function getPaymentMovement(payment: any): AccountMovement | null {
   if (isVoided(payment)) return null;
 
