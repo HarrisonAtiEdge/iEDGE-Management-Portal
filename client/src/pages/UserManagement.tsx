@@ -3094,6 +3094,17 @@ const AVAILABLE_TABS = [
     icon: "ReceiptText",
   },
   { path: "/records", label: "Records", icon: "Archive" },
+  {
+    path: "/travel-estimate/create",
+    label: "Create Travel Estimate",
+    icon: "PlaneTakeoff",
+  },
+  {
+    path: "/travel-estimate/list",
+    label: "Travel Estimate List",
+    icon: "PlaneTakeoff",
+  },
+
 ];
 
 const PANEL_ID = "IEDGE-SYSTEM";

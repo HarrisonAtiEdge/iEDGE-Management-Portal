@@ -1,5 +1,3 @@
-
-
 // "use client";
 
 // import React, { useEffect, useMemo, useState } from "react";
@@ -962,8 +960,6 @@
 //                       </span>
 //                     </td>
 
-
-
 //                     <td className="px-4 py-3 font-medium text-slate-600">
 //                       {inv.company || "-"}
 //                     </td>
@@ -1156,9 +1152,6 @@
 //   );
 // }
 
-
-
-
 "use client";
 
 import React, { useEffect, useMemo, useState } from "react";
@@ -1225,18 +1218,14 @@ type ProjectInfo = { id: string; name: string; code: string };
 
 const text = (value: unknown) => String(value ?? "").trim();
 
-export default function EstimateInvoiceList({
-  onEdit,
-  onDuplicate,
-}: Props) {
+export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
   const [invoices, setInvoices] = useState<EstimateInvoice[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
   const [loggedInUser, setLoggedInUser] = useState<any>(null);
 
   const [previewURL, setPreviewURL] = useState<string | null>(null);
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
-  const [previewInvoiceNo, setPreviewInvoiceNo] =
-    useState<string>("invoice");
+  const [previewInvoiceNo, setPreviewInvoiceNo] = useState<string>("invoice");
 
   const [invoiceNoFilter, setInvoiceNoFilter] = useState("");
   const [estimateNoFilter, setEstimateNoFilter] = useState("");
@@ -1312,7 +1301,10 @@ export default function EstimateInvoiceList({
         );
       },
       (error) => {
-        console.error("Failed to load estimates for the Project column:", error);
+        console.error(
+          "Failed to load estimates for the Project column:",
+          error,
+        );
       },
     );
 
@@ -1467,11 +1459,16 @@ export default function EstimateInvoiceList({
     }
   };
 
-  const formatAmount = (value: any) =>
-    Number(value ?? 0).toLocaleString(undefined, {
-      minimumFractionDigits: 2,
-      maximumFractionDigits: 2,
+  // Whole amounts drop the ".00"; anything else keeps two decimals (.50, .12).
+  const formatAmount = (value: any) => {
+    const amount = Number(value ?? 0) || 0;
+    const hasCents = Math.round(amount * 100) % 100 !== 0;
+
+    return amount.toLocaleString(undefined, {
+      minimumFractionDigits: hasCents ? 2 : 0,
+      maximumFractionDigits: hasCents ? 2 : 0,
     });
+  };
 
   const getDaysPending = (inv: any): number | null => {
     try {
@@ -1490,9 +1487,7 @@ export default function EstimateInvoiceList({
       }
 
       if (!createdDate && inv?.invoiceDate) {
-        const parsedInvoiceDate = new Date(
-          `${inv.invoiceDate}T00:00:00`,
-        );
+        const parsedInvoiceDate = new Date(`${inv.invoiceDate}T00:00:00`);
 
         if (!Number.isNaN(parsedInvoiceDate.getTime())) {
           createdDate = parsedInvoiceDate;
@@ -1517,19 +1512,13 @@ export default function EstimateInvoiceList({
         today.getDate(),
       );
 
-      const differenceMs =
-        currentDay.getTime() - createdDay.getTime();
+      const differenceMs = currentDay.getTime() - createdDay.getTime();
 
-      const days = Math.floor(
-        differenceMs / (1000 * 60 * 60 * 24),
-      );
+      const days = Math.floor(differenceMs / (1000 * 60 * 60 * 24));
 
       return Math.max(0, days);
     } catch (error) {
-      console.error(
-        "Failed to calculate pending days:",
-        error,
-      );
+      console.error("Failed to calculate pending days:", error);
 
       return null;
     }
@@ -1598,8 +1587,7 @@ export default function EstimateInvoiceList({
         setUsersMap(map);
 
         const adminCheck =
-          userData?.isAdmin === true ||
-          userData?.isAdmin === "true";
+          userData?.isAdmin === true || userData?.isAdmin === "true";
 
         const operationAdminCheck =
           userData?.isOperationAdmin === true ||
@@ -1610,18 +1598,13 @@ export default function EstimateInvoiceList({
           userData?.isFinancialAdmin === "true";
 
         const canViewAll =
-          adminCheck ||
-          operationAdminCheck ||
-          financialAdminCheck;
+          adminCheck || operationAdminCheck || financialAdminCheck;
 
         setIsAdmin(canViewAll);
 
         const q = canViewAll
           ? query(invoicesRef)
-          : query(
-              invoicesRef,
-              where("createdBy", "==", uid),
-            );
+          : query(invoicesRef, where("createdBy", "==", uid));
 
         unsubSnapshot = onSnapshot(q, (snap) => {
           const list = snap.docs.map((d) => ({
@@ -1665,79 +1648,28 @@ export default function EstimateInvoiceList({
     const m = now.getMonth();
     const d = now.getDate();
 
-    const startOfToday = new Date(
-      y,
-      m,
-      d,
-      0,
-      0,
-      0,
-    );
+    const startOfToday = new Date(y, m, d, 0, 0, 0);
 
-    const endOfToday = new Date(
-      y,
-      m,
-      d,
-      23,
-      59,
-      59,
-    );
+    const endOfToday = new Date(y, m, d, 23, 59, 59);
 
-    const startOfThisMonth = new Date(
-      y,
-      m,
-      1,
-      0,
-      0,
-      0,
-    );
+    const startOfThisMonth = new Date(y, m, 1, 0, 0, 0);
 
-    const endOfThisMonth = new Date(
-      y,
-      m + 1,
-      0,
-      23,
-      59,
-      59,
-    );
+    const endOfThisMonth = new Date(y, m + 1, 0, 23, 59, 59);
 
-    const startOfLastMonth = new Date(
-      y,
-      m - 1,
-      1,
-      0,
-      0,
-      0,
-    );
+    const startOfLastMonth = new Date(y, m - 1, 1, 0, 0, 0);
 
-    const endOfLastMonth = new Date(
-      y,
-      m,
-      0,
-      23,
-      59,
-      59,
-    );
+    const endOfLastMonth = new Date(y, m, 0, 23, 59, 59);
 
     if (datePreset === "today") {
-      return (
-        inv >= startOfToday &&
-        inv <= endOfToday
-      );
+      return inv >= startOfToday && inv <= endOfToday;
     }
 
     if (datePreset === "thisMonth") {
-      return (
-        inv >= startOfThisMonth &&
-        inv <= endOfThisMonth
-      );
+      return inv >= startOfThisMonth && inv <= endOfThisMonth;
     }
 
     if (datePreset === "lastMonth") {
-      return (
-        inv >= startOfLastMonth &&
-        inv <= endOfLastMonth
-      );
+      return inv >= startOfLastMonth && inv <= endOfLastMonth;
     }
 
     return true;
@@ -1773,17 +1705,11 @@ export default function EstimateInvoiceList({
   );
 
   const filteredInvoices = invoices.filter((inv) => {
-    const invoiceNoMatch = String(
-      inv.invoiceNo || "",
-    )
+    const invoiceNoMatch = String(inv.invoiceNo || "")
       .toLowerCase()
       .includes(invoiceNoFilter.toLowerCase());
 
-    const estimateNoMatch = String(
-      inv.sourceEstimateNo ||
-        inv.estimateNo ||
-        "",
-    )
+    const estimateNoMatch = String(inv.sourceEstimateNo || inv.estimateNo || "")
       .toLowerCase()
       .includes(estimateNoFilter.toLowerCase());
 
@@ -1813,42 +1739,27 @@ export default function EstimateInvoiceList({
 
     const invDate = String(inv.invoiceDate || "");
 
-    const exactDateMatch = dateFilter
-      ? invDate === dateFilter
-      : true;
+    const exactDateMatch = dateFilter ? invDate === dateFilter : true;
 
-    const presetMatch = datePreset
-      ? isDateInPresetRange(invDate)
-      : true;
+    const presetMatch = datePreset ? isDateInPresetRange(invDate) : true;
 
-    const dateMatch =
-      exactDateMatch &&
-      presetMatch;
+    const dateMatch = exactDateMatch && presetMatch;
 
     const statusMatch = statusFilter
-      ? String(inv.status || "").toLowerCase() ===
-        statusFilter.toLowerCase()
+      ? String(inv.status || "").toLowerCase() === statusFilter.toLowerCase()
       : true;
 
     const amount = Number(inv.total || 0);
 
-    const minOk = minAmount
-      ? amount >= Number(minAmount)
-      : true;
+    const minOk = minAmount ? amount >= Number(minAmount) : true;
 
-    const maxOk = maxAmount
-      ? amount <= Number(maxAmount)
-      : true;
+    const maxOk = maxAmount ? amount <= Number(maxAmount) : true;
 
-    const createdByText = String(
-      usersMap[inv.createdBy]?.displayName || "",
-    )
+    const createdByText = String(usersMap[inv.createdBy]?.displayName || "")
       .toLowerCase()
       .trim();
 
-    const company = String(
-      inv.company || "",
-    ).toLowerCase();
+    const company = String(inv.company || "").toLowerCase();
 
     let companyMatch = true;
 
@@ -1860,14 +1771,11 @@ export default function EstimateInvoiceList({
     }
 
     if (companyFilter === "travel") {
-      companyMatch =
-        company === "iedge - travel & tours";
+      companyMatch = company === "iedge - travel & tours";
     }
 
     const createdByMatch = createdByFilter
-      ? createdByText.includes(
-          createdByFilter.toLowerCase(),
-        )
+      ? createdByText.includes(createdByFilter.toLowerCase())
       : true;
 
     return (
@@ -1905,48 +1813,25 @@ export default function EstimateInvoiceList({
     pageSize,
   ]);
 
-  const totalPages = Math.max(
-    1,
-    Math.ceil(
-      filteredInvoices.length /
-        pageSize,
-    ),
-  );
+  const totalPages = Math.max(1, Math.ceil(filteredInvoices.length / pageSize));
 
-  const safePage = Math.min(
-    page,
-    totalPages,
-  );
+  const safePage = Math.min(page, totalPages);
 
-  const paginatedInvoices =
-    filteredInvoices.slice(
-      (safePage - 1) * pageSize,
-      safePage * pageSize,
-    );
+  const paginatedInvoices = filteredInvoices.slice(
+    (safePage - 1) * pageSize,
+    safePage * pageSize,
+  );
 
   const startItem =
-    filteredInvoices.length === 0
-      ? 0
-      : (safePage - 1) *
-          pageSize +
-        1;
+    filteredInvoices.length === 0 ? 0 : (safePage - 1) * pageSize + 1;
 
-  const endItem = Math.min(
-    safePage * pageSize,
-    filteredInvoices.length,
-  );
+  const endItem = Math.min(safePage * pageSize, filteredInvoices.length);
 
   const getVisiblePages = () => {
-    const pages: Array<
-      number | "..."
-    > = [];
+    const pages: Array<number | "..."> = [];
 
     if (totalPages <= 6) {
-      for (
-        let i = 1;
-        i <= totalPages;
-        i++
-      ) {
+      for (let i = 1; i <= totalPages; i++) {
         pages.push(i);
       }
 
@@ -1954,94 +1839,50 @@ export default function EstimateInvoiceList({
     }
 
     if (safePage <= 3) {
-      return [
-        1,
-        2,
-        3,
-        "...",
-        totalPages,
-      ];
+      return [1, 2, 3, "...", totalPages];
     }
 
-    if (
-      safePage >=
-      totalPages - 2
-    ) {
-      return [
-        1,
-        "...",
-        totalPages - 2,
-        totalPages - 1,
-        totalPages,
-      ];
+    if (safePage >= totalPages - 2) {
+      return [1, "...", totalPages - 2, totalPages - 1, totalPages];
     }
 
-    return [
-      1,
-      "...",
-      safePage - 1,
-      safePage,
-      safePage + 1,
-      "...",
-      totalPages,
-    ];
+    return [1, "...", safePage - 1, safePage, safePage + 1, "...", totalPages];
   };
 
-  const visiblePages =
-    getVisiblePages();
+  const visiblePages = getVisiblePages();
 
-  const totalAmount =
-    filteredInvoices.reduce(
-      (sum, inv) =>
-        sum +
-        Number(inv.total || 0),
-      0,
-    );
+  const totalAmount = filteredInvoices.reduce(
+    (sum, inv) => sum + Number(inv.total || 0),
+    0,
+  );
 
-  const paidCount =
-    filteredInvoices.filter(
-      (inv) =>
-        String(
-          inv.status || "",
-        ).toLowerCase() === "paid",
-    ).length;
+  const paidCount = filteredInvoices.filter(
+    (inv) => String(inv.status || "").toLowerCase() === "paid",
+  ).length;
 
-  const unpaidCount =
-    filteredInvoices.filter(
-      (inv) =>
-        !inv.status ||
-        String(
-          inv.status || "",
-        ).toLowerCase() ===
-          "unpaid",
-    ).length;
+  const unpaidCount = filteredInvoices.filter(
+    (inv) => !inv.status || String(inv.status || "").toLowerCase() === "unpaid",
+  ).length;
 
-  const partialCount =
-    filteredInvoices.filter(
-      (inv) =>
-        String(
-          inv.status || "",
-        ).toLowerCase() ===
-        "partially paid",
-    ).length;
+  const partialCount = filteredInvoices.filter(
+    (inv) => String(inv.status || "").toLowerCase() === "partially paid",
+  ).length;
 
-  const hasActiveFilters =
-    Boolean(
-      invoiceNoFilter ||
-        estimateNoFilter ||
-        poNumberFilter ||
-        poPresenceFilter !==
-          "all" ||
-        subjectFilter ||
-        clientFilter ||
-        dateFilter ||
-        statusFilter ||
-        minAmount ||
-        maxAmount ||
-        createdByFilter ||
-        companyFilter ||
-        datePreset,
-    );
+  const hasActiveFilters = Boolean(
+    invoiceNoFilter ||
+      estimateNoFilter ||
+      poNumberFilter ||
+      poPresenceFilter !== "all" ||
+      subjectFilter ||
+      clientFilter ||
+      dateFilter ||
+      statusFilter ||
+      minAmount ||
+      maxAmount ||
+      createdByFilter ||
+      companyFilter ||
+      datePreset,
+  );
 
   const resetFilters = () => {
     setInvoiceNoFilter("");
@@ -2059,85 +1900,51 @@ export default function EstimateInvoiceList({
     setDatePreset("");
   };
 
-  const handleViewPdf = async (
-    inv: any,
-  ) => {
+  const handleViewPdf = async (inv: any) => {
     try {
-      const blob =
-        await buildEstimateInvoicePdfBlob(
-          {
-            invoice: inv,
-            companyList,
-            withLogo: Boolean(
-              inv?.withLogo ?? true,
-            ),
-            footerUser:
-              loggedInUser,
-            companyName: String(
-              inv?.company || "",
-            ).trim(),
-          } as any,
-        );
+      const blob = await buildEstimateInvoicePdfBlob({
+        invoice: inv,
+        companyList,
+        withLogo: Boolean(inv?.withLogo ?? true),
+        footerUser: loggedInUser,
+        companyName: String(inv?.company || "").trim(),
+      } as any);
 
-      const url =
-        URL.createObjectURL(blob);
+      const url = URL.createObjectURL(blob);
 
       setPreviewURL(url);
 
-      setPreviewInvoiceNo(
-        inv?.invoiceNo ||
-          "invoice",
-      );
+      setPreviewInvoiceNo(inv?.invoiceNo || "invoice");
 
       setIsPreviewOpen(true);
     } catch (e) {
       console.error(e);
 
-      alert(
-        "Failed to generate PDF.",
-      );
+      alert("Failed to generate PDF.");
     }
   };
 
-  const handleClosePreview =
-    () => {
-      setIsPreviewOpen(false);
-      setPreviewURL(null);
-    };
+  const handleClosePreview = () => {
+    setIsPreviewOpen(false);
+    setPreviewURL(null);
+  };
 
-  const formatCsvCell = (
-    value: any,
-  ) => {
-    if (
-      value === null ||
-      value === undefined
-    ) {
+  const formatCsvCell = (value: any) => {
+    if (value === null || value === undefined) {
       return '""';
     }
 
-    const str =
-      String(value);
+    const str = String(value);
 
-    const onlyDigits =
-      /^\d+$/.test(str);
+    const onlyDigits = /^\d+$/.test(str);
 
-    if (
-      onlyDigits &&
-      str.length >= 11
-    ) {
-      const safe =
-        str.replace(
-          /"/g,
-          '""',
-        );
+    if (onlyDigits && str.length >= 11) {
+      const safe = str.replace(/"/g, '""');
 
       return `"=""${safe}"""`;
     }
 
-    return `"${str.replace(
-      /"/g,
-      '""',
-    )}"`;
+    return `"${str.replace(/"/g, '""')}"`;
   };
 
   const handleExport = () => {
@@ -2160,123 +1967,63 @@ export default function EstimateInvoiceList({
         "Status",
       ];
 
-      const rows =
-        filteredInvoices.map(
-          (inv) => {
-            const status = String(
-              inv.status || "Unpaid",
-            ).toLowerCase();
+      const rows = filteredInvoices.map((inv) => {
+        const status = String(inv.status || "Unpaid").toLowerCase();
 
-            const isStillPending =
-              status === "unpaid" ||
-              status ===
-                "partially paid";
+        const isStillPending =
+          status === "unpaid" || status === "partially paid";
 
-            const daysPending =
-              getDaysPending(inv);
+        const daysPending = getDaysPending(inv);
 
-            const project =
-              getInvoiceProject(inv);
+        const project = getInvoiceProject(inv);
 
-            return [
-              inv.invoiceDate || "",
-              inv.invoiceNo || "",
-              project.name &&
-              project.code
-                ? `${project.name} (${project.code})`
-                : project.name ||
-                  project.code,
-              inv.sourceEstimateNo ||
-                inv.estimateNo ||
-                "",
-              getPoNumber(inv),
-              getSubjectValue(inv) ||
-                "",
-              inv.client || "",
-              usersMap[
-                inv.createdBy
-              ]?.displayName ||
-                "Unknown",
-              isStillPending
-                ? daysPending ?? ""
-                : "Closed",
-              Number(
-                inv.total ?? 0,
-              ).toFixed(2),
-              inv.status ||
-                "Unpaid",
-            ];
-          },
-        );
+        return [
+          inv.invoiceDate || "",
+          inv.invoiceNo || "",
+          project.name && project.code
+            ? `${project.name} (${project.code})`
+            : project.name || project.code,
+          inv.sourceEstimateNo || inv.estimateNo || "",
+          getPoNumber(inv),
+          getSubjectValue(inv) || "",
+          inv.client || "",
+          usersMap[inv.createdBy]?.displayName || "Unknown",
+          isStillPending ? (daysPending ?? "") : "Closed",
+          Number(inv.total ?? 0).toFixed(2),
+          inv.status || "Unpaid",
+        ];
+      });
 
       const csvContent = [
-        headers
-          .map(formatCsvCell)
-          .join(","),
-        ...rows.map((row) =>
-          row
-            .map(
-              formatCsvCell,
-            )
-            .join(","),
-        ),
+        headers.map(formatCsvCell).join(","),
+        ...rows.map((row) => row.map(formatCsvCell).join(",")),
       ].join("\n");
 
-      const blob =
-        new Blob(
-          [
-            "\uFEFF" +
-              csvContent,
-          ],
-          {
-            type: "text/csv;charset=utf-8;",
-          },
-        );
+      const blob = new Blob(["\uFEFF" + csvContent], {
+        type: "text/csv;charset=utf-8;",
+      });
 
-      const url =
-        URL.createObjectURL(
-          blob,
-        );
+      const url = URL.createObjectURL(blob);
 
-      const link =
-        document.createElement(
-          "a",
-        );
+      const link = document.createElement("a");
 
-      const stamp =
-        new Date()
-          .toISOString()
-          .slice(0, 19)
-          .replace(
-            /[:T]/g,
-            "-",
-          );
+      const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
 
       link.href = url;
 
-      link.download =
-        `estimate-invoices-${stamp}.csv`;
+      link.download = `estimate-invoices-${stamp}.csv`;
 
-      document.body.appendChild(
-        link,
-      );
+      document.body.appendChild(link);
 
       link.click();
 
-      document.body.removeChild(
-        link,
-      );
+      document.body.removeChild(link);
 
       URL.revokeObjectURL(url);
     } catch (error) {
-      console.error(
-        "Export failed:",
-        error,
-      );
+      console.error("Export failed:", error);
 
-      alert(
-        "Failed to export invoices.",
-      );
+      alert("Failed to export invoices.");
     }
   };
 
@@ -2291,9 +2038,7 @@ export default function EstimateInvoiceList({
           <div>
             <div className="mb-3 inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-semibold text-slate-600 shadow-sm">
               <ReceiptText className="h-3.5 w-3.5" />
-
-              Estimate Invoice
-              Management
+              Estimate Invoice Management
             </div>
 
             <h2 className="text-2xl font-black tracking-[-0.04em] text-slate-950 sm:text-3xl">
@@ -2301,12 +2046,8 @@ export default function EstimateInvoiceList({
             </h2>
 
             <p className="mt-2 max-w-2xl text-sm leading-6 text-slate-500">
-              View, filter,
-              export, preview,
-              duplicate, edit, and
-              receive payments
-              against estimate
-              invoices.
+              View, filter, export, preview, duplicate, edit, and receive
+              payments against estimate invoices.
             </p>
           </div>
 
@@ -2314,32 +2055,21 @@ export default function EstimateInvoiceList({
             <Button
               type="button"
               variant="outline"
-              onClick={
-                resetFilters
-              }
-              disabled={
-                !hasActiveFilters
-              }
+              onClick={resetFilters}
+              disabled={!hasActiveFilters}
               className="h-10 rounded-xl border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-40"
             >
               <RotateCcw className="mr-2 h-4 w-4" />
-
               Reset Filters
             </Button>
 
             <Button
               type="button"
-              onClick={
-                handleExport
-              }
-              disabled={
-                filteredInvoices.length ===
-                0
-              }
+              onClick={handleExport}
+              disabled={filteredInvoices.length === 0}
               className="h-10 rounded-xl bg-slate-950 px-4 text-xs font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-40"
             >
               <FileSpreadsheet className="mr-2 h-4 w-4" />
-
               Export CSV
             </Button>
           </div>
@@ -2352,9 +2082,7 @@ export default function EstimateInvoiceList({
             </p>
 
             <p className="mt-2 text-2xl font-black text-slate-950">
-              {
-                filteredInvoices.length
-              }
+              {filteredInvoices.length}
             </p>
           </div>
 
@@ -2364,10 +2092,7 @@ export default function EstimateInvoiceList({
             </p>
 
             <p className="mt-2 text-2xl font-black text-slate-950">
-              Rs.{" "}
-              {formatAmount(
-                totalAmount,
-              )}
+              Rs. {formatAmount(totalAmount)}
             </p>
           </div>
 
@@ -2387,8 +2112,7 @@ export default function EstimateInvoiceList({
             </p>
 
             <p className="mt-2 text-2xl font-black text-amber-600">
-              {unpaidCount +
-                partialCount}
+              {unpaidCount + partialCount}
             </p>
           </div>
         </div>
@@ -2406,13 +2130,10 @@ export default function EstimateInvoiceList({
             </div>
 
             <div>
-              <h3 className="text-sm font-black text-slate-950">
-                Filters
-              </h3>
+              <h3 className="text-sm font-black text-slate-950">Filters</h3>
 
               <p className="text-xs text-slate-500">
-                Refine invoice
-                records instantly
+                Refine invoice records instantly
               </p>
             </div>
           </div>
@@ -2420,7 +2141,6 @@ export default function EstimateInvoiceList({
           <div className="flex flex-wrap items-center gap-2">
             <div className="mr-1 flex items-center gap-1.5 text-xs font-semibold text-slate-500">
               <CalendarDays className="h-3.5 w-3.5" />
-
               Date Range
             </div>
 
@@ -2434,31 +2154,20 @@ export default function EstimateInvoiceList({
                 value: "today",
               },
               {
-                label:
-                  "This Month",
-                value:
-                  "thisMonth",
+                label: "This Month",
+                value: "thisMonth",
               },
               {
-                label:
-                  "Last Month",
-                value:
-                  "lastMonth",
+                label: "Last Month",
+                value: "lastMonth",
               },
             ].map((item) => (
               <button
-                key={
-                  item.label
-                }
+                key={item.label}
                 type="button"
-                onClick={() =>
-                  setDatePreset(
-                    item.value as any,
-                  )
-                }
+                onClick={() => setDatePreset(item.value as any)}
                 className={`rounded-full border px-3 py-1.5 text-xs font-semibold transition ${
-                  datePreset ===
-                  item.value
+                  datePreset === item.value
                     ? "border-slate-950 bg-slate-950 text-white shadow-sm"
                     : "border-slate-200 bg-white text-slate-600 hover:bg-slate-50"
                 }`}
@@ -2476,19 +2185,10 @@ export default function EstimateInvoiceList({
             </label>
 
             <input
-              className={
-                inputClass
-              }
+              className={inputClass}
               placeholder="Search invoice"
-              value={
-                invoiceNoFilter
-              }
-              onChange={(e) =>
-                setInvoiceNoFilter(
-                  e.target
-                    .value,
-                )
-              }
+              value={invoiceNoFilter}
+              onChange={(e) => setInvoiceNoFilter(e.target.value)}
             />
           </div>
 
@@ -2498,19 +2198,10 @@ export default function EstimateInvoiceList({
             </label>
 
             <input
-              className={
-                inputClass
-              }
+              className={inputClass}
               placeholder="Search estimate"
-              value={
-                estimateNoFilter
-              }
-              onChange={(e) =>
-                setEstimateNoFilter(
-                  e.target
-                    .value,
-                )
-              }
+              value={estimateNoFilter}
+              onChange={(e) => setEstimateNoFilter(e.target.value)}
             />
           </div>
 
@@ -2520,19 +2211,10 @@ export default function EstimateInvoiceList({
             </label>
 
             <input
-              className={
-                inputClass
-              }
+              className={inputClass}
               placeholder="Search PO number"
-              value={
-                poNumberFilter
-              }
-              onChange={(e) =>
-                setPoNumberFilter(
-                  e.target
-                    .value,
-                )
-              }
+              value={poNumberFilter}
+              onChange={(e) => setPoNumberFilter(e.target.value)}
             />
           </div>
 
@@ -2542,34 +2224,19 @@ export default function EstimateInvoiceList({
             </label>
 
             <select
-              className={
-                selectClass
-              }
-              value={
-                poPresenceFilter
-              }
+              className={selectClass}
+              value={poPresenceFilter}
               onChange={(e) =>
                 setPoPresenceFilter(
-                  e.target
-                    .value as
-                    | "all"
-                    | "withPo"
-                    | "withoutPo",
+                  e.target.value as "all" | "withPo" | "withoutPo",
                 )
               }
             >
-              <option value="all">
-                All PO Records
-              </option>
+              <option value="all">All PO Records</option>
 
-              <option value="withPo">
-                With PO Number
-              </option>
+              <option value="withPo">With PO Number</option>
 
-              <option value="withoutPo">
-                Without PO
-                Number
-              </option>
+              <option value="withoutPo">Without PO Number</option>
             </select>
           </div>
 
@@ -2579,19 +2246,10 @@ export default function EstimateInvoiceList({
             </label>
 
             <input
-              className={
-                inputClass
-              }
+              className={inputClass}
               placeholder="Search subject"
-              value={
-                subjectFilter
-              }
-              onChange={(e) =>
-                setSubjectFilter(
-                  e.target
-                    .value,
-                )
-              }
+              value={subjectFilter}
+              onChange={(e) => setSubjectFilter(e.target.value)}
             />
           </div>
 
@@ -2601,44 +2259,22 @@ export default function EstimateInvoiceList({
             </label>
 
             <select
-              className={
-                selectClass
-              }
+              className={selectClass}
               aria-label="Filter by client"
-              value={
-                clientFilter
-              }
-              onChange={(e) =>
-                setClientFilter(
-                  e.target
-                    .value,
-                )
-              }
+              value={clientFilter}
+              onChange={(e) => setClientFilter(e.target.value)}
             >
-              <option value="">
-                All Clients
-              </option>
+              <option value="">All Clients</option>
 
-              {clientFilterOptions.map(
-                (option) => (
-                  <option
-                    key={option.key}
-                    value={option.key}
-                  >
-                    {option.name} (
-                    {option.count})
-                  </option>
-                ),
-              )}
+              {clientFilterOptions.map((option) => (
+                <option key={option.key} value={option.key}>
+                  {option.name} ({option.count})
+                </option>
+              ))}
 
-              {invoicesWithoutClient >
-                0 && (
-                <option
-                  value={NO_CLIENT}
-                >
-                  No client (
-                  {invoicesWithoutClient}
-                  )
+              {invoicesWithoutClient > 0 && (
+                <option value={NO_CLIENT}>
+                  No client ({invoicesWithoutClient})
                 </option>
               )}
             </select>
@@ -2650,31 +2286,15 @@ export default function EstimateInvoiceList({
             </label>
 
             <select
-              className={
-                selectClass
-              }
-              value={
-                companyFilter
-              }
-              onChange={(e) =>
-                setCompanyFilter(
-                  e.target
-                    .value,
-                )
-              }
+              className={selectClass}
+              value={companyFilter}
+              onChange={(e) => setCompanyFilter(e.target.value)}
             >
-              <option value="">
-                All Companies
-              </option>
+              <option value="">All Companies</option>
 
-              <option value="iedge">
-                iEDGE Group
-              </option>
+              <option value="iedge">iEDGE Group</option>
 
-              <option value="travel">
-                iEDGE - Travel &
-                Tours
-              </option>
+              <option value="travel">iEDGE - Travel & Tours</option>
             </select>
           </div>
 
@@ -2684,19 +2304,10 @@ export default function EstimateInvoiceList({
             </label>
 
             <input
-              className={
-                inputClass
-              }
+              className={inputClass}
               placeholder="Search creator"
-              value={
-                createdByFilter
-              }
-              onChange={(e) =>
-                setCreatedByFilter(
-                  e.target
-                    .value,
-                )
-              }
+              value={createdByFilter}
+              onChange={(e) => setCreatedByFilter(e.target.value)}
             />
           </div>
 
@@ -2707,18 +2318,9 @@ export default function EstimateInvoiceList({
 
             <input
               type="date"
-              className={
-                inputClass
-              }
-              value={
-                dateFilter
-              }
-              onChange={(e) =>
-                setDateFilter(
-                  e.target
-                    .value,
-                )
-              }
+              className={inputClass}
+              value={dateFilter}
+              onChange={(e) => setDateFilter(e.target.value)}
             />
           </div>
 
@@ -2728,42 +2330,21 @@ export default function EstimateInvoiceList({
             </label>
 
             <select
-              className={
-                selectClass
-              }
-              value={
-                statusFilter
-              }
-              onChange={(e) =>
-                setStatusFilter(
-                  e.target
-                    .value,
-                )
-              }
+              className={selectClass}
+              value={statusFilter}
+              onChange={(e) => setStatusFilter(e.target.value)}
             >
-              <option value="">
-                All Status
-              </option>
+              <option value="">All Status</option>
 
-              <option value="Unpaid">
-                Unpaid
-              </option>
+              <option value="Unpaid">Unpaid</option>
 
-              <option value="Partially Paid">
-                Partially Paid
-              </option>
+              <option value="Partially Paid">Partially Paid</option>
 
-              <option value="Paid">
-                Paid
-              </option>
+              <option value="Paid">Paid</option>
 
-              <option value="Cancelled">
-                Cancelled
-              </option>
+              <option value="Cancelled">Cancelled</option>
 
-              <option value="Void">
-                Void
-              </option>
+              <option value="Void">Void</option>
             </select>
           </div>
 
@@ -2776,35 +2357,17 @@ export default function EstimateInvoiceList({
               <input
                 type="number"
                 placeholder="Min amount"
-                className={
-                  inputClass
-                }
-                value={
-                  minAmount
-                }
-                onChange={(e) =>
-                  setMinAmount(
-                    e.target
-                      .value,
-                  )
-                }
+                className={inputClass}
+                value={minAmount}
+                onChange={(e) => setMinAmount(e.target.value)}
               />
 
               <input
                 type="number"
                 placeholder="Max amount"
-                className={
-                  inputClass
-                }
-                value={
-                  maxAmount
-                }
-                onChange={(e) =>
-                  setMaxAmount(
-                    e.target
-                      .value,
-                  )
-                }
+                className={inputClass}
+                value={maxAmount}
+                onChange={(e) => setMaxAmount(e.target.value)}
               />
             </div>
           </div>
@@ -2819,162 +2382,80 @@ export default function EstimateInvoiceList({
         <div className="flex flex-col gap-3 border-b border-slate-100 px-4 py-4 sm:px-5 lg:flex-row lg:items-center lg:justify-between">
           <p className="text-sm font-medium text-slate-600">
             Showing{" "}
+            <span className="font-black text-slate-950">{startItem}</span> to{" "}
+            <span className="font-black text-slate-950">{endItem}</span> of{" "}
             <span className="font-black text-slate-950">
-              {startItem}
-            </span>{" "}
-            to{" "}
-            <span className="font-black text-slate-950">
-              {endItem}
-            </span>{" "}
-            of{" "}
-            <span className="font-black text-slate-950">
-              {
-                filteredInvoices.length
-              }
+              {filteredInvoices.length}
             </span>{" "}
             invoices
           </p>
 
           <div className="flex flex-wrap items-center gap-2">
             <div className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 shadow-sm">
-              <span className="text-xs font-semibold text-slate-500">
-                Rows
-              </span>
+              <span className="text-xs font-semibold text-slate-500">Rows</span>
 
               <select
-                value={
-                  pageSize
-                }
-                onChange={(e) =>
-                  setPageSize(
-                    Number(
-                      e.target
-                        .value,
-                    ),
-                  )
-                }
+                value={pageSize}
+                onChange={(e) => setPageSize(Number(e.target.value))}
                 className="bg-transparent text-xs font-bold text-slate-800 outline-none"
               >
-                <option
-                  value={10}
-                >
-                  10
-                </option>
+                <option value={10}>10</option>
 
-                <option
-                  value={20}
-                >
-                  20
-                </option>
+                <option value={20}>20</option>
 
-                <option
-                  value={50}
-                >
-                  50
-                </option>
+                <option value={50}>50</option>
 
-                <option
-                  value={100}
-                >
-                  100
-                </option>
+                <option value={100}>100</option>
 
-                <option
-                  value={200}
-                >
-                  200
-                </option>
+                <option value={200}>200</option>
 
-                <option
-                  value={500}
-                >
-                  500
-                </option>
+                <option value={500}>500</option>
 
-                <option
-                  value={1000}
-                >
-                  1000
-                </option>
+                <option value={1000}>1000</option>
               </select>
             </div>
 
             <button
               type="button"
-              disabled={
-                safePage <= 1
-              }
-              onClick={() =>
-                setPage((p) =>
-                  Math.max(
-                    1,
-                    p - 1,
-                  ),
-                )
-              }
+              disabled={safePage <= 1}
+              onClick={() => setPage((p) => Math.max(1, p - 1))}
               className="inline-flex h-10 items-center gap-1 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-white"
             >
               <ChevronLeft className="h-4 w-4" />
-
               Prev
             </button>
 
-            {visiblePages.map(
-              (
-                item,
-                index,
-              ) =>
-                item ===
-                "..." ? (
-                  <span
-                    key={`ellipsis-${index}`}
-                    className="flex h-10 min-w-10 items-center justify-center text-sm font-bold text-slate-400"
-                  >
-                    ...
-                  </span>
-                ) : (
-                  <button
-                    key={
-                      item
-                    }
-                    type="button"
-                    onClick={() =>
-                      setPage(
-                        Number(
-                          item,
-                        ),
-                      )
-                    }
-                    className={`flex h-10 min-w-10 items-center justify-center rounded-xl border px-3 text-sm font-bold shadow-sm transition ${
-                      safePage ===
-                      item
-                        ? "border-slate-950 bg-slate-950 text-white"
-                        : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
-                    }`}
-                  >
-                    {item}
-                  </button>
-                ),
+            {visiblePages.map((item, index) =>
+              item === "..." ? (
+                <span
+                  key={`ellipsis-${index}`}
+                  className="flex h-10 min-w-10 items-center justify-center text-sm font-bold text-slate-400"
+                >
+                  ...
+                </span>
+              ) : (
+                <button
+                  key={item}
+                  type="button"
+                  onClick={() => setPage(Number(item))}
+                  className={`flex h-10 min-w-10 items-center justify-center rounded-xl border px-3 text-sm font-bold shadow-sm transition ${
+                    safePage === item
+                      ? "border-slate-950 bg-slate-950 text-white"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-50"
+                  }`}
+                >
+                  {item}
+                </button>
+              ),
             )}
 
             <button
               type="button"
-              disabled={
-                safePage >=
-                totalPages
-              }
-              onClick={() =>
-                setPage((p) =>
-                  Math.min(
-                    totalPages,
-                    p + 1,
-                  ),
-                )
-              }
+              disabled={safePage >= totalPages}
+              onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
               className="inline-flex h-10 items-center gap-1 rounded-xl border border-slate-200 bg-white px-4 text-sm font-semibold text-slate-700 shadow-sm transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:text-slate-300 disabled:hover:bg-white"
             >
               Next
-
               <ChevronRight className="h-4 w-4" />
             </button>
           </div>
@@ -3040,346 +2521,293 @@ export default function EstimateInvoiceList({
             </thead>
 
             <tbody className="divide-y divide-slate-100">
-              {paginatedInvoices.map(
-                (inv) => {
-                  const status =
-                    String(
-                      inv.status ||
-                        "Unpaid",
-                    ).toLowerCase();
+              {paginatedInvoices.map((inv) => {
+                const status = String(inv.status || "Unpaid").toLowerCase();
 
-                  const isVoid =
-                    status ===
-                    "void";
+                const isVoid = status === "void";
 
-                  const isStillPending =
-                    status ===
-                      "unpaid" ||
-                    status ===
-                      "partially paid";
+                const isStillPending =
+                  status === "unpaid" || status === "partially paid";
 
-                  const poNumber =
-                    getPoNumber(
-                      inv,
-                    ).trim();
+                const poNumber = getPoNumber(inv).trim();
 
-                  const hasPO =
-                    poNumber.length >
-                    0;
+                const hasPO = poNumber.length > 0;
 
-                  const daysPending =
-                    getDaysPending(
-                      inv,
-                    );
+                const daysPending = getDaysPending(inv);
 
-                  const project =
-                    getInvoiceProject(
-                      inv,
-                    );
+                const project = getInvoiceProject(inv);
 
-                  return (
-                    <tr
-                      key={
-                        inv.id
+                // Partially paid invoices also show what has been received
+                // and what is still due, from the balance the Receive
+                // Payment modal keeps on the invoice.
+                const remainingDue = Number(inv.balance);
+                const paymentSplit =
+                  status === "partially paid" &&
+                  inv.balance != null &&
+                  Number.isFinite(remainingDue)
+                    ? {
+                        received: Math.max(
+                          Number(inv.total || 0) - remainingDue,
+                          0,
+                        ),
+                        remaining: remainingDue,
                       }
-                      className={`transition ${
-                        !hasPO
-                          ? "border-l-4 border-l-amber-500 bg-amber-50/80 hover:bg-amber-100/80"
-                          : "bg-white hover:bg-slate-50/80"
-                      }`}
-                    >
-                      {/* =====================
+                    : null;
+
+                return (
+                  <tr
+                    key={inv.id}
+                    className={`transition ${
+                      !hasPO
+                        ? "border-l-4 border-l-amber-500 bg-amber-50/80 hover:bg-amber-100/80"
+                        : "bg-white hover:bg-slate-50/80"
+                    }`}
+                  >
+                    {/* =====================
                           INVOICE DATE
                           MOVED FIRST
                       ====================== */}
 
-                      <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-600">
-                        {inv.invoiceDate ||
-                          "-"}
-                      </td>
+                    <td className="whitespace-nowrap px-4 py-3 font-medium text-slate-600">
+                      {inv.invoiceDate || "-"}
+                    </td>
 
-                      {/* Invoice Number */}
+                    {/* Invoice Number */}
 
-                      <td className="px-4 py-3 font-bold text-slate-900">
-                        <div className="flex items-center gap-2">
-                          <span>
-                            {inv.invoiceNo ||
-                              "-"}
+                    <td className="px-4 py-3 font-bold text-slate-900">
+                      <div className="flex items-center gap-2">
+                        <span>{inv.invoiceNo || "-"}</span>
+
+                        {!hasPO && (
+                          <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-amber-700">
+                            NO PO
                           </span>
+                        )}
+                      </div>
+                    </td>
 
-                          {!hasPO && (
-                            <span className="inline-flex items-center rounded-full border border-amber-300 bg-amber-100 px-2 py-0.5 text-[9px] font-black uppercase tracking-[0.08em] text-amber-700">
-                              NO PO
+                    {/* Project, from the invoice's estimate */}
+
+                    <td className="max-w-[200px] px-4 py-3">
+                      {project.name ? (
+                        <>
+                          <span className="line-clamp-2 font-semibold text-slate-800">
+                            {project.name}
+                          </span>
+                          {project.code && (
+                            <span className="mt-0.5 block text-[11px] font-medium text-slate-400">
+                              {project.code}
                             </span>
                           )}
-                        </div>
-                      </td>
-
-                      {/* Project, from the invoice's estimate */}
-
-                      <td className="max-w-[200px] px-4 py-3">
-                        {project.name ? (
-                          <>
-                            <span className="line-clamp-2 font-semibold text-slate-800">
-                              {project.name}
-                            </span>
-                            {project.code && (
-                              <span className="mt-0.5 block text-[11px] font-medium text-slate-400">
-                                {project.code}
-                              </span>
-                            )}
-                          </>
-                        ) : (
-                          <span className="font-medium text-slate-600">
-                            {project.code ||
-                              "-"}
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Estimate Number */}
-
-                      <td className="px-4 py-3 font-medium text-slate-600">
-                        {inv.sourceEstimateNo ||
-                          inv.estimateNo ||
-                          "-"}
-                      </td>
-
-                      {/* PO Number */}
-
-                      <td className="px-4 py-3 font-medium text-slate-700">
-                        {hasPO ? (
-                          <span className="font-semibold text-slate-700">
-                            {
-                              poNumber
-                            }
-                          </span>
-                        ) : (
-                          <span className="inline-flex items-center rounded-lg border border-amber-300 bg-amber-100 px-2.5 py-1 font-black text-amber-800">
-                            No PO
-                          </span>
-                        )}
-                      </td>
-
-                      {/* Client */}
-
-                      <td className="px-4 py-3 font-medium text-slate-700">
-                        {inv.client ||
-                          "-"}
-                      </td>
-
-                      {/* Subject */}
-
-                      <td className="max-w-[220px] px-4 py-3 font-medium text-slate-700">
-                        <span className="line-clamp-2">
-                          {getSubjectValue(
-                            inv,
-                          ) ||
-                            "-"}
+                        </>
+                      ) : (
+                        <span className="font-medium text-slate-600">
+                          {project.code || "-"}
                         </span>
-                      </td>
+                      )}
+                    </td>
 
-                      {/* Company */}
+                    {/* Estimate Number */}
 
-                      <td className="px-4 py-3 font-medium text-slate-600">
-                        {inv.company ||
-                          "-"}
-                      </td>
+                    <td className="px-4 py-3 font-medium text-slate-600">
+                      {inv.sourceEstimateNo || inv.estimateNo || "-"}
+                    </td>
 
-                      {/* Created By */}
+                    {/* PO Number */}
 
-                      <td className="px-4 py-3">
-                        <div className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-700">
-                          {usersMap[
-                            inv
-                              .createdBy
-                          ]
-                            ?.displayName ||
-                            "Unknown"}
-                        </div>
-                      </td>
+                    <td className="px-4 py-3 font-medium text-slate-700">
+                      {hasPO ? (
+                        <span className="font-semibold text-slate-700">
+                          {poNumber}
+                        </span>
+                      ) : (
+                        <span className="inline-flex items-center rounded-lg border border-amber-300 bg-amber-100 px-2.5 py-1 font-black text-amber-800">
+                          No PO
+                        </span>
+                      )}
+                    </td>
 
-                      {/* Days Pending */}
+                    {/* Client */}
 
-                      <td className="px-4 py-3">
-                        {isStillPending ? (
-                          <span
-                            className={`inline-flex min-w-[82px] items-center justify-center rounded-full border px-3 py-1 text-[11px] font-black ${getPendingDaysClasses(
-                              daysPending,
-                            )}`}
-                          >
-                            {daysPending ===
-                            null
-                              ? "-"
-                              : daysPending ===
-                                  0
-                                ? "Today"
-                                : `${daysPending} ${
-                                    daysPending ===
-                                    1
-                                      ? "day"
-                                      : "days"
-                                  }`}
-                          </span>
-                        ) : (
-                          <span className="inline-flex min-w-[82px] items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-500">
-                            Closed
-                          </span>
-                        )}
-                      </td>
+                    <td className="px-4 py-3 font-medium text-slate-700">
+                      {inv.client || "-"}
+                    </td>
 
-                      {/* Amount */}
+                    {/* Subject */}
 
-                      <td className="px-4 py-3 text-right font-black text-slate-950">
-                        Rs.{" "}
-                        {formatAmount(
-                          inv.total,
-                        )}
-                      </td>
+                    <td className="max-w-[220px] px-4 py-3 font-medium text-slate-700">
+                      <span className="line-clamp-2">
+                        {getSubjectValue(inv) || "-"}
+                      </span>
+                    </td>
 
-                      {/* Status */}
+                    {/* Company */}
 
-                      <td className="px-4 py-3">
+                    <td className="px-4 py-3 font-medium text-slate-600">
+                      {inv.company || "-"}
+                    </td>
+
+                    {/* Created By */}
+
+                    <td className="px-4 py-3">
+                      <div className="inline-flex items-center rounded-full bg-slate-100 px-3 py-1 text-[11px] font-bold text-slate-700">
+                        {usersMap[inv.createdBy]?.displayName || "Unknown"}
+                      </div>
+                    </td>
+
+                    {/* Days Pending */}
+
+                    <td className="px-4 py-3">
+                      {isStillPending ? (
                         <span
-                          className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-black ${getStatusPillClasses(
-                            inv.status ||
-                              "Unpaid",
+                          className={`inline-flex min-w-[82px] items-center justify-center rounded-full border px-3 py-1 text-[11px] font-black ${getPendingDaysClasses(
+                            daysPending,
                           )}`}
                         >
-                          {inv.status ||
-                            "Unpaid"}
+                          {daysPending === null
+                            ? "-"
+                            : daysPending === 0
+                              ? "Today"
+                              : `${daysPending} ${
+                                  daysPending === 1 ? "day" : "days"
+                                }`}
                         </span>
-                      </td>
+                      ) : (
+                        <span className="inline-flex min-w-[82px] items-center justify-center rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-bold text-slate-500">
+                          Closed
+                        </span>
+                      )}
+                    </td>
 
-                      {/* Actions */}
+                    {/* Amount */}
 
-                      <td className="px-4 py-3">
-                        <div className="flex items-center gap-1.5">
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title={
-                              isVoid
-                                ? "Receive Payment disabled for Void invoices"
-                                : "Receive Payment"
-                            }
-                            onClick={() => {
-                              if (
-                                isVoid
-                              ) {
-                                return;
-                              }
-
-                              setSelectedInvoice(
-                                inv,
-                              );
-
-                              setShowPaymentModal(
-                                true,
-                              );
-                            }}
-                            disabled={
-                              isVoid
-                            }
-                            className="h-9 w-9 rounded-xl text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-40"
+                    <td className="px-4 py-3 text-right font-black text-slate-950">
+                      Rs. {formatAmount(inv.total)}
+                      {paymentSplit && (
+                        <>
+                          <span
+                            title="Received"
+                            className="mt-0.5 block whitespace-nowrap text-[11px] font-medium text-emerald-600"
                           >
-                            <Wallet className="h-4 w-4" />
-                          </Button>
+                            Rs. {formatAmount(paymentSplit.received)}
+                          </span>
+                          <span
+                            title="Remaining"
+                            className="block whitespace-nowrap text-[11px] font-medium text-rose-600"
+                          >
+                            Rs. {formatAmount(paymentSplit.remaining)}
+                          </span>
+                        </>
+                      )}
+                    </td>
 
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="View PDF"
-                            onClick={() =>
-                              handleViewPdf(
-                                inv,
-                              )
+                    {/* Status */}
+
+                    <td className="px-4 py-3">
+                      <span
+                        className={`inline-flex items-center rounded-full border px-3 py-1 text-[11px] font-black ${getStatusPillClasses(
+                          inv.status || "Unpaid",
+                        )}`}
+                      >
+                        {inv.status || "Unpaid"}
+                      </span>
+                    </td>
+
+                    {/* Actions */}
+
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1.5">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title={
+                            isVoid
+                              ? "Receive Payment disabled for Void invoices"
+                              : "Receive Payment"
+                          }
+                          onClick={() => {
+                            if (isVoid) {
+                              return;
                             }
-                            className="h-9 w-9 rounded-xl text-slate-600 hover:bg-blue-50 hover:text-blue-700"
-                          >
-                            <Eye className="h-4 w-4" />
-                          </Button>
 
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Edit"
-                            onClick={() =>
-                              onEdit(
-                                inv,
-                              )
-                            }
-                            className="h-9 w-9 rounded-xl text-slate-600 hover:bg-amber-50 hover:text-amber-700"
-                          >
-                            <Pencil className="h-4 w-4" />
-                          </Button>
+                            setSelectedInvoice(inv);
 
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            title="Duplicate"
-                            onClick={() => {
-                              const dup =
-                                {
-                                  ...inv,
-                                  id: undefined,
-                                  invoiceNo:
-                                    "",
-                                };
+                            setShowPaymentModal(true);
+                          }}
+                          disabled={isVoid}
+                          className="h-9 w-9 rounded-xl text-slate-600 hover:bg-emerald-50 hover:text-emerald-700 disabled:opacity-40"
+                        >
+                          <Wallet className="h-4 w-4" />
+                        </Button>
 
-                              onDuplicate(
-                                dup,
-                              );
-                            }}
-                            className="h-9 w-9 rounded-xl text-slate-600 hover:bg-purple-50 hover:text-purple-700"
-                          >
-                            <Copy className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                },
-              )}
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="View PDF"
+                          onClick={() => handleViewPdf(inv)}
+                          className="h-9 w-9 rounded-xl text-slate-600 hover:bg-blue-50 hover:text-blue-700"
+                        >
+                          <Eye className="h-4 w-4" />
+                        </Button>
 
-              {filteredInvoices.length ===
-                0 && (
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Edit"
+                          onClick={() => onEdit(inv)}
+                          className="h-9 w-9 rounded-xl text-slate-600 hover:bg-amber-50 hover:text-amber-700"
+                        >
+                          <Pencil className="h-4 w-4" />
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="Duplicate"
+                          onClick={() => {
+                            const dup = {
+                              ...inv,
+                              id: undefined,
+                              invoiceNo: "",
+                            };
+
+                            onDuplicate(dup);
+                          }}
+                          className="h-9 w-9 rounded-xl text-slate-600 hover:bg-purple-50 hover:text-purple-700"
+                        >
+                          <Copy className="h-4 w-4" />
+                        </Button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
+
+              {filteredInvoices.length === 0 && (
                 <tr>
-                  <td
-                    colSpan={
-                      13
-                    }
-                    className="px-4 py-14 text-center"
-                  >
+                  <td colSpan={13} className="px-4 py-14 text-center">
                     <div className="mx-auto flex max-w-sm flex-col items-center">
                       <div className="mb-3 flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-500">
                         <ReceiptText className="h-6 w-6" />
                       </div>
 
                       <h4 className="text-sm font-black text-slate-900">
-                        No invoices
-                        found
+                        No invoices found
                       </h4>
 
                       <p className="mt-1 text-xs leading-5 text-slate-500">
-                        Try changing or
-                        clearing your
-                        filters to view
-                        more invoice
-                        records.
+                        Try changing or clearing your filters to view more
+                        invoice records.
                       </p>
 
                       {hasActiveFilters && (
                         <Button
                           type="button"
                           variant="outline"
-                          onClick={
-                            resetFilters
-                          }
+                          onClick={resetFilters}
                           className="mt-4 h-9 rounded-xl text-xs font-bold"
                         >
-                          Clear
-                          Filters
+                          Clear Filters
                         </Button>
                       )}
                     </div>
@@ -3397,10 +2825,8 @@ export default function EstimateInvoiceList({
 
       {!isAdmin ? (
         <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs font-medium text-slate-500">
-          Showing only your
-          invoices because this
-          account does not have
-          admin access.
+          Showing only your invoices because this account does not have admin
+          access.
         </div>
       ) : null}
 
@@ -3408,90 +2834,68 @@ export default function EstimateInvoiceList({
           PDF PREVIEW
       ========================== */}
 
-      {isPreviewOpen &&
-        previewURL && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
-            <div className="flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-white shadow-2xl">
-              <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
-                <div>
-                  <h2 className="text-sm font-black text-slate-950">
-                    Invoice PDF
-                    Preview
-                  </h2>
+      {isPreviewOpen && previewURL && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-950/70 p-4 backdrop-blur-sm">
+          <div className="flex h-[90vh] w-full max-w-6xl flex-col overflow-hidden rounded-3xl border border-white/10 bg-white shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-100 px-5 py-4">
+              <div>
+                <h2 className="text-sm font-black text-slate-950">
+                  Invoice PDF Preview
+                </h2>
 
-                  <p className="mt-1 text-xs text-slate-500">
-                    {previewInvoiceNo ||
-                      "invoice"}
-                  </p>
-                </div>
-
-                <button
-                  type="button"
-                  onClick={
-                    handleClosePreview
-                  }
-                  className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-sm font-black text-slate-600 transition hover:bg-slate-200"
-                >
-                  X
-                </button>
+                <p className="mt-1 text-xs text-slate-500">
+                  {previewInvoiceNo || "invoice"}
+                </p>
               </div>
 
-              <div className="flex-1 bg-slate-100 p-3">
-                <iframe
-                  src={
-                    previewURL
-                  }
-                  className="h-full w-full rounded-2xl border border-slate-200 bg-white"
-                  title="Invoice PDF Preview"
-                />
-              </div>
+              <button
+                type="button"
+                onClick={handleClosePreview}
+                className="flex h-9 w-9 items-center justify-center rounded-xl bg-slate-100 text-sm font-black text-slate-600 transition hover:bg-slate-200"
+              >
+                X
+              </button>
+            </div>
 
-              <div className="flex justify-end border-t border-slate-100 px-5 py-4">
-                <Button
-                  onClick={() => {
-                    const link =
-                      document.createElement(
-                        "a",
-                      );
+            <div className="flex-1 bg-slate-100 p-3">
+              <iframe
+                src={previewURL}
+                className="h-full w-full rounded-2xl border border-slate-200 bg-white"
+                title="Invoice PDF Preview"
+              />
+            </div>
 
-                    link.href =
-                      previewURL;
+            <div className="flex justify-end border-t border-slate-100 px-5 py-4">
+              <Button
+                onClick={() => {
+                  const link = document.createElement("a");
 
-                    link.download = `${
-                      previewInvoiceNo ||
-                      "invoice"
-                    }.pdf`;
+                  link.href = previewURL;
 
-                    link.click();
-                  }}
-                  className="h-10 rounded-xl bg-slate-950 px-4 text-xs font-semibold text-white hover:bg-slate-800"
-                >
-                  <Download className="mr-2 h-4 w-4" />
+                  link.download = `${previewInvoiceNo || "invoice"}.pdf`;
 
-                  Download PDF
-                </Button>
-              </div>
+                  link.click();
+                }}
+                className="h-10 rounded-xl bg-slate-950 px-4 text-xs font-semibold text-white hover:bg-slate-800"
+              >
+                <Download className="mr-2 h-4 w-4" />
+                Download PDF
+              </Button>
             </div>
           </div>
-        )}
+        </div>
+      )}
 
       {/* =========================
           PAYMENT MODAL
       ========================== */}
 
-      {showPaymentModal &&
-        selectedInvoice && (
-          <ReceivePaymentModal
-            invoice={
-              selectedInvoice
-            }
-            onClose={() =>
-              setShowPaymentModal(
-                false,
-              )
-            }
-          />
-        )}
+      {showPaymentModal && selectedInvoice && (
+        <ReceivePaymentModal
+          invoice={selectedInvoice}
+          onClose={() => setShowPaymentModal(false)}
+        />
+      )}
     </div>
   );
 }

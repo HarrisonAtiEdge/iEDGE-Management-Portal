@@ -402,6 +402,11 @@ import EmployeeRequests from "./pages/EmployeeRequests";
 import EmployeeProfile from "./pages/EmployeeProfile";
 import Salary from "./pages/Salary";
 import { RTGSForm, RTGSList, RTGSVendors, RTGSAuthorizers } from "@/pages/RTGS";
+import {
+  CreateTravelEstimate,
+  EditTravelEstimate,
+  TravelEstimateListPage,
+} from "@/pages/TravelEstimate";
 
 function AuthenticatedApp() {
   const { currentUser } = useAuth();
@@ -701,6 +706,25 @@ function AuthenticatedApp() {
         <Route path="/RTGS/authorizers">
           <ProtectedRoute>
             <RTGSAuthorizers />
+          </ProtectedRoute>
+        </Route>
+
+        <Route path="/travel-estimate">
+          <Redirect to="/travel-estimate/list" />
+        </Route>
+        <Route path="/travel-estimate/create">
+          <ProtectedRoute>
+            <CreateTravelEstimate />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/travel-estimate/list">
+          <ProtectedRoute>
+            <TravelEstimateListPage />
+          </ProtectedRoute>
+        </Route>
+        <Route path="/travel-estimate/edit/:id">
+          <ProtectedRoute>
+            <EditTravelEstimate />
           </ProtectedRoute>
         </Route>
 

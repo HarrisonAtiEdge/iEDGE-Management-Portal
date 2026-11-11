@@ -1957,6 +1957,9 @@ import {
   TrendingUp,
   Banknote,
   PenLine,
+  Plane,
+  FilePlus,
+  List,
 } from "lucide-react";
 import { Link, useLocation } from "wouter";
 import { canAccessRtgs } from "@/components/RTGS/rtgsData";
@@ -2617,6 +2620,9 @@ const LUCIDE_ICONS: Record<string, LucideIcon> = {
   TrendingUp,
   Banknote,
   PenLine,
+  Plane,
+  FilePlus,
+  List,
 };
 
 // ✅ Backward compatibility for old FontAwesome names
@@ -2694,6 +2700,20 @@ const RTGS_DROPDOWN: SidebarItem = {
   ],
 };
 
+const TRAVEL_ESTIMATE_DROPDOWN: SidebarItem = {
+  path: "#",
+  label: "Travel Estimate",
+  icon: "Plane",
+  children: [
+    {
+      path: "/travel-estimate/create",
+      label: "Create Estimate",
+      icon: "FilePlus",
+    },
+    { path: "/travel-estimate/list", label: "Estimate List", icon: "List" },
+  ],
+};
+
 // ✅ Main admin fallback tabs
 const AVAILABLE_TABS: SidebarItem[] = [
   { path: "/dashboard", label: "Dashboard", icon: "LayoutDashboard" },
@@ -2708,6 +2728,7 @@ const AVAILABLE_TABS: SidebarItem[] = [
   { path: "/users", label: "User Management", icon: "UserRound" },
   FINANCE_DROPDOWN,
   TRAVEL_DROPDOWN,
+  TRAVEL_ESTIMATE_DROPDOWN,
   CONTACTS_DROPDOWN,
   // { path: "/records", label: "Records", icon: "Archive" },
 
@@ -2943,6 +2964,53 @@ function applyRtgsAccess(items: SidebarItem[], userRole: string): SidebarItem[] 
   const financeIndex = withoutRtgs.findIndex((item) => item.label === "Finance");
   const updated = [...withoutRtgs];
   updated.splice(financeIndex >= 0 ? financeIndex + 1 : updated.length, 0, RTGS_DROPDOWN);
+  return updated;
+}
+
+const TRAVEL_ESTIMATE_PATHS = new Set(
+  (TRAVEL_ESTIMATE_DROPDOWN.children || []).map((child) => child.path),
+);
+
+// The main admin always gets the Travel Estimate dropdown. Other roles get
+// the pages User Management assigns them (saved as flat tabs), gathered into
+// the same dropdown. Placed right after the Travel dropdown when there is one.
+function applyTravelEstimateTabs(
+  items: SidebarItem[],
+  userRole: string,
+): SidebarItem[] {
+  const safeItems = Array.isArray(items) ? items : [];
+  const assignedPaths = new Set<string>();
+
+  const remaining = safeItems.filter((item) => {
+    if (TRAVEL_ESTIMATE_PATHS.has(item.path)) {
+      assignedPaths.add(item.path);
+      return false;
+    }
+    if (item.label === TRAVEL_ESTIMATE_DROPDOWN.label && item.children) {
+      item.children.forEach((child) => {
+        if (TRAVEL_ESTIMATE_PATHS.has(child.path)) assignedPaths.add(child.path);
+      });
+      return false;
+    }
+    return true;
+  });
+
+  const children = (TRAVEL_ESTIMATE_DROPDOWN.children || []).filter(
+    (child) => userRole === "main_admin" || assignedPaths.has(child.path),
+  );
+
+  if (children.length === 0) {
+    return remaining;
+  }
+
+  const travelIndex = remaining.findIndex(
+    (item) => item.label === TRAVEL_DROPDOWN.label,
+  );
+  const updated = [...remaining];
+  updated.splice(travelIndex >= 0 ? travelIndex + 1 : updated.length, 0, {
+    ...TRAVEL_ESTIMATE_DROPDOWN,
+    children,
+  });
   return updated;
 }
 
@@ -3183,6 +3251,8 @@ export default function Layout({ children }: { children: React.ReactNode }) {
             finalItems = ensureRequestsTab(finalItems);
 
             finalItems = applyRtgsAccess(finalItems, userRole);
+
+           finalItems = applyTravelEstimateTabs(finalItems, userRole);
 
             setSidebarItems(finalItems);
             setLoading(false);
@@ -4050,7 +4120,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           </div>
         </header>
 
-        <div className="flex-1 overflow-y-auto p-6">{children}</div>
+        <div className="relative flex-1 overflow-y-auto p-6">{children}</div>
       </main>
 
       {selectedGlobalSearchResult &&
