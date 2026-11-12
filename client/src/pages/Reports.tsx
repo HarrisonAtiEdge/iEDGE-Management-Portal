@@ -149,6 +149,7 @@ export default function Reports() {
           <ProjectReportTable
             rows={filteredRows}
             resultsPerPage={filters.resultsPerPage}
+            budgetRequests={data.budgetRequests}
           />
         </>
       )}

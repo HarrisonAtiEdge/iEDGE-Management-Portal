@@ -2661,6 +2661,9 @@ interface BudgetDetailsModalProps {
   // (2-step admin) status progression than the table's approve does.
   onApprove?: (request: InvoiceRequest) => void;
   canApprove?: boolean;
+  // View-only mode (e.g. opened from the Reports tab): hides every
+  // approve/reject action so the modal can't change the request's state.
+  readOnly?: boolean;
 }
 
 export default function BudgetDetailsModal({
@@ -2670,11 +2673,12 @@ export default function BudgetDetailsModal({
   onSubmitExpense,
   onApprove,
   canApprove,
+  readOnly = false,
 }: BudgetDetailsModalProps) {
   const { userProfile } = useAuth();
   const { toast } = useToast();
 
-  const isMainAdmin = userProfile?.role === "main_admin";
+  const isMainAdmin = !readOnly && userProfile?.role === "main_admin";
 
   const [liveInvoice, setLiveInvoice] = useState<InvoiceRequest | null>(
     invoice,
@@ -2954,7 +2958,7 @@ export default function BudgetDetailsModal({
 
   const totalBudget = activeInvoice.totalAmount || 0;
 
-  const canShowRequestActions = canApproveRequest(activeInvoice);
+  const canShowRequestActions = !readOnly && canApproveRequest(activeInvoice);
 
   const paymentDetails = activeInvoice.paymentDetails as
     | {
@@ -3419,7 +3423,7 @@ export default function BudgetDetailsModal({
                 </div>
 
                 <div className="flex flex-wrap items-center gap-2">
-                  {canApprove && (
+                  {canApprove && !readOnly && (
                     <Button
                       size="sm"
                       className="rounded-full bg-green-600 px-4 text-white shadow-sm hover:bg-green-700"

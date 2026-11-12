@@ -14,6 +14,12 @@ export type InvoicePaymentStatus =
   | "partially_paid"
   | "unpaid";
 
+export interface BudgetRequestEntry {
+  id: string;
+  number: string;
+  amount: number;
+}
+
 export interface ProjectReportRow {
   projectCode: string;
   projectName: string;
@@ -30,8 +36,9 @@ export interface ProjectReportRow {
   budgetRequestCost: number;
   budgetRequestCount: number;
   // Every approved-or-later budget request rolled into this project's cost,
-  // by its own request number and amount — not just a total.
-  budgetRequestEntries: { number: string; amount: number }[];
+  // by its own request number and amount — not just a total. `id` is the
+  // Firestore doc id, used to open that request's full details.
+  budgetRequestEntries: BudgetRequestEntry[];
 
   reimbursementCost: number;
   reimbursementCount: number;
