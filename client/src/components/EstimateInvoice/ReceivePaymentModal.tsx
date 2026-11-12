@@ -2504,11 +2504,10 @@ export default function ReceivePaymentModal({ invoice, onClose }: Props) {
 
       const waiverApplied = waiverEligible && waiveRemainingBalance;
       const waivedAmount = appliedWaiverAmount;
+      // Settled by this payment alone; the invoice's new balance also counts
+      // every earlier payment and waiver (the Remaining Due shown above).
       const settledAmount = Number((totalPayment + waivedAmount).toFixed(2));
-      const newBalance = Math.max(
-        Number((total - settledAmount).toFixed(2)),
-        0,
-      );
+      const newBalance = projectedBalance;
       const totalWaivedAfter = Number(
         (previousWaivedAmount + waivedAmount).toFixed(2),
       );
