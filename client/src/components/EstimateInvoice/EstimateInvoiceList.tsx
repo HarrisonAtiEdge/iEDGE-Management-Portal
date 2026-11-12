@@ -1163,7 +1163,9 @@ import {
   getDocs,
   onSnapshot,
   query,
+  serverTimestamp,
   where,
+  writeBatch,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { Button } from "@/components/ui/button";
@@ -1180,6 +1182,7 @@ import {
   ReceiptText,
   RotateCcw,
   Wallet,
+  Wrench,
 } from "lucide-react";
 import { buildEstimateInvoicePdfBlob } from "@/lib/estimateInvoicePdf";
 import ReceivePaymentModal from "@/components/EstimateInvoice/ReceivePaymentModal";
@@ -1218,6 +1221,12 @@ type ProjectInfo = { id: string; name: string; code: string };
 
 const text = (value: unknown) => String(value ?? "").trim();
 
+// True when the app is opened on this machine. Published builds also run in
+// development mode (client/.env sets NODE_ENV), so import.meta.env.DEV can't
+// tell local from live; the address can.
+const isLocalhost = () =>
+  ["localhost", "127.0.0.1", "[::1]"].includes(window.location.hostname);
+
 export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
   const [invoices, setInvoices] = useState<EstimateInvoice[]>([]);
   const [isAdmin, setIsAdmin] = useState(false);
@@ -1251,6 +1260,7 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
 
   const [selectedInvoice, setSelectedInvoice] = useState<any>(null);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [repairingBalances, setRepairingBalances] = useState(false);
 
   const [datePreset, setDatePreset] = useState<
     "" | "today" | "thisMonth" | "lastMonth"
@@ -1371,6 +1381,26 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
     return {
       name: text(inv.projectName) || project?.name || "",
       code: project?.code || code,
+    };
+  };
+
+  /**
+   * What a partially paid invoice has received and still has due, from the
+   * balance the Receive Payment modal keeps on it; null for other invoices.
+   */
+  const getPaymentSplit = (inv: any) => {
+    const remaining = Number(inv.balance);
+    if (
+      String(inv.status || "").toLowerCase() !== "partially paid" ||
+      inv.balance == null ||
+      !Number.isFinite(remaining)
+    ) {
+      return null;
+    }
+
+    return {
+      received: Math.max(Number(inv.total || 0) - remaining, 0),
+      remaining,
     };
   };
 
@@ -1964,6 +1994,8 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
         "Created By",
         "Days Pending",
         "Amount",
+        "Received",
+        "Remaining",
         "Status",
       ];
 
@@ -1976,6 +2008,8 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
         const daysPending = getDaysPending(inv);
 
         const project = getInvoiceProject(inv);
+
+        const paymentSplit = getPaymentSplit(inv);
 
         return [
           inv.invoiceDate || "",
@@ -1990,6 +2024,8 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
           usersMap[inv.createdBy]?.displayName || "Unknown",
           isStillPending ? (daysPending ?? "") : "Closed",
           Number(inv.total ?? 0).toFixed(2),
+          paymentSplit ? paymentSplit.received.toFixed(2) : "",
+          paymentSplit ? paymentSplit.remaining.toFixed(2) : "",
           inv.status || "Unpaid",
         ];
       });
@@ -2024,6 +2060,109 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
       console.error("Export failed:", error);
 
       alert("Failed to export invoices.");
+    }
+  };
+
+  // Invoices paid in more than one payment used to be saved with the balance
+  // left after their last payment only, so fully paid invoices could show as
+  // Partially Paid. This recalculates each invoice's balance from all of its
+  // payments and waivers, as the Receive Payment modal now does, and saves
+  // the ones that are wrong. It only lowers a balance or marks an invoice
+  // Paid; an invoice is never made to look less paid than it is saved as.
+  const handleRepairBalances = async () => {
+    if (
+      !window.confirm(
+        "Recalculate every invoice's balance and status from its recorded payments, and save the ones that are wrong?",
+      )
+    ) {
+      return;
+    }
+
+    try {
+      setRepairingBalances(true);
+
+      const paymentsSnap = await getDocs(
+        collection(db, "Panels", PANEL_ID, "payments"),
+      );
+
+      const settledByInvoice = new Map<string, number>();
+      paymentsSnap.forEach((paymentDoc) => {
+        const payment = paymentDoc.data() as any;
+        const invoiceId = text(payment.invoiceId);
+        if (!invoiceId) return;
+
+        settledByInvoice.set(
+          invoiceId,
+          (settledByInvoice.get(invoiceId) || 0) +
+            Number(payment.totalPayment ?? payment.amount ?? 0) +
+            Number(payment.waivedAmount || 0),
+        );
+      });
+
+      const fixes = invoices.flatMap((inv) => {
+        const total = Number(inv.total || 0);
+        const settled = settledByInvoice.get(inv.id);
+        const storedStatus = String(inv.status || "").toLowerCase();
+
+        if (settled === undefined || !(total > 0) || storedStatus === "void") {
+          return [];
+        }
+
+        const balance = Math.max(
+          Number((total - Math.min(total, settled)).toFixed(2)),
+          0,
+        );
+        const isPaid = balance <= 0.009;
+
+        if (!isPaid && storedStatus === "paid") return [];
+
+        const storedBalance = Number(inv.balance);
+        const balanceTooHigh =
+          inv.balance != null &&
+          Number.isFinite(storedBalance) &&
+          storedBalance - balance > 0.009;
+
+        if (!balanceTooHigh && !(isPaid && inv.status !== "Paid")) return [];
+
+        return [
+          {
+            inv,
+            balance: isPaid ? 0 : balance,
+            status: isPaid ? "Paid" : "Partially Paid",
+          },
+        ];
+      });
+
+      // Firestore takes at most 500 writes in one batch.
+      for (let start = 0; start < fixes.length; start += 400) {
+        const batch = writeBatch(db);
+        fixes.slice(start, start + 400).forEach(({ inv, balance, status }) => {
+          batch.update(doc(invoicesRef, inv.id), {
+            balance,
+            status,
+            updatedAt: serverTimestamp(),
+          });
+        });
+        await batch.commit();
+      }
+
+      const fixedNumbers = fixes.map(({ inv }) => inv.invoiceNo || inv.id);
+      alert(
+        fixes.length === 0
+          ? "Every invoice's balance already matches its payments."
+          : `Updated ${fixes.length} invoice(s): ${fixedNumbers
+              .slice(0, 30)
+              .join(", ")}${
+              fixedNumbers.length > 30
+                ? ` and ${fixedNumbers.length - 30} more`
+                : ""
+            }`,
+      );
+    } catch (error) {
+      console.error("Failed to recalculate invoice balances:", error);
+      alert("Failed to recalculate invoice balances.");
+    } finally {
+      setRepairingBalances(false);
     }
   };
 
@@ -2062,6 +2201,23 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
               <RotateCcw className="mr-2 h-4 w-4" />
               Reset Filters
             </Button>
+
+            {/* Only when the app is opened on this machine, never on the
+                live site. Local and live share one Firebase project, so a
+                repair run here fixes the live data too. */}
+            {isAdmin && isLocalhost() && (
+              <Button
+                type="button"
+                variant="outline"
+                onClick={handleRepairBalances}
+                disabled={repairingBalances || invoices.length === 0}
+                title="Recalculate invoice balances and statuses from their recorded payments"
+                className="h-10 rounded-xl border-slate-200 bg-white text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-40"
+              >
+                <Wrench className="mr-2 h-4 w-4" />
+                {repairingBalances ? "Recalculating..." : "Recalculate Balances"}
+              </Button>
+            )}
 
             <Button
               type="button"
@@ -2537,22 +2693,7 @@ export default function EstimateInvoiceList({ onEdit, onDuplicate }: Props) {
 
                 const project = getInvoiceProject(inv);
 
-                // Partially paid invoices also show what has been received
-                // and what is still due, from the balance the Receive
-                // Payment modal keeps on the invoice.
-                const remainingDue = Number(inv.balance);
-                const paymentSplit =
-                  status === "partially paid" &&
-                  inv.balance != null &&
-                  Number.isFinite(remainingDue)
-                    ? {
-                        received: Math.max(
-                          Number(inv.total || 0) - remainingDue,
-                          0,
-                        ),
-                        remaining: remainingDue,
-                      }
-                    : null;
+                const paymentSplit = getPaymentSplit(inv);
 
                 return (
                   <tr
