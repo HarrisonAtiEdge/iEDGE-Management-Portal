@@ -4,6 +4,7 @@
 // source is a new .forEach block here, nothing else has to change).
 
 import type {
+  BudgetRequestEntry,
   ProjectReportRow,
   ReportsRawData,
   RtdClientActivity,
@@ -90,7 +91,7 @@ type MutableRow = {
   estimateNumbers: string[];
   budgetRequestCost: number;
   budgetRequestCount: number;
-  budgetRequestEntries: { number: string; amount: number }[];
+  budgetRequestEntries: BudgetRequestEntry[];
   reimbursementCost: number;
   reimbursementCount: number;
   invoicedTotal: number;
@@ -201,6 +202,7 @@ export function buildProjectReports(raw: ReportsRawData): ProjectReportRow[] {
     row.budgetRequestCost += amount;
     row.budgetRequestCount += 1;
     row.budgetRequestEntries.push({
+      id: normalize(request.id),
       number: normalize(request.requestId) || `#${normalize(request.id)}`,
       amount,
     });

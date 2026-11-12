@@ -1,11 +1,18 @@
-import { Fragment, useEffect, useState } from "react";
-import { ChevronDown, ChevronLeft, ChevronRight } from "lucide-react";
-import type { ProjectReportRow, ResultsPerPage } from "@/lib/reports/types";
+import { Fragment, useEffect, useMemo, useState } from "react";
+import { ChevronDown, ChevronLeft, ChevronRight, ExternalLink } from "lucide-react";
+import type {
+  BudgetRequestEntry,
+  ProjectReportRow,
+  ResultsPerPage,
+} from "@/lib/reports/types";
 import { formatDate, formatMoney, formatPercent } from "@/lib/reports/format";
+import BudgetDetailsModal from "@/components/BudgetDetailsModal";
 
 type Props = {
   rows: ProjectReportRow[];
   resultsPerPage: ResultsPerPage;
+  // Raw budget request docs, so a clicked entry can open its full details.
+  budgetRequests?: any[];
 };
 
 const STATUS_META: Record<
@@ -50,9 +57,28 @@ const PAYMENT_META: Record<
 
 const COLUMN_COUNT = 11;
 
-export default function ProjectReportTable({ rows, resultsPerPage }: Props) {
+export default function ProjectReportTable({
+  rows,
+  resultsPerPage,
+  budgetRequests = [],
+}: Props) {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [page, setPage] = useState(1);
+  const [selectedBudgetRequestId, setSelectedBudgetRequestId] = useState<
+    string | null
+  >(null);
+
+  const budgetRequestById = useMemo(() => {
+    const map = new Map<string, any>();
+    budgetRequests.forEach((request) => {
+      if (request?.id) map.set(String(request.id), request);
+    });
+    return map;
+  }, [budgetRequests]);
+
+  const selectedBudgetRequest = selectedBudgetRequestId
+    ? budgetRequestById.get(selectedBudgetRequestId) ?? null
+    : null;
 
   // Jump back to page 1 whenever the filtered result set or the page size
   // changes — an old page number could otherwise point past the end (or
@@ -307,6 +333,12 @@ export default function ProjectReportTable({ rows, resultsPerPage }: Props) {
                             label={`Approved Budget Requests (${row.budgetRequestCount})`}
                             entries={row.budgetRequestEntries}
                             emptyText="No approved budget requests for this project code."
+                            onSelect={(entry) =>
+                              setSelectedBudgetRequestId(entry.id)
+                            }
+                            isSelectable={(entry) =>
+                              budgetRequestById.has(entry.id)
+                            }
                           />
                         </div>
                       </td>
@@ -357,6 +389,15 @@ export default function ProjectReportTable({ rows, resultsPerPage }: Props) {
           </button>
         </div>
       ) : null}
+
+      {selectedBudgetRequest ? (
+        <BudgetDetailsModal
+          isOpen
+          readOnly
+          invoice={selectedBudgetRequest}
+          onClose={() => setSelectedBudgetRequestId(null)}
+        />
+      ) : null}
     </div>
   );
 }
@@ -398,10 +439,14 @@ function AmountEntriesList({
   label,
   entries,
   emptyText,
+  onSelect,
+  isSelectable,
 }: {
   label: string;
-  entries: { number: string; amount: number }[];
+  entries: BudgetRequestEntry[];
   emptyText: string;
+  onSelect?: (entry: BudgetRequestEntry) => void;
+  isSelectable?: (entry: BudgetRequestEntry) => boolean;
 }) {
   return (
     <div className="rounded-2xl border border-slate-200 bg-white p-4">
@@ -413,19 +458,46 @@ function AmountEntriesList({
         <p className="mt-1 text-xs text-slate-400">{emptyText}</p>
       ) : (
         <ul className="mt-2 space-y-1.5">
-          {entries.map((entry, index) => (
-            <li
-              key={`${entry.number}-${index}`}
-              className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs"
-            >
-              <span className="font-semibold text-slate-700">
-                {entry.number}
-              </span>
-              <span className="font-bold text-slate-900">
-                {formatMoney(entry.amount)}
-              </span>
-            </li>
-          ))}
+          {entries.map((entry, index) => {
+            const clickable =
+              !!onSelect && (isSelectable ? isSelectable(entry) : true);
+
+            const content = (
+              <>
+                <span className="flex items-center gap-1.5 font-semibold text-slate-700">
+                  {entry.number}
+                  {clickable ? (
+                    <ExternalLink className="h-3 w-3 text-slate-400" />
+                  ) : null}
+                </span>
+                <span className="font-bold text-slate-900">
+                  {formatMoney(entry.amount)}
+                </span>
+              </>
+            );
+
+            return (
+              <li key={`${entry.id || entry.number}-${index}`}>
+                {clickable ? (
+                  <button
+                    type="button"
+                    title="View budget request details"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      onSelect?.(entry);
+                    }}
+                    className="flex w-full items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-left text-xs transition hover:border-blue-300 hover:bg-blue-50 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-400"
+                  >
+                    {content}
+                  </button>
+                ) : (
+                  <div className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 bg-slate-50 px-2.5 py-1.5 text-xs">
+                    {content}
+                  </div>
+                )}
+              </li>
+            );
+          })}
         </ul>
       )}
     </div>
