@@ -38,7 +38,9 @@ export default function ProjectReportCharts({ rows }: Props) {
     .slice(0, TOP_N)
     .map((row) => ({
       name: row.projectName || row.projectCode,
-      Revenue: row.invoicedTotal || row.estimateTotal,
+      // Same revenue figure profit is measured against (PO value, else
+      // invoiced total); estimate value only for not-yet-invoiced projects.
+      Revenue: row.profitRevenue ?? row.estimateTotal,
       Cost: row.totalCost,
       // Omitted (not zeroed) for estimate-only projects — there's no real
       // profit figure to plot until something is actually invoiced.

@@ -1576,6 +1576,29 @@ const defaultRow: ServiceItem = {
 
 const PANEL_ID = "IEDGE-SYSTEM";
 
+// PO amounts are edited as strings (so a field can be blank while typing)
+// and saved as numbers. Older invoices may only have a single `poAmount`.
+const toPoAmountInputs = (invoice: any): string[] => {
+  const raw = Array.isArray(invoice?.poAmounts)
+    ? invoice.poAmounts
+    : invoice?.poAmount !== undefined && invoice?.poAmount !== null
+      ? [invoice.poAmount]
+      : [];
+
+  const values = raw
+    .map((value: any) => String(value ?? "").trim())
+    .filter(Boolean);
+
+  return values.length ? values : [""];
+};
+
+const toPoAmountNumbers = (inputs: string[]): number[] =>
+  inputs
+    .map((value) => String(value ?? "").replace(/,/g, "").trim())
+    .filter(Boolean)
+    .map(Number)
+    .filter((value) => Number.isFinite(value));
+
 export type EstimateInvoice = any;
 
 type Props = {
@@ -1617,6 +1640,7 @@ export default function EstimateInvoiceForm({
   const [subject, setSubject] = useState("");
 
   const [poNumber, setPoNumber] = useState("");
+  const [poAmounts, setPoAmounts] = useState<string[]>([""]);
 
   const [previousEstimateTotal, setPreviousEstimateTotal] = useState<
     number | null
@@ -1974,6 +1998,7 @@ export default function EstimateInvoiceForm({
       setProjectOwner("");
       setSubject("");
       setPoNumber("");
+      setPoAmounts([""]);
 
       setPaymentTerm("");
       setTaxType("exclusive");
@@ -2018,6 +2043,7 @@ export default function EstimateInvoiceForm({
     setProjectOwner(existingInvoice.projectOwner ?? "");
     setSubject(existingInvoice.subject ?? "");
     setPoNumber(existingInvoice.poNumber ?? "");
+    setPoAmounts(toPoAmountInputs(existingInvoice));
 
     setPaymentTerm(existingInvoice.paymentTerm ?? "");
     setTaxType((existingInvoice.taxType ?? "exclusive") as any);
@@ -2135,6 +2161,7 @@ export default function EstimateInvoiceForm({
     setProjectOwner("");
     setSubject("");
     setPoNumber("");
+    setPoAmounts([""]);
     setPreviousEstimateTotal(null);
     setPaymentTerm("");
     setTaxType("exclusive");
@@ -2218,6 +2245,11 @@ export default function EstimateInvoiceForm({
       setWhtTotal(t.whtTotal);
       setTotal(t.total);
 
+      const poAmountValues = toPoAmountNumbers(poAmounts);
+      const poAmountTotal = Number(
+        poAmountValues.reduce((sum, value) => sum + value, 0).toFixed(2),
+      );
+
       if (editId) {
         const updatedInvoice: any = {
           company,
@@ -2231,6 +2263,8 @@ export default function EstimateInvoiceForm({
           projectOwner,
           subject,
           poNumber,
+          poAmounts: poAmountValues,
+          poAmountTotal,
 
           paymentTerm,
           taxType,
@@ -2381,6 +2415,8 @@ export default function EstimateInvoiceForm({
           projectOwner,
           subject,
           poNumber,
+          poAmounts: poAmountValues,
+          poAmountTotal,
 
           paymentTerm,
           taxType,
@@ -2580,6 +2616,67 @@ export default function EstimateInvoiceForm({
               placeholder="e.g. PO-12345"
             />
           </div>
+        </div>
+
+        <div className="mt-4">
+          <div className="flex items-center justify-between gap-3">
+            <label className="text-sm font-medium">PO Amount</label>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              onClick={() => setPoAmounts((prev) => [...prev, ""])}
+            >
+              + Add PO Amount
+            </Button>
+          </div>
+
+          <div className="mt-1 grid grid-cols-1 gap-3 md:grid-cols-4">
+            {poAmounts.map((value, idx) => (
+              <div key={idx} className="flex items-center gap-2">
+                <Input
+                  type="number"
+                  min={0}
+                  step="any"
+                  inputMode="decimal"
+                  value={value}
+                  onChange={(e) =>
+                    setPoAmounts((prev) =>
+                      prev.map((v, i) => (i === idx ? e.target.value : v)),
+                    )
+                  }
+                  placeholder={
+                    poAmounts.length > 1 ? `PO Amount ${idx + 1}` : "e.g. 150000"
+                  }
+                  aria-label={`PO Amount ${idx + 1}`}
+                />
+                {poAmounts.length > 1 ? (
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    title="Remove this PO amount"
+                    onClick={() =>
+                      setPoAmounts((prev) => prev.filter((_, i) => i !== idx))
+                    }
+                  >
+                    ✖
+                  </Button>
+                ) : null}
+              </div>
+            ))}
+          </div>
+
+          {poAmounts.length > 1 ? (
+            <div className="mt-2 text-sm text-gray-600">
+              Total PO Amount:{" "}
+              <span className="font-semibold text-gray-900">
+                {money(
+                  toPoAmountNumbers(poAmounts).reduce((sum, v) => sum + v, 0),
+                )}
+              </span>
+            </div>
+          ) : null}
         </div>
 
         <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-3">

@@ -22,6 +22,12 @@ const PAYMENT_LABELS: Record<ProjectReportRow["paymentStatus"], string> = {
   no_invoice: "Not Invoiced Yet",
 };
 
+const PROFIT_BASIS_LABELS: Record<ProjectReportRow["profitBasis"], string> = {
+  po: "PO Value",
+  invoiced: "Invoiced (no PO amount)",
+  none: "-",
+};
+
 export function exportProjectReportsToExcel(
   rows: ProjectReportRow[],
   filename = "project-reports.xlsx",
@@ -34,10 +40,12 @@ export function exportProjectReportsToExcel(
       Estimated: row.estimateTotal,
       Cost: row.totalCost,
       Invoiced: row.invoiceCount > 0 ? row.invoicedTotal : 0,
+      "PO Value": row.poAmountCount > 0 ? row.poTotal : "-",
       "Payment Status": PAYMENT_LABELS[row.paymentStatus],
       "Days Outstanding": row.daysOutstanding ?? "-",
       Profit: row.profit ?? "-",
       "Profit %": row.profitMargin ?? "-",
+      "Profit Basis": PROFIT_BASIS_LABELS[row.profitBasis],
       Status: STATUS_LABELS[row.status],
       "Earliest Activity": formatDate(row.earliestDate),
       "Latest Activity": formatDate(row.latestDate),
@@ -75,6 +83,7 @@ export function exportProjectReportsToPdf(
         "Estimated",
         "Cost",
         "Invoiced",
+        "PO Value",
         "Payment",
         "Days Out.",
         "Profit",
@@ -88,6 +97,7 @@ export function exportProjectReportsToPdf(
       formatMoney(row.estimateTotal),
       formatMoney(row.totalCost),
       row.invoiceCount > 0 ? formatMoney(row.invoicedTotal) : "-",
+      row.poAmountCount > 0 ? formatMoney(row.poTotal) : "-",
       PAYMENT_LABELS[row.paymentStatus],
       row.daysOutstanding === null ? "-" : `${row.daysOutstanding}d`,
       row.profit === null ? "-" : formatMoney(row.profit),

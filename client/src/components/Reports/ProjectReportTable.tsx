@@ -55,7 +55,25 @@ const PAYMENT_META: Record<
   },
 };
 
-const COLUMN_COUNT = 11;
+const COLUMN_COUNT = 12;
+
+const PROFIT_BASIS_META: Record<
+  ProjectReportRow["profitBasis"],
+  { label: string; sub: string }
+> = {
+  po: {
+    label: "PO Value",
+    sub: "Sum of PO amounts minus approved cost",
+  },
+  invoiced: {
+    label: "Invoiced Amount",
+    sub: "No PO amounts entered on this project's invoices — using invoiced total minus approved cost",
+  },
+  none: {
+    label: "Not Calculated",
+    sub: "An estimate is a quote, not revenue — profit only shows once invoiced",
+  },
+};
 
 export default function ProjectReportTable({
   rows,
@@ -116,7 +134,7 @@ export default function ProjectReportTable({
       </div>
 
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[1550px] text-sm">
+        <table className="w-full min-w-[1680px] text-sm">
           <thead>
             <tr className="border-b bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
               <th className="w-8 px-4 py-4" />
@@ -125,6 +143,7 @@ export default function ProjectReportTable({
               <th className="px-5 py-4 text-right">Estimated</th>
               <th className="px-5 py-4 text-right">Cost</th>
               <th className="px-5 py-4 text-right">Invoiced</th>
+              <th className="px-5 py-4 text-right">PO Value</th>
               <th className="px-5 py-4 text-left">Payment</th>
               <th className="px-5 py-4 text-center">Days Outstanding</th>
               <th className="px-5 py-4 text-right">Profit</th>
@@ -192,6 +211,10 @@ export default function ProjectReportTable({
                       {row.invoiceCount > 0
                         ? formatMoney(row.invoicedTotal)
                         : "-"}
+                    </td>
+
+                    <td className="px-5 py-4 text-right text-slate-700">
+                      {row.poAmountCount > 0 ? formatMoney(row.poTotal) : "-"}
                     </td>
 
                     <td className="px-5 py-4">
@@ -293,14 +316,14 @@ export default function ProjectReportTable({
                           <DetailStat
                             label="Profit Basis"
                             value={
-                              row.profitBasis === "invoiced"
-                                ? "Invoiced Amount"
-                                : "Not Calculated"
+                              row.profitRevenue === null
+                                ? PROFIT_BASIS_META[row.profitBasis].label
+                                : `${PROFIT_BASIS_META[row.profitBasis].label}: ${formatMoney(row.profitRevenue)}`
                             }
                             sub={
-                              row.profitBasis === "invoiced"
-                                ? "Invoiced total minus approved cost"
-                                : "An estimate is a quote, not revenue — profit only shows once invoiced"
+                              row.profitBasis === "po"
+                                ? `${PROFIT_BASIS_META.po.sub} (${row.poAmountCount} PO amount(s))`
+                                : PROFIT_BASIS_META[row.profitBasis].sub
                             }
                           />
                           <DetailStat
