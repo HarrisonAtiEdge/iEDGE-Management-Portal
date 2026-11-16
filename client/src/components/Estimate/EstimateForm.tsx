@@ -13,8 +13,18 @@ import {
   increment,
   serverTimestamp,
   runTransaction,
+  writeBatch,
 } from "firebase/firestore";
 import { Estimate } from "../../types";
+import {
+  EstimateCopyPurpose,
+  buildHistoryEntry,
+  diffEstimates,
+  estimateCopyCounterRef,
+  getEstimateCreatorId,
+  getEstimateRoot,
+  newEstimateHistoryRef,
+} from "@/lib/estimateHistory";
 import { Button } from "@/components/ui/button";
 import { RichTextEditor } from "@/components/ui/rich-text-editor";
 import {
@@ -60,6 +70,16 @@ interface SavedPoNumberRecord {
   id: string;
   poNumber: string;
   estimateNo: string;
+  copyOfEstimateId: string;
+}
+
+// Set while the form is saving an edit as a new copy of an estimate.
+interface CopyTarget {
+  rootId: string;
+  rootNo: string;
+  sourceId: string;
+  sourceNo: string;
+  purpose: EstimateCopyPurpose;
 }
 
 // ✅ popular currencies (extend anytime)
@@ -189,6 +209,8 @@ interface TermsConditionDoc {
 type Props = {
   existingEstimate?: Estimate;
   duplicateMode?: boolean;
+  // Save the edit as a new copy of existingEstimate instead of updating it.
+  copyMode?: { purpose: EstimateCopyPurpose } | null;
   onClose?: () => void;
   onSave?: (estimate: Estimate) => void;
 };
@@ -535,6 +557,7 @@ const clearEstimateContext = () => {
 export default function EstimateForm({
   existingEstimate,
   duplicateMode = false,
+  copyMode = null,
   onClose,
   onSave,
 }: Props) {
@@ -676,6 +699,7 @@ export default function EstimateForm({
   const [paymentTerm, setPaymentTerm] = useState("");
   const [company, setCompany] = useState("");
   const [editId, setEditId] = useState<string | null>(null);
+  const [copyTarget, setCopyTarget] = useState<CopyTarget | null>(null);
 
   // ✅ prevent double-click / double-save
   const savingRef = useRef(false);
@@ -706,6 +730,19 @@ export default function EstimateForm({
     setToastOpen(true);
   };
 
+  // An estimate and its copies share a PO number, so they don't warn about
+  // each other.
+  const poFamilyRootId = duplicateMode
+    ? ""
+    : copyTarget?.rootId ||
+      String(existingEstimate?.copyOfEstimateId || existingEstimate?.id || "");
+
+  const isSamePoFamily = (record: { id: string; copyOfEstimateId: string }) =>
+    record.id === editId ||
+    (Boolean(poFamilyRootId) &&
+      (record.id === poFamilyRootId ||
+        record.copyOfEstimateId === poFamilyRootId));
+
   const duplicatePoRecord = useMemo(() => {
     const normalized = normalizePoNumber(poNumber);
     if (!normalized) return null;
@@ -713,11 +750,13 @@ export default function EstimateForm({
     return (
       savedPoNumbers.find(
         (record) =>
-          record.id !== editId &&
+          !isSamePoFamily(record) &&
           normalizePoNumber(record.poNumber) === normalized,
       ) || null
     );
-  }, [savedPoNumbers, poNumber, editId]);
+    // isSamePoFamily only reads editId and poFamilyRootId.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [savedPoNumbers, poNumber, editId, poFamilyRootId]);
 
   const poNumberWarning = duplicatePoRecord
     ? `This PO number already exists${
@@ -755,8 +794,15 @@ export default function EstimateForm({
       );
 
       const duplicate = snapshot.docs.find((document) => {
-        if (editId && document.id === editId) return false;
         const data = document.data() as any;
+        if (
+          isSamePoFamily({
+            id: document.id,
+            copyOfEstimateId: String(data?.copyOfEstimateId || ""),
+          })
+        ) {
+          return false;
+        }
         return normalizePoNumber(data?.poNumber) === normalized;
       });
 
@@ -767,6 +813,7 @@ export default function EstimateForm({
         id: duplicate.id,
         poNumber: String(data?.poNumber || ""),
         estimateNo: String(data?.estimateNo || ""),
+        copyOfEstimateId: String(data?.copyOfEstimateId || ""),
       } as SavedPoNumberRecord;
     } catch (error) {
       console.error("Error checking duplicate PO number:", error);
@@ -989,8 +1036,22 @@ export default function EstimateForm({
     setStatus((existingEstimate as any)?.status ?? "RFQ Sent");
     setApprovalReceivedOn((existingEstimate as any)?.approvalReceivedOn ?? "");
 
-    setEditId(duplicateMode ? null : (existingEstimate.id ?? null));
-    setEstimateNo(duplicateMode ? "" : (existingEstimate.estimateNo ?? ""));
+    const savesAsNew = duplicateMode || Boolean(copyMode);
+    setEditId(savesAsNew ? null : (existingEstimate.id ?? null));
+    setEstimateNo(savesAsNew ? "" : (existingEstimate.estimateNo ?? ""));
+
+    const copyRoot = getEstimateRoot(existingEstimate);
+    setCopyTarget(
+      copyMode && !duplicateMode && copyRoot.id
+        ? {
+            rootId: copyRoot.id,
+            rootNo: copyRoot.estimateNo,
+            sourceId: String(existingEstimate.id || ""),
+            sourceNo: String(existingEstimate.estimateNo || ""),
+            purpose: copyMode.purpose,
+          }
+        : null,
+    );
     setClient(existingEstimate.client ?? "");
     setDate(existingEstimate.date ?? "");
     setExpiryDate(existingEstimate.expiryDate ?? "");
@@ -1112,7 +1173,7 @@ export default function EstimateForm({
       address: (existingEstimate as any).address ?? "",
       addtionalInfo: (existingEstimate as any).info ?? "",
     });
-  }, [existingEstimate, duplicateMode]);
+  }, [existingEstimate, duplicateMode, copyMode]);
 
   useEffect(() => {
     const estimatesCollection = collection(
@@ -1132,6 +1193,7 @@ export default function EstimateForm({
               id: document.id,
               poNumber: String(data?.poNumber || ""),
               estimateNo: String(data?.estimateNo || ""),
+              copyOfEstimateId: String(data?.copyOfEstimateId || ""),
             } as SavedPoNumberRecord;
           })
           .filter((record) => normalizePoNumber(record.poNumber));
@@ -1872,6 +1934,11 @@ export default function EstimateForm({
     const currentUserEmail = String(
       loggedInUser?.email || auth.currentUser?.email || "",
     ).trim();
+    const editor = {
+      id: currentUserId,
+      name: currentUserName,
+      email: currentUserEmail,
+    };
 
     const estimateBase: Estimate = {
       estimateNo: estimateNo || "",
@@ -1970,27 +2037,53 @@ export default function EstimateForm({
 
         const localEditedAt = new Date();
 
-        await updateDoc(ref, {
-          ...estimateToUpdate,
-          updatedAt: serverTimestamp(),
-          lastEditedAt: serverTimestamp(),
-          lastEditedById: currentUserId,
-          lastEditedByName: currentUserName,
-          lastEditedByEmail: currentUserEmail,
-          editCount: increment(1),
-        } as any);
-
-        setProjectOwner(editedProjectOwner);
-        setLastEditedByName(currentUserName);
-        setLastEditedAt(localEditedAt);
-
-        const savedEstimateForCallback = {
-          ...estimateToUpdate,
-          updatedAt: localEditedAt,
+        // Record what this edit changed alongside the update itself.
+        // A save that changes nothing isn't counted as an edit.
+        const changes = diffEstimates(currentData, estimateToUpdate);
+        const isRealEdit = changes.length > 0;
+        const editStamp = {
           lastEditedAt: localEditedAt,
           lastEditedById: currentUserId,
           lastEditedByName: currentUserName,
           lastEditedByEmail: currentUserEmail,
+        };
+        const batch = writeBatch(db);
+
+        batch.update(ref, {
+          ...estimateToUpdate,
+          updatedAt: serverTimestamp(),
+          ...(isRealEdit
+            ? {
+                ...editStamp,
+                lastEditedAt: serverTimestamp(),
+                editCount: increment(1),
+              }
+            : {}),
+        } as any);
+
+        if (isRealEdit) {
+          batch.set(
+            newEstimateHistoryRef(editId),
+            buildHistoryEntry(editor, originalCreatedBy, {
+              type: "edit",
+              editNumber: Number(currentData.editCount || 0) + 1,
+              changes,
+            }),
+          );
+        }
+
+        await batch.commit();
+
+        setProjectOwner(editedProjectOwner);
+        if (isRealEdit) {
+          setLastEditedByName(currentUserName);
+          setLastEditedAt(localEditedAt);
+        }
+
+        const savedEstimateForCallback = {
+          ...estimateToUpdate,
+          updatedAt: localEditedAt,
+          ...(isRealEdit ? editStamp : {}),
         } as any;
 
         let ownerUser: any = {
@@ -2027,6 +2120,83 @@ export default function EstimateForm({
         clearEstimateContext();
 
         onSave?.(savedEstimateForCallback);
+      } else if (copyTarget) {
+        // Save as a copy numbered from the original (IE-200123-1, -2, …).
+        // The original is not changed; it only gets a "copy" history entry.
+        const target = copyTarget;
+        const createdCopy = await runTransaction(db, async (tx) => {
+          const rootSnap = await tx.get(
+            doc(db, "Panels", "IEDGE-SYSTEM", "estimates", target.rootId),
+          );
+          const counterRef = estimateCopyCounterRef(target.rootId);
+          const counterSnap = await tx.get(counterRef);
+
+          const nextCopyNumber =
+            Number(counterSnap.exists() ? counterSnap.data()?.current : 0) + 1;
+
+          tx.set(
+            counterRef,
+            { current: nextCopyNumber, estimateNo: target.rootNo },
+            { merge: true },
+          );
+
+          const copyEstimateNo = `${target.rootNo}-${nextCopyNumber}`;
+          const newRef = doc(
+            collection(db, "Panels", "IEDGE-SYSTEM", "estimates"),
+          );
+
+          const copyToSave: Estimate = {
+            ...estimateBase,
+            estimateNo: copyEstimateNo,
+            copyOfEstimateId: target.rootId,
+            copyOfEstimateNo: target.rootNo,
+            copyNumber: nextCopyNumber,
+            copyPurpose: target.purpose,
+            ...({
+              copiedFromEstimateId: target.sourceId,
+              copiedFromEstimateNo: target.sourceNo,
+              createdAt: serverTimestamp(),
+            } as any),
+          };
+
+          tx.set(newRef, copyToSave);
+
+          if (rootSnap.exists()) {
+            tx.set(
+              newEstimateHistoryRef(target.rootId),
+              buildHistoryEntry(editor, getEstimateCreatorId(rootSnap.data()), {
+                type: "copy",
+                copyEstimateId: newRef.id,
+                copyEstimateNo,
+                copyPurpose: target.purpose,
+              }),
+            );
+          }
+
+          return { ...copyToSave, id: newRef.id };
+        });
+
+        // Further saves from this form now update the copy.
+        setCopyTarget(null);
+        setEditId(createdCopy.id);
+        setEstimateNo(createdCopy.estimateNo);
+        setLastEditedByName("");
+        setLastEditedAt(null);
+
+        const blob = await buildEstimatePdfBlob({
+          estimate: createdCopy,
+          companyList,
+          withLogo,
+          footerUser: loggedInUser,
+          companyName: company,
+        });
+
+        const pdfURL = URL.createObjectURL(blob);
+        setPreviewURL(pdfURL);
+        setIsPreviewOpen(true);
+        clearEstimateContext();
+
+        onSave?.(createdCopy);
       } else {
         const createdEstimate = await runTransaction(db, async (tx) => {
           const counterRef = doc(
@@ -2224,6 +2394,18 @@ export default function EstimateForm({
         `}</style>
 
       <div className="bg-white p-5 rounded-xl shadow border border-gray-100">
+        {copyTarget ? (
+          <div className="mb-4 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2 text-sm text-amber-900">
+            <span className="font-semibold">
+              Saving as a copy of {copyTarget.sourceNo}
+              {copyTarget.purpose === "invoice" ? " for an invoice" : ""}.
+            </span>{" "}
+            {copyTarget.sourceNo} stays exactly as it is. This copy gets its
+            own number ({copyTarget.rootNo}-1, {copyTarget.rootNo}-2 …) when
+            you save.
+          </div>
+        ) : null}
+
         <h3 className="text-sm font-semibold mb-3 text-gray-700">
           Basic Information
         </h3>
@@ -2234,7 +2416,12 @@ export default function EstimateForm({
               Estimate No
             </label>
             <input
-              value={estimateNo || "Will be assigned on Save"}
+              value={
+                estimateNo ||
+                (copyTarget
+                  ? `${copyTarget.rootNo}-… (on Save)`
+                  : "Will be assigned on Save")
+              }
               readOnly
               className="w-full rounded-lg border border-gray-300 p-2 text-sm bg-gray-50"
             />
@@ -3486,7 +3673,13 @@ export default function EstimateForm({
 
         <div className="mt-4 flex justify-between gap-3">
           <Button onClick={handleSave} disabled={loading}>
-            {loading ? "Saving..." : editId ? "Update & Save" : "Save"}
+            {loading
+              ? "Saving..."
+              : editId
+                ? "Update & Save"
+                : copyTarget
+                  ? "Save as Copy"
+                  : "Save"}
           </Button>
         </div>
 

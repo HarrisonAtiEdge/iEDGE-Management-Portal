@@ -1144,9 +1144,18 @@ import {
   deleteDoc,
   doc as docRef,
   updateDoc,
+  writeBatch,
 } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { buildEstimatePdfBlob } from "@/lib/estimatePdf";
+import {
+  EstimateEditChoice,
+  buildHistoryEntry,
+  getEstimateCreatorId,
+  newEstimateHistoryRef,
+} from "@/lib/estimateHistory";
+import EstimateEditChoiceDialog from "./EstimateEditChoiceDialog";
+import EstimateHistoryDialog from "./EstimateHistoryDialog";
 import {
   ChevronLeft,
   ChevronRight,
@@ -1155,6 +1164,7 @@ import {
   Eye,
   Filter,
   FileSpreadsheet,
+  History,
   Pencil,
   Search,
   Trash2,
@@ -1163,7 +1173,7 @@ import {
 import * as XLSX from "xlsx";
 
 type Props = {
-  onEdit: (estimate: Estimate) => void;
+  onEdit: (estimate: Estimate, choice: EstimateEditChoice) => void;
   onDuplicate: (estimate: Estimate) => void;
   initialEstimateNo?: string;
 };
@@ -1179,6 +1189,10 @@ export default function EstimateList({
   );
   const [previewURL, setPreviewURL] = useState<string | null>(null);
   const [isDrawerOpen, setIsDrawerOpen] = useState(false);
+
+  // Estimate whose Edit popup / History is open.
+  const [editTarget, setEditTarget] = useState<Estimate | null>(null);
+  const [historyTarget, setHistoryTarget] = useState<Estimate | null>(null);
 
   const [usersMap, setUsersMap] = useState<Record<string, any>>({});
   const [isAdmin, setIsAdmin] = useState(false);
@@ -1472,15 +1486,57 @@ export default function EstimateList({
     "PO Received": "border-violet-200 bg-violet-50 text-violet-700",
   };
 
-  const handleStatusChange = async (estimateId: string, newStatus: string) => {
+  const getCreatorName = (estimate: Estimate) =>
+    usersMap[getEstimateCreatorId(estimate)]?.displayName ||
+    (estimate as any).createdByName ||
+    "";
+
+  // Number of copies made from each original, keyed by the original's id.
+  const copyCountByRoot = useMemo(() => {
+    const counts: Record<string, number> = {};
+    estimates.forEach((e) => {
+      if (e.copyOfEstimateId) {
+        counts[e.copyOfEstimateId] = (counts[e.copyOfEstimateId] || 0) + 1;
+      }
+    });
+    return counts;
+  }, [estimates]);
+
+  const handleStatusChange = async (estimate: Estimate, newStatus: string) => {
+    const estimateId = (estimate as any).id as string;
+    const user = auth.currentUser;
+    const editor = {
+      id: user?.uid || "",
+      name: String(
+        usersMap[user?.uid || ""]?.displayName ||
+          user?.displayName ||
+          user?.email ||
+          "Unknown User",
+      ),
+      email: String(user?.email || ""),
+    };
+
     try {
-      await updateDoc(
-        doc(db, "Panels", "IEDGE-SYSTEM", "estimates", estimateId),
-        {
-          status: newStatus,
-          updatedAt: new Date(),
-        },
+      const batch = writeBatch(db);
+      batch.update(doc(db, "Panels", "IEDGE-SYSTEM", "estimates", estimateId), {
+        status: newStatus,
+        updatedAt: new Date(),
+      });
+      batch.set(
+        newEstimateHistoryRef(estimateId),
+        buildHistoryEntry(editor, getEstimateCreatorId(estimate), {
+          type: "status",
+          changes: [
+            {
+              field: "status",
+              label: "Status",
+              before: estimate.status || "RFQ Sent",
+              after: newStatus,
+            },
+          ],
+        }),
       );
+      await batch.commit();
     } catch (error) {
       console.error("Status update failed:", error);
       alert("Failed to update status");
@@ -1938,6 +1994,19 @@ export default function EstimateList({
                       <span className="font-bold text-slate-900">
                         {e.estimateNo || "—"}
                       </span>
+                      {e.copyOfEstimateNo ? (
+                        <span className="mt-1 block w-fit rounded-full bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                          Copy of {e.copyOfEstimateNo}
+                          {e.copyPurpose === "invoice" ? " · for invoice" : ""}
+                        </span>
+                      ) : copyCountByRoot[(e as any).id] ? (
+                        <span className="mt-1 block w-fit rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-semibold text-slate-600">
+                          Original · {copyCountByRoot[(e as any).id]}{" "}
+                          {copyCountByRoot[(e as any).id] === 1
+                            ? "copy"
+                            : "copies"}
+                        </span>
+                      ) : null}
                     </td>
 
                     <td className="px-5 py-4">
@@ -2014,10 +2083,20 @@ export default function EstimateList({
                           variant="ghost"
                           size="icon"
                           title="Edit"
-                          onClick={() => onEdit(e)}
+                          onClick={() => setEditTarget(e)}
                           className={iconButtonClass}
                         >
                           <Pencil className="h-4 w-4" />
+                        </Button>
+
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          title="History"
+                          onClick={() => setHistoryTarget(e)}
+                          className={iconButtonClass}
+                        >
+                          <History className="h-4 w-4" />
                         </Button>
 
                         <Button
@@ -2057,7 +2136,7 @@ export default function EstimateList({
                         <select
                           value={e.status || "RFQ Sent"}
                           onChange={(ev) =>
-                            handleStatusChange((e as any).id!, ev.target.value)
+                            handleStatusChange(e, ev.target.value)
                           }
                           className={`rounded-full border px-3 py-1.5 text-xs font-bold outline-none transition focus:ring-4 focus:ring-slate-100 ${
                             STATUS_STYLES[e.status || "RFQ Sent"] ||
@@ -2254,7 +2333,7 @@ export default function EstimateList({
                 variant="outline"
                 className="rounded-xl border-slate-200"
                 onClick={() => {
-                  if (selectedEstimate) onEdit(selectedEstimate);
+                  if (selectedEstimate) setEditTarget(selectedEstimate);
                   setIsDrawerOpen(false);
                 }}
               >
@@ -2285,6 +2364,23 @@ export default function EstimateList({
           </div>
         </div>
       )}
+
+      <EstimateEditChoiceDialog
+        estimate={editTarget}
+        currentUserId={auth.currentUser?.uid || ""}
+        creatorName={editTarget ? getCreatorName(editTarget) : ""}
+        onCancel={() => setEditTarget(null)}
+        onConfirm={(choice) => {
+          if (editTarget) onEdit(editTarget, choice);
+          setEditTarget(null);
+        }}
+      />
+
+      <EstimateHistoryDialog
+        estimate={historyTarget}
+        creatorName={historyTarget ? getCreatorName(historyTarget) : ""}
+        onClose={() => setHistoryTarget(null)}
+      />
     </div>
   );
 }

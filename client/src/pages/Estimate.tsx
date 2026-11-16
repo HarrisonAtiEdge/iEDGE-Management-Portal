@@ -147,12 +147,16 @@ import EstimateList from "../components/Estimate/EstimateList";
 import { Button } from "@/components/ui/button";
 import { Estimate } from "../types";
 import { useLocation } from "wouter";
+import { EstimateEditChoice } from "@/lib/estimateHistory";
+
+type CopyMode = Extract<EstimateEditChoice, { kind: "copy" }>;
 
 export default function Estimates() {
   // Default to Estimate List whenever the Estimate module is opened.
   const [activeTab, setActiveTab] = useState<"createNew" | "list">("list");
   const [selectedEstimate, setSelectedEstimate] = useState<Estimate | null>(null);
   const [duplicateMode, setDuplicateMode] = useState(false);
+  const [copyMode, setCopyMode] = useState<CopyMode | null>(null);
   const [initialEstimateNo, setInitialEstimateNo] = useState("");
 
   const [location, setLocation] = useLocation();
@@ -169,6 +173,7 @@ export default function Estimates() {
     if (requestedTab === "list" || requestedEstimateNo) {
       setSelectedEstimate(null);
       setDuplicateMode(false);
+      setCopyMode(null);
       setInitialEstimateNo(requestedEstimateNo);
       setActiveTab("list");
       return;
@@ -179,10 +184,12 @@ export default function Estimates() {
     setActiveTab("list");
   }, [location]);
 
-  // Called by EstimateList when user clicks Edit.
-  const handleEdit = (estimate: Estimate) => {
+  // Called by EstimateList once the user has chosen, in the edit popup,
+  // whether to edit the estimate itself or save the edit as a copy.
+  const handleEdit = (estimate: Estimate, choice: EstimateEditChoice) => {
     setSelectedEstimate(estimate);
     setDuplicateMode(false);
+    setCopyMode(choice.kind === "copy" ? choice : null);
     setActiveTab("createNew");
   };
 
@@ -190,12 +197,14 @@ export default function Estimates() {
   const handleDuplicate = (estimate: Estimate) => {
     setSelectedEstimate(estimate);
     setDuplicateMode(true);
+    setCopyMode(null);
     setActiveTab("createNew");
   };
 
   const handleCreateNew = () => {
     setSelectedEstimate(null);
     setDuplicateMode(false);
+    setCopyMode(null);
     setInitialEstimateNo("");
     setActiveTab("createNew");
 
@@ -208,6 +217,7 @@ export default function Estimates() {
   const handleShowList = () => {
     setSelectedEstimate(null);
     setDuplicateMode(false);
+    setCopyMode(null);
     setInitialEstimateNo("");
     setActiveTab("list");
 
@@ -252,6 +262,7 @@ export default function Estimates() {
           <EstimateForm
             existingEstimate={selectedEstimate ?? undefined}
             duplicateMode={duplicateMode}
+            copyMode={copyMode}
           />
         )}
 

@@ -1549,6 +1549,11 @@ import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { buildEstimateInvoicePdfBlob } from "@/lib/estimateInvoicePdf";
+import {
+  buildHistoryEntry,
+  getEstimateCreatorId,
+  newEstimateHistoryRef,
+} from "@/lib/estimateHistory";
 
 type ServiceItem = {
   detail: string;
@@ -2427,6 +2432,48 @@ export default function EstimateInvoiceForm({
           doc(db, "Panels", PANEL_ID, "estimates", estDoc.id),
           { status: "Invoiced", updatedAt: serverTimestamp() },
           { merge: true },
+        );
+
+        // Shows in the estimate's History, next to its edits.
+        const previousStatus = String(estData.status || "RFQ Sent");
+        tx.set(
+          newEstimateHistoryRef(estDoc.id),
+          buildHistoryEntry(
+            {
+              id: user.uid,
+              name: String(
+                loggedInUser?.displayName ||
+                  loggedInUser?.name ||
+                  user.displayName ||
+                  loggedInUser?.email ||
+                  user.email ||
+                  "Unknown User",
+              ).trim(),
+              email: String(loggedInUser?.email || user.email || "").trim(),
+            },
+            getEstimateCreatorId(estData),
+            {
+              type: "invoice",
+              changes: [
+                {
+                  field: "invoiceNo",
+                  label: "Invoice",
+                  before: "",
+                  after: nextInvoiceNo,
+                },
+                ...(previousStatus !== "Invoiced"
+                  ? [
+                      {
+                        field: "status",
+                        label: "Status",
+                        before: previousStatus,
+                        after: "Invoiced",
+                      },
+                    ]
+                  : []),
+              ],
+            },
+          ),
         );
 
         return { invoiceNo: nextInvoiceNo, invoiceToSave };

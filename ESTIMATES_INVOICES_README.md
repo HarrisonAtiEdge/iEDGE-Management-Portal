@@ -32,6 +32,9 @@ All data is in Firestore under `Panels/IEDGE-SYSTEM/…` (`PANEL_ID = "IEDGE-SYS
 | `client/src/lib/estimatePdf.ts` | ~1032 (`buildEstimatePdfBlob` ~1325) | Estimate PDF (jsPDF + autotable), multi-currency lines |
 | `client/src/lib/estimateInvoicePdf.ts` | ~756 (`buildEstimateInvoicePdfBlob` ~987) | Invoice PDF: heading, TO/meta block, services table, totals (or % block), taxation summary, message, terms pages, footer |
 | `client/src/lib/payments/accountBalances.ts` | ~267 | Shared account ledger used by the Account Statement and Accounts tab (invoice payments credit an account, WHT+SST debit it) |
+| `client/src/components/Estimate/EstimateEditChoiceDialog.tsx` | line 1 | Popup shown on Edit: edit in place or save as a copy (§3a) |
+| `client/src/components/Estimate/EstimateHistoryDialog.tsx` | line 1 | History button in the list: who changed what, when, before/after |
+| `client/src/lib/estimateHistory.ts` | line 1 | Field diff, history entries, copy counter |
 | `client/src/types.ts` | `Estimate` at ~36 | Estimate type (loose — many extra fields are added with `as any`) |
 | `client/src/pages/PaymentWaiverSettings.tsx` | — | Sets `settings/paymentSettings.paymentWaiverLimit` (Sundry tolerance) |
 | `client/src/pages/SundryAdjustments.tsx` | — | Lists payments with waivers/Sundry |
@@ -64,8 +67,9 @@ has its own tax (`taxId/taxLabel/taxPercent`, from `tax`) and WHT
 
 **Saving:** new estimates get their number in a transaction from
 `counters/estimates` (`IE-` + next number, starting after 200000). Edits keep
-the original `createdBy`/`createdByName`, set `lastEditedBy*`, and
-`editCount: increment(1)`. A duplicate PO number only warns
+the original `createdBy`/`createdByName`; when a tracked field changed they
+also set `lastEditedBy*` and `editCount: increment(1)` (a save that changes
+nothing isn't counted). A duplicate PO number only warns
 (`poNumberNormalized` is stored). After saving, the PDF preview opens.
 
 **Coming from a Sales Record:** `components/SalesRecordModal.tsx` writes
@@ -80,6 +84,38 @@ Payment Received, PO Received. Creating an invoice sets the estimate to
 created by, date range, amount range), Excel export (`xlsx`), View PDF, Edit,
 Duplicate, Delete (admins only), inline status select (admins and operation
 admins).
+
+## 3a. Editing: copies and history
+
+Clicking Edit (list row or PDF drawer) opens `EstimateEditChoiceDialog` first.
+Everyone ticks one of two options; Continue stays disabled until they do:
+- **The estimate's creator** (`createdBy` = current user): "Keep the previous
+  estimate as the first copy" or "Edit the same estimate".
+- **Anyone else**: "This edit is for an invoice" or "Edit the same estimate".
+
+The first option saves the edit as a copy that starts with all of the
+estimate's fields; the original is untouched. "Edit the same estimate" edits
+the original and is recorded in its History.
+
+Copies are new `estimates` docs numbered from the original: `IE-200123-1`,
+`-2`, … (counter at `counters/estimateCopies/estimates/{originalId}`; a copy
+of a copy is still numbered from the original). They carry `copyOfEstimateId`,
+`copyOfEstimateNo`, `copyNumber`, `copyPurpose` (`revision` / `invoice`),
+`copiedFromEstimateId/No`, and `createdBy` = whoever made the copy.
+Invoices load a copy by its own number as usual. The list badges copies
+("Copy of IE-200123") and originals ("Original · 2 copies"). An estimate and
+its copies don't trigger the duplicate-PO warning for each other.
+
+**History:** `estimates/{id}/editHistory` gets one entry per in-place edit that
+changed something (`type: "edit"`, `editNumber`), per inline status change
+(`"status"`), per copy made (`"copy"`, on the original) and per invoice
+created from it (`"invoice"`: the invoice number, plus the status change to
+Invoiced; written in the invoice transaction). Each entry has
+`editedAt`, `editedById/Name/Email`, `isCreator` and `changes`
+(`{ field, label, before, after }`, display strings; service rows matched by
+`rowId`, or by position for rows saved without one; dragging rows into a new
+order adds a "Service order" change). Edits made before this
+existed only show as a count ("N earlier edits…").
 
 ## 4. Invoices
 
@@ -202,3 +238,4 @@ User flags on `Panels/IEDGE-SYSTEM/users/{uid}`: `isAdmin`, `isOperationAdmin`,
 | Receive Payment: invoice balance counts every earlier payment (fixes fully paid invoices left as Partially Paid) | `c3b9527` | `dba98f9` |
 | Invoice CSV export: Received and Remaining columns | `bed5739` | `93f72f9` |
 | "Recalculate Balances" button (admins, localhost only) to repair invoices saved with the old balance bug — already run once; data is fixed | `bed5739` | `93f72f9` |
+| Estimate edit popup, copies (`IE-…-1`) and History (§3a) | uncommitted | not ported |

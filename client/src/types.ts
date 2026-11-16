@@ -57,5 +57,10 @@ export interface Estimate {
   editCount?: number;
   createdBy: string;
   termsCondition?: string;
-  status?: EstimateStatus; 
+  status?: EstimateStatus;
+  // Set on copies made when editing; the original keeps its own number.
+  copyOfEstimateId?: string;
+  copyOfEstimateNo?: string;
+  copyNumber?: number;
+  copyPurpose?: "revision" | "invoice";
 }
