@@ -50,6 +50,11 @@ export interface ProjectReportRow {
   // Same idea for invoices — the actual invoiceNo of every invoice included.
   invoiceNumbers: string[];
 
+  // Sum of every PO amount entered on this project's (non-void) invoices,
+  // and how many individual PO amounts that sum covers.
+  poTotal: number;
+  poAmountCount: number;
+
   // Payment completeness across every (non-void) invoice raised for this
   // project. "unpaid"/"partially_paid" mean at least one invoice still has
   // money outstanding.
@@ -60,11 +65,13 @@ export interface ProjectReportRow {
   // null once everything is paid, or if there's no invoice yet.
   daysOutstanding: number | null;
 
-  // Profit only exists once a project has been invoiced — an estimate is a
-  // quote, not revenue, so there is nothing real to show as "profit" for an
-  // estimate-only project. Both are null in that case.
+  // Profit = PO value sum minus approved cost. Projects whose invoices have
+  // no PO amounts fall back to the invoiced total ("invoiced"); estimate-only
+  // projects have no profit at all ("none", and profit/margin are null).
+  // `profitRevenue` is the amount profit was measured against.
   profit: number | null;
-  profitBasis: "invoiced" | "none";
+  profitBasis: "po" | "invoiced" | "none";
+  profitRevenue: number | null;
   profitMargin: number | null;
 
   // Invoiced vs estimated — flags over/under-billing relative to the quote.

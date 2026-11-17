@@ -1,5 +1,6 @@
 import {
   Briefcase,
+  FileText,
   HandCoins,
   Receipt,
   TrendingDown,
@@ -19,17 +20,26 @@ export default function ReportSummaryCards({ rows }: Props) {
       acc.estimateTotal += row.estimateTotal;
       acc.totalCost += row.totalCost;
       acc.invoicedTotal += row.invoicedTotal;
-      // Only invoiced projects have a real profit figure — estimate-only
-      // projects contribute nothing here, same as the table shows "-" for
-      // them instead of a projected number.
+      acc.poTotal += row.poTotal;
+      // Profit is measured against PO value (or the invoiced total where no
+      // PO amounts were entered). Estimate-only projects contribute nothing
+      // here, same as the table shows "-" for them.
       acc.profit += row.profit ?? 0;
+      acc.profitRevenue += row.profitRevenue ?? 0;
       return acc;
     },
-    { estimateTotal: 0, totalCost: 0, invoicedTotal: 0, profit: 0 },
+    {
+      estimateTotal: 0,
+      totalCost: 0,
+      invoicedTotal: 0,
+      poTotal: 0,
+      profit: 0,
+      profitRevenue: 0,
+    },
   );
 
   const avgMargin =
-    totals.invoicedTotal > 0 ? (totals.profit / totals.invoicedTotal) * 100 : 0;
+    totals.profitRevenue > 0 ? (totals.profit / totals.profitRevenue) * 100 : 0;
   const profitable = rows.filter(
     (row) => row.profit !== null && row.profit > 0,
   ).length;
@@ -64,9 +74,16 @@ export default function ReportSummaryCards({ rows }: Props) {
       accent: "bg-purple-100 text-purple-600",
     },
     {
+      label: "PO Value",
+      value: formatCompactMoney(totals.poTotal),
+      sub: "Sum of PO amounts on invoices",
+      icon: FileText,
+      accent: "bg-sky-100 text-sky-600",
+    },
+    {
       label: "Profit",
       value: formatCompactMoney(totals.profit),
-      sub: `${formatPercent(avgMargin)} avg. margin`,
+      sub: `${formatPercent(avgMargin)} avg. margin (on PO value)`,
       icon: totals.profit >= 0 ? TrendingUp : TrendingDown,
       accent:
         totals.profit >= 0
@@ -76,7 +93,7 @@ export default function ReportSummaryCards({ rows }: Props) {
   ];
 
   return (
-    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-5">
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
       {cards.map((card) => (
         <div
           key={card.label}

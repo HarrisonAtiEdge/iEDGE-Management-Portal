@@ -38,7 +38,21 @@ const isApprovedOrLater = (status: any) => {
   return Boolean(value) && !NOT_YET_APPROVED_STATUSES.has(value);
 };
 
-const isPaidStatus = (status: any) => normalize(status).toLowerCase() === "paid";
+// PO amounts entered on an invoice (Invoice tab → PO Amount). Read from the
+// `poAmounts` array, falling back to a single legacy `poAmount` field.
+const getPoAmounts = (invoice: any): number[] => {
+  const raw = Array.isArray(invoice?.poAmounts)
+    ? invoice.poAmounts
+    : invoice?.poAmount !== undefined && invoice?.poAmount !== null
+      ? [invoice.poAmount]
+      : [];
+
+  return raw
+    .filter((value: any) => String(value ?? "").trim() !== "")
+    .map(toNumber);
+};
+
+const isPaidStatus =(status: any) => normalize(status).toLowerCase() === "paid";
 
 // Voided/cancelled invoices never represented real revenue — excluded from
 // both the invoiced total and the payment-status calculation entirely.
@@ -97,6 +111,8 @@ type MutableRow = {
   invoicedTotal: number;
   invoiceCount: number;
   invoiceNumbers: string[];
+  poTotal: number;
+  poAmountCount: number;
   paidInvoiceCount: number;
   unpaidInvoiceDates: string[];
   earliestDate: string | null;
@@ -118,6 +134,8 @@ function createRow(projectCode: string): MutableRow {
     invoicedTotal: 0,
     invoiceCount: 0,
     invoiceNumbers: [],
+    poTotal: 0,
+    poAmountCount: 0,
     paidInvoiceCount: 0,
     unpaidInvoiceDates: [],
     earliestDate: null,
@@ -181,6 +199,10 @@ export function buildProjectReports(raw: ReportsRawData): ProjectReportRow[] {
     if (invoice.invoiceNo) row.invoiceNumbers.push(normalize(invoice.invoiceNo));
     noteClient(row, invoice.client);
 
+    const poAmounts = getPoAmounts(invoice);
+    row.poTotal += poAmounts.reduce((sum, value) => sum + value, 0);
+    row.poAmountCount += poAmounts.length;
+
     const invoiceDate = getDateValue(invoice.invoiceDate);
     trackDateRange(row, invoiceDate);
 
@@ -234,13 +256,28 @@ export function buildProjectReports(raw: ReportsRawData): ProjectReportRow[] {
       const totalCost = row.budgetRequestCost + row.reimbursementCost;
       const hasInvoice = row.invoiceCount > 0;
 
-      // Profit is only ever real once something has actually been billed —
-      // an estimate is a quote, not revenue, so "estimate_only" projects
-      // show no profit figure at all rather than a projected one.
-      const profit = hasInvoice ? row.invoicedTotal - totalCost : null;
+      // Profit is measured against the sum of the client PO amounts entered
+      // on the project's invoices. Invoices raised before PO amounts existed
+      // have none, so those projects fall back to the invoiced total. An
+      // estimate is a quote, not revenue, so estimate-only projects show no
+      // profit figure at all.
+      const hasPo = row.poAmountCount > 0;
+      const profitBasis: ProjectReportRow["profitBasis"] = hasPo
+        ? "po"
+        : hasInvoice
+          ? "invoiced"
+          : "none";
+      const profitRevenue =
+        profitBasis === "po"
+          ? row.poTotal
+          : profitBasis === "invoiced"
+            ? row.invoicedTotal
+            : null;
+
+      const profit = profitRevenue === null ? null : profitRevenue - totalCost;
       const profitMargin =
-        hasInvoice && row.invoicedTotal > 0
-          ? ((profit as number) / row.invoicedTotal) * 100
+        profitRevenue !== null && profitRevenue > 0
+          ? ((profit as number) / profitRevenue) * 100
           : null;
 
       const { client, candidates } = pickClientName(row);
@@ -287,11 +324,14 @@ export function buildProjectReports(raw: ReportsRawData): ProjectReportRow[] {
         invoicedTotal: row.invoicedTotal,
         invoiceCount: row.invoiceCount,
         invoiceNumbers: row.invoiceNumbers,
+        poTotal: row.poTotal,
+        poAmountCount: row.poAmountCount,
         paymentStatus,
         paidInvoiceCount: row.paidInvoiceCount,
         daysOutstanding: daysSince(oldestUnpaidDate),
         profit,
-        profitBasis: hasInvoice ? "invoiced" : "none",
+        profitBasis,
+        profitRevenue,
         profitMargin,
         billingVariance: hasInvoice ? row.invoicedTotal - row.estimateTotal : null,
         status,
